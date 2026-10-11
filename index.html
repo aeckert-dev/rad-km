@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rad-km</title>
+
+<!-- Einstellungen, damit die Seite auf dem iPhone wie eine App vom Home-Bildschirm startet -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rad-km">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAAja0lEQVR42u19d3xcxbX/nJl77/ZddVlykWTJXZKxjTEYDBI9FNuxqQFCAkk+6Q94eQkhfBIggcDLC+8l+f0gCS2EEF4ghOBQHEpMb664F8mW3NSsvv3emfP+GGmRt0hraS1b9ny9Hyxhafeee79z2pxzBgruup4oKCQDVbdAQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQUGRQ0GRQ0GRQ0GRQ0GRQ0GRQ0GRQ0GRQ0GRQ0GRQ0FBkUNBkUNBkUNBkUNBkUNBkUNBkUNBkUNBkUNBkUNBQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQZFDQUGRQ0GRQ0GRQ0GRQ0GRQ0GRQ2GMQFO3ILNgQAkcwc8LgUhQkePEBxLsjgQR03rYQAgS4tRtGqWoyHGCMwNRZ9r5U6ZrlCESgKF/HgA2NTV2BHs1xtKklCLH2AMAWIJnG/a/3nC7zo7grl711AP/2LY6W3NxRY4T3awQfzTsszulVhjC20BBgVoo4HgVR5Ej0+EfAAWKZGhyEEIoUDiOZRnD5DjSuGBsRQqKHKMUF2Q8UgACkpc09gVQRGSUKnKMsbjgSCMFACBIAPq+iHEBUWoasIQlBBJCwqZJCCIhHEXUMgkBVOQYi3FBIq55+j9f2romx7BxIQhBgQgEBAqTW0DA5JYpOBDgyIVAJMRgjAIVBPNdXp1pGqXT8idQAI2yeRMqBGKh2+c27H30SkFK0U9EgQKBHM92beyalSOIC1JFCt3hYCAc4MgtzilQQ9OEQLuu57m8JufjvTmFnuwoN8tyxk3MyrMErx5X6nO4uOAVecVOw0YJeO3OI2U2679aRighRKMMFTmObVyQNFKYP2GKBuzsybM4ihyHe9a4Ektwn91ZljNOCOFzOCnQoUiGhGD/FwQIpHI7JIn3dx/adajJYJq0UECgI9irUXocZsBO3lBWPvV7LrpuSAVDCPS7Gv3OJyEUBn4BhJAhQ1KByAD2drZd9Psf23Ujxgabrrt0m1DkON4g133swchnD7FQBKBPcwBkgo5ACJk3oaKqqLShs8WuGfJzEcVxa1ZO6i17aZg0yuSLUcoopUBBItN+NEdh0/Tq4tJANIIEBQpxHDNjbJODo+BCyP8KFGMiAieEnFEyXQgEAsf/BY9VswIEfDbn6CedsD/2FP1fyL8YpUM+b5nQXTBxqtsmg2dFjqOT6jCF9cauT12GvS8spPS0iVNHzhW5uLH/i9izBwAgQAjS/pw9I0e8+KWlmpJfXJpTuKejOeZ2KHJkUjkzoP5o+Iqn7kckGmPd/p6bTr9owaRpXIhB+JFq0RMCFIAQBKDy+UFKJxRCZjRsRRHJjrb90qhtOLinOxS46bQLJvhyB0+6AIBA4dRtU/OLt7Xud+g2oshxdMwKcRt2AEBEZ3b+nedfTQEGX4ixKCTFogdCSGfIT4G2+rsOdLfrTNvX1bano0Vn2paWvR3BXo2y3e3NvZEQALT0dgkUGmXdvV010+f9+zlLBQpIIy9CgcwbX/G3jR8e/27HGA5lBaIGtD3Ye/OCC8pyCrngjLJBfj5kRiKWJRBji37t/noueE8ktKmpgVHqj4Tr25so0N5IqDscYJRanFuCAwADSgGQEJumM6BI0GXYAIALUVIw4alrb3UZdoEIQ3MapE9q1/Tj3KaM+TyHQDSYdt2cGuxf+knNEAAEzchFj/xkX1eboWnNPV0yuolyC5FQALk3y4DaNB0JMkqz7C6Ze+3bcpMmCMiAnRHUgHYG/fdfceMEX96Q1ByY7agcN6nIm3Mo2KMzDVHtrRwFMEq7QoHPTZ93ZukMgSm9DWnp7ZpR7M35eO+ObIfbZdj605rwmR8KBGNeCSKXsXHck8PDPr07HDh7cuUN82o5isREu3zqcS6IvJgsh7uyqOTV7Wttms6PY3KM4TwHImFAbzt7aeJDTGbp4YIppxACOtUE9iWgLMHlK5YsQYl0sixC2DXbfy/5ikYZYJJt2FSJNKl7FpbOsIQ4zt0OOnbVRnc4cOG0OYOrjX4hKSGkprwy1+mOCmvkn64zrT3Q+72apVXjSizB6eGfjgSRYGfI39DZSgZExQPdjrnF5QZlx7nbQceu2tCplo7aIIRQCohYnldUVVQajIbpyNIhlNLeSGjO+MnfWngpR8ESDIoQAgjc/soff//RSkIIPzx7K9XJ1ILiHJdHeruKHBlWG72R4Bml09NRG31WAAUQOLN0RtSyRlh6iohCiAcX3+yxOUiCQeFCMMpW79v1yIev7uloGejZxHxSRCzy5MwomBgyI4ocGU9ygMn5l049L1FpS68xsbxKKvPLZsx3GnY+go0YjbLOoP87Z122qGyWJXgcLxERgJiC/2jlH22aVneoKWhGZHlpHFMpwGmTpo6cqYoccdEg7Y2E5k2oWFZ1BiJSYInJrERHj1GKBKuLSmcWTgyZEUqHVx8EITNSllP4g9rlAjGJQUFBgf763RVv1W/Kdfvq2pt2tR1M5XacUTJNowxVtJJRckDEMm9ZtNhgmkAxUCvL29wTCR0K9JAE/SGE0Jk2f+KUkGnSYQkOACEz+ovLvuyzuxIz5UIIRll9e9P9q57PdngQSSAS+XjfTiIT9gnZjjnFk/PdPlNYx61lOb7IAf0RYH9FBSR1BudNqFhauUAkqA0hBCHktR3rHv3kNWn+E96eXD5zvsG0YYQJGmXtgd7r59VePvM0nmBQYly8/ZU/BqNhqagohQ8btyfNdiBioSdrWsH4iGXS1PKe1OSQmem+QhuggqDJrdiLI6dAYz8AAJSAyfktixYbTMfD1Qbp3yx79JPX/lW3MaknSAiZP3FKsTcnys0jWq8AEOVWvtt353lXIWLiHor0Q/+w5s0XN3+U5XBzIRDRoevrD+wOmhGW4HZIAzQ1f7w/GuFCpJL3ZCQHAGiUUqAmt7rDgVZ/d2co0B0OMGC5Tm+u05Pr9OQ6vU7D3hMJdoeDrf7uzpDf5FbIjJTnjrts5nyUu+eHPx4K9IPG7e/s3rKnvaXV3x3nCcrspNfunD9pSjAaoUdy6xnQ7lDgZxdfX5JdIFNqiUm2xs7WO1f+yedwSYdXINqYsbezre5QUzLHGQgh51fMLnD5clLIG7FMANAoo8eIJaOdPpc9jGEzGjAjOmXF3tzqotLZxWVT84rHebKLvNmFnix5GwGIPxKub2/2R0Kbmht2tB3YcHDPhgO7f3julU7dlriXIW/gL99+QaPsQE/7qvpNV88+i6PQBpgeuSGyeOZpz2/8gKStwxmlXSH/ksrTv3TqeUn3UBAFpexnbz7b5u/Oc3ktwWNGMBIxd7UdrC4qFQTp4e9JCFlSeXptRZVM1STKu2Z/3b6uQ4Fo2KEbTt1GAazRLREaPXJQoIRgdyQohCjPK6qZXHXZjFMXlEzLdrhT/YrP7hrvyyWEXDLjVEJIyIxuaWmcnj+h/93itDp9v2HbazvWZzlcrYHu9xu2Xj37LEikJiHnTK4scPlCVpSl0RMgt16dhv3+S75IksVB0qD8Y+snf1q7Ktfl+YwZQBlAMOR/advq5dULIYWP5bO7UskbNCObmxtf2rr6jV0btrTsC5tRn8OlUTpqVWTa6BgRBrQnEiSEXDh1zjWnLLpk+qkemyO2mgWK/srveAXaV6JNEAAcunHqhCkD84wD1QYSfPCdv3MUAtGp21bVbfJHQ27DMTCskJalwO2rLCp5Z/dmr9055L4XA9oa6Lr/khvLc4sS1YZ88+5w4D9eesLR33AQkxcILK4+c3n1QkRM1QKT4It8Jq9Tt502ceppE6f++IJr3t295S+fvvfilo86g/4sh5v0tU2McXJolIWtaHs4VFNeecd5V9WWV8UWHOmr/4bEXMWAZwMDwwFp3eOWrxCCUrq7vfmd+i0em8MS3KEZu9ubP2jYfuHUObJh5DDLQtnlM+e/sevTIaMDRmlPOHhOedV3Fy0WybZeOQqNsgdWPb+no0UalFTyDrJyBpFXbgNqlNVWVNdWVN+yaPF/vf3CM+vfYZRKSccwOTTGOgK9ZTmFv17ytWtOWcQok/uelMIw6j2BAEvmmiEQgfjTN/7ij4ZyXV6TWzK4eHfP1gunzonLdkhCLCyZ4dJtQ6ZK5aq+9+Lrdcq4EHGpMy6ERtm7e7b85r2Xsp1ujjy5vCRJuixNeeVCQKknkEwvmPDold+5bm7NfW8++/buLblOd0zZjKVoRcburb3dl86Yv+ob9103t4ZRJtPG6RRqH+lNRMQJWXkAEDIjGmUChdMwVtVtjHIzjoUyAzGjcMKMwonBQVOlGmOHAj3fOeuyBZOm8WSZcgKkNxK6bcVjUihCUsgLdMQCEgaUUSpNcG151cqv3P39ms/3hENRbmlHrQSfuWqqM/+mlEa5FbHMuy/6wq+WfNVt2C3BKdB0QrLDbHB6kb70VM6tqK4aV/Kvuo2dIb/DsDFgTT2dl82YP86TzYUY+NFcCJ1pTT0db9ZtdBv2pCuPAg1GI7MKJz125Xc11tfplGhQ/vvdF/+87u18d1bIjAxP3sOkHkpemSqTOuy8itmV/fI6j05DJT0azAiZURvTf7f8W9+vWcZRIKKWuoQOCXIhZMUNxmdIiUCRjnMu5zIsnrXgxS/dOSVvfHcoYNO0QDT8QeO2xDy61Fu15dW21KlSABLl1i8vv8lts2PC1qsQQqNsU3Pjf731QoHH548E05d3kKcu5bUElzm0Qe4wIWBxviQmbzhwpJ94DMghmeGzOV/5yk+unXO2yTmDlJk+gciFkJ3pGmUMKBDSFQp0h4Pd4WBnyC99wDS9E40yS/DZxWVvfePeBZOmtQd7nYbtH1tXY0LOSn5bVVxSmlMYsaKJl9eXKZ9be/bkyqQGBYFYgt/64iMmt6Lc8qQnbyoIxK5QICZvLD0qUPAU/ZJAiMYOk7cz5NdYhvmRSYeUAkQsy64ZL375ztnFZRbneorLlYXaFIAA+KPhdfvr1uyv29TUsK+7vbGzVU7UsYQo8mYXebLPKJn+rTMvtTE9HX5wIXx2199uvOOyx+9et79+w8E9uzuay3OLhMCYewEAXHCvzVlbUfW7D1c6dJuFfOAiDlvRybnj7vvcDUkz5QIFo+yJNW+817DVZ3dRgBVpyJuYzo9FwmEruvQP99a3N5XmFBZ7c6qLSquLSudNqCj25gzMtQ8u76WP3b3+wO4shyuDIUyGo5WIZT687Buzi8sswVMROdZ6tKVl7yMf/fP1XRsaO9ui3GRANcaM/mE9QKAr5H9/10ZG2S2UJa25Sqq6uBA+u/ORK75z2eP37OtoWbO/rjy3SBBBCRtgywgh5MzSmb//cCUmJDbaw6GHl30zFprGPWZGWUNny4//+bTX7gqakceu/G6a8ia1JrLNKc/t/aBxW8AMr91f98LmDzXKCtxZC0umf3XBheeUV1Ggcjkl6qSYvI9e+Z2LH72rNxIc3rbi0TUrGmWHAr13X3jtVbPPMrmV1ATKi2aUbm/df9VTD5zz0A9/+9HKpp4Oj82R7/JlO91uw6EzTb40xuya4XP7bl20hAJNnI6EsRrxhPtlCT69YMIfr7mVC/HS1k+QxFsWybPa8sqiwzfhNMo6gr1LKxdcUb1QRqqJHypQfO+lJ7rDwZ5w8CcXpCvvjc88uLerLVXW6/RJ04CAS7dnOVz5Ll+WwxWIhl7Y/OGSP9x79kO3v75rA+13RQeR96lrb41aVgb9UpopZnQEe5dWnn7bOZ+3BE86qkvGdVyIB1Y9f/ZDt7+0bTWjNNfpMTQ95oV9Vv+NSAE6Q/7zpsxeMGlq0lpAmYhMuko0ykzOF5bO+NmlX3p1+7pgNJJ0E67AnbVo8qxAJCypI7MjuS7vLy77Mk3mOsjSr79u/OClrauR4OUz538vPXlrHr7jj2v/tbu9OTEtIb3j0ydNszHNEqLPNxeCAct2ul2GfWNTw9In7v3Kc79p8XexFLlzKe+isll3XXhte6A3U85pBsghrWZpTuFDy75OSPI8MReCAd3T0XLp43f/aOVTAJDlcMnbncotH6TzQP5Kq7/7vYZtNMV60hnjQtxeu3z+pCmv79qQ+FTkt2eVzYy1CMit159edF1pdiEXPHHrlQE9FOi56/U/2zRtYlbeQ8u+genJyyi16/a1++sTQ6eBbU4DdZgM4gQKl2H3OZxPrV1V8/Adb9VvYpTyZF6FzhgX/LZzli6pXNAVCmRk/kAG3oIB7QmH7r7wC/kuX1xGYaDR/fTgntrf/uid3VvGebIgSSVOvKocpPNAWpPnN72/6Ne3/e+Gd6ReTerSE0LuvfiG13du+Oz7zySnhJBzy6vyXB5T8DSalAQA3PHqU42dbVHLuuuCa9OXlxAEIDKupqnbnEJmNPHdZDCf5/K29HZd+tg9T697i1GWQl4AAg9ccqNDNywhRp5oHCk5KKU9kWBNedXSytM5CpawSyIf7acH9yx+4mddIX+2021yPqRdHKTzAJFQoFFuPrP+HZ/T+5Xn/t/T697SKEtcT5RSgTh3fPm0/PGt/m7Z4zrgXz/rVwiZEYJkkCYlufX6zu7Nf17/tk7ZWWUzl1aekb68HNGhG5ubGrtCfpqk8GfoNidLcJumu232r/51MHm5EOW5RV87/eLuUEADdqw1BxJEcs9FXzCYRhLmxcoYrLGzdckf7u0OB1yG3eJDB1qDdx4I5BTg75s//mjvTrfd6TLsNz/3m5e3rWGUJWojOWT2urk1PeHgZ1HKAA0k+xUEYkfIn7JJCRGA+KPhf//H4zIWuOei645IXkQ0mN7U07G5eW8qt2PINieBggJ4bc5B5JV9D9+vWVaSXRBOlsIZPXJIVXzRtDlnlEznCU9Rrg9L8K8//1Crv8tls6cZgg/SeYBIAGiUm796d4Vd06Vn4DLs337htw2drXL3IUHTklynp9iXk5ielk9l8awFnPPqcSUpm5RQUKD3vfnspuZGC/kFU08ZhrwUIGyZsqQ0PmObdpuTQITB5QXgKLIcrq+dflFvODTCbZ0Rag5AxOvn1pBk/SMCkQL91bsrXt+5IcfpSUdnkKE6D2JqY83+Oo/NITei7Lre1Nv5Hy89LoOdpG/r1G1JyY2EVI0rmTlu4r2f++IgTUof793xm/deynN5TMsanrxIkDG29kAdGVmb05DyytmsV1Sfme/2mdwaie4YPjnkFmhFXrHcFo8jqRCCUVrX3nT/qucH1kell2ZN0XmAhAINmdH/eXeFbcB8C4vzXKfn75s//uvGD1I584NteFL28LJvXTD1FDl8IdGgmIL/aOWfACBsmsOWFxHtmraz7eDI25wGl1dSrTS74NyK6t5IiI5AeQz/NxnQQDRybkWVy7ALIeL5DoQQcufKPwWiYZZ2684QnQcoAOD9hq3rD9S7bY6BpVAchcfmuPv1ZzqCvfQIBwIDIQsmTcVkJYCxJqW36zdlO9w9kdCw5ZX1xg0dLRlpcxpcXqlPLpsxXyCSEQQtwyeHQDQou3zmaSQhTBRCUKA72w68sXODx+ZIfylDGp0Hv/topSxHjVuXDt3Y2Xbw1e1rgcCRNjwmHcozsEkpx+kxhTVCeRml/gy1OQ0ur9zCrK2oGu/LjVrmsN1SOmybEuXmeF/u/IlTEo2odLh++9HK3kgo/WwdAISH6jx4v2Hbq9vXee3OREddEHToxu8+Wmly60gdsaSFFwOblDTKItZI5U2nzWlq/viwmdbjHETeWP537oTyoBmho0wOChAyo9XFpV67U2r7gaRmlPVGgq/tWO8ybOkvYgbUHwnfeOq5Tt2WqLfld796dwUA0SiVlVEDX0CIx+bY3Lx3U3Njqm2I9BHXpIQERy6vSKPNaUbhhChPq7taCOEybJ8ebPj04J5EeUX/QNyRjIgZruYgYHJ+SvFkIJA0Lb3+wJ7GzlabZqR7yGp/Dv7m0y5IpTZe27n+uU/fI0jag71d4UBXKP7lj4Q6ezpWbP2EkOTnmMRG3A9pZeKalDIiLw7a5tS3UVwyA9I+0YcCDZmRN+s2khQFTXOKJ+sjOJJhmFv2sthpSl4xSfDj5FWuP7g7YpleuzPN4d4a0I5I6IfnXpnj9KRqWFp/YPeF0+bKtZtKn/kjYVmEnFSXBs2IzjRjqCN8EpuUkGRGXkppMBTZ1rovsc1JpvNPnVghazLSWexIUGNs/cH6pFl5QsjErDyfw21xiw6LIsMlByEMYHx/NUriZW1s2kMpTfMYIgoQMCMTfHk3zT8/aYuH/D8/qF3+g9rlaRu+JEoxNvF4SIMS16SUKXmBECT4QcO2q2cvgnjeABKclJVfnjduc3Oj07CJoRYWIhqatrPtYMiMOHTbYR06hBBCxnmynLqt04oOb6rAMCcRcBQeuzPf7SMJs34pAUvwvZ1t+pGcQWRxft/nbshxekTqIcDYP+ht8NdIJl6kalLKlLyCCLuur9lfZ3IrcfqUHBIxb0JFmkMikBCdam3+no5gb8LeAEGCOtPGebLS1EMZ8zm44D67sy8nTSDu5vqj4YaOVkNLa8gmo7Q3Eqopr7rmlLMHn+EEABTokK+RbCjIZJRsUnIMKOnOlLxCoE0z6g817+s6BATidIP8ZlHZLAaQDsOlce8M+evbW+KcGBn+2DWj2JcT5cOcPDaiPEeqvCek21TQ5zpFLGvR5JkDD8c7JohrUoqTLlPyapR1hQIfNG6XiiTRixzvzdUpS/9gQEjhYPWp5OGqjQzsrQzyyI/ojXSmHdvxRzJT3hny37biMUpTncWTAXmBEI6iqbczqZqR8RQe8WOAYTyjo7u3wlI3B6dPWCSoUbqxqYEe01klsg3p2U/fW7u/3mNziiS7/5mUd1vLPkhW1wMA21r3RbiV/t0YRKWR/mrZ0U6Chc2oLJLAuEwfQYduK/Jmm+ndL4HosTtf2bZm3YF6jbIot/qOYBrGq28QMQ7yYJL+lsktnWnd4cBjn7zucziT1NFkWt6Xt60+TN4B1/C7D1c6dSPNJnqOwmt3FHmzE1UEELAE7wkHKVAcNXIgoka19mBPQ0eSCb2IaNP0kuz8qJXWKDREZAAmt5Y9+fP1B+oNpiVmP9N9gTykbTDln/S3dKZ1hfzLn/z5lua9Dj3+jJzRkHfANWxt2ec00mpvBACLWzlOr5zqEZe3ldvmuztabNowx+8Pv28FkXSHAynSi2RW4aTnPn0/TUssEO2a0RXyf/7J+748//xzJlcOr36677Bqh7u6qDRpjNoVCmxs2nP4rikiIZubG59Y/eaW5r3yTOFRlvfsyZUapZuaG/8w1DUk6rMIt8pzCx26La7xSe7G9oRDcubAqGZIKUCUW1tb910y49Skidvq4jJ50Hz6MaRDN/zR8H1vPveLt/4mU8hHKhOjrDvQfWvt8gcvvzmuH0lO6djU3FDz8I88A7b75aeYwrJrRlKDMmryDnkNqTYxqopK5UQoeljtCxKAPR0thwLdHptzeJNehp0hRdmrQxKiuNjQvkJPVm80lP4cVjlWJc/lGfZxmrKt45Lpp6ZKcu9sO2jTdK/dETdcC4Ag4iB7daMg75DXkNRC6ZTVTK5MJe+OtgOmTHIM65bS4doUdOj6mn11oYQNRplPLHRnLSyd4e/vF0r/bS0h0kmDJkmMEgxGwyXZ+aeXTCUJLW7yib7XsDV2oOvA1+Bu7OjIO+Q1JNrQkBUtyyk8o3T6IPICACHDXG3DJIdAtGlGY2fr1pZ9JHG4DBJCyNfPuNhg2qiltRhQfzTyxVPPdRsOLhJ21YH6o6G1++ocujGM82+OT3kD6ck77NQiHdnDCL+8bQ1J2C+WU/oWlkyfXVwWiIboqJz+agqe43BfNfssQkhca7zcbvmwYUd9e7Mj7SqCk1zekaXPiXAYxj93rreSzXqW3eg/veg6S4hRyG3pTOsI9N6yaHFpdkGyLjQEQl7evnok55ucbPKOjBwCXbptU1PDx3t3EBJficQo5Shqyquun1vbHujN+FyRuM/qDQfnjJ/8rTMvlZ0/cXadUtoR7F25fZ3bNvzzNE42eckI91Yo0IhlPr3+bSCEJDviBBHv+9wNZTmFoWjkKClbIASRCER5Ok7iiCZZx/XqjnW725vtI9CxJ6O8I9qPQO5zuP628cPdHc2Msrj9CHkKcJ7L+/srvh22TJGs53jk0JjW3NNx14XXpjodhwJYgj/0wSsOwxjhYNeTTd6RsRuJRllXOHD/v/5KkgVMMvFw9uRZj1zx7d5ISCChQDO4hnSmNfd03nbO0tvO+XzSWSuyC+2ptavW7qtzGY6RlgScZPKOdNQkIjp12+p9u86tqJ6UnZ/oHFEALvjs4sml2QXPbXyPUjBYBg5jlkU9TT0dt5y9+MHLb0YUlMZPNpajQrsjwRueedDCzKzjk0pemhFKa5T9+J9PSx8t0cjJeRLXza35yw0/8Nqc7cFejbFhe9FAiM5Y0AwHouEHLv3Sg5ffLEenJxlZj4IC/c9Vz+/vbneMzPqenPJmYEit7L7a2rpPoDi3YnbSyScUKBdiRsGEJbMWNHS2rD+wm1EmBwSmL4E8fEQgHgr0zCwsefzqf7t+bo1AhBQjmjTKXt625nv/eDzL4eSZGyN/8sibmQnGAtFl2P9Vt/GU4snTCybIwpmE+wVciByn5+rZiybnFq3fv3t/9yFCiME0RvsWVkJFQl+JjZzLGbHM7nDQodu+X7vs4WXfnJY/XnpkqToZ93a1XfnUA7IuNbN5y5NEXii46/qM3C8KEOXcbdhX3HTn7KKyVPMVYyMTDwV6Xt62+tGPX9/Y3CAHlts0XaNMo0yuLiBgIbeEiFimxS2NaaXZBTfMrb2iemFFXrHUoknLnAQiIdgbCS178ucf793hs7uOxukCJ4O8GSMHIUSjrDscmJI3/q1v3OezOweZvxn7J4G4Zv+uVXWb1u6v23Xo4KFgT2fQDwQIECHQa3dkOdxT8ooqx5UsKpu1qGym2+aQv57ojsXulEChUXbTs79+cs2bRd4ck1vk6OCElzeT5IjdrwWTpr1w4x1euzNxyOtAyy3wsHkYITPaHuzZ09EiVbQleJEnp8ibHTu2R94mAKAp52X3mf/bVjz2/z94Od/tNflRPpHkhJY3w+SQ96sj5J83vvy3y79ZOa5kkPslvTNEIXtTU6UEYkc5pVo9Az2y7nDwlhcfeWb9Ozku9+gcd3UCy5v5IzUEostmb+hoWbHlk9nFZeW540T/cQhJ4zTZqiQrdWViOIaYdZfHU6S6U3KUsUbZno6WL/z5lyu2fFzo8Y3aWXknsLxH5bwVgeg07AEz/PS6txllZ5XNlDMCBm/+kQcT0QGv/nMmBslY9p3hRYG+uOXja5/+xa5DB/LdvqNtTU4SeY8KOUh/DZzOtJe3rv60qaG6qLTA7ZMFwMnO+RtOsqFfOcOhQM89b/zv7a88yZG7jaN+8tnJI+/RIkcs2+OxOTa3NP5p3Vsdwd7ZxWUem0POnUl1DMBQ74lCyFPiKAUwufXYJ69/+dlfvbZzg8/ulPvm5BjhxJM38w5pEgJSagnREw5Oysq/af75y6sXykEXA52vvsWVcPOkJZalTQCf9W+1+btf2b729x//c+3+Opdhs2vGMVEYJ7a8o0EO0j/RMWxF/ZFQrstbW151yYz5teVVxQkTLwSK/swhAsRnA3sjoXf3bH1l25rXd21o6Gix67rLsIsB3txxghND3lEiR2yzgAE1ueWPhjmK8d7cU4onLyydPqd48qTs/Dyn12t3xuWRukKBQDRc3960vfXAew1bNxzYXd/exFG4DLtdM6S6Jscrxrq8o0qO2KqSVVJRywqZEUsIRmmWw+XQjCJvTqEnKzYyxR8J17c3WYK3BXq44EDAoRt2zSBAjkNtceLJewzIMTCWk3keJGhxLhBNYZm8rx0ZCWFADU2jABrVpHEeQ5w4AeTVjuHNQoJcHJb50RkDY2D/BZF/5HnMYx1jTl7tuLlx/a46jn0WnCjyUqKgoMihoMihoMihoMihoMihoMihoMihoMihoMihoMihoKDIoaDIoaDIoaDIoaDIoaDIoaDIoaDIoaDIoaDIoaCgyKGgyKGgyKGgyKGgyKGgyKGgyKGgyKGgyKGgyKGgyKFugYIih4Iih0Lm8H9Wd8DE1WhHbQAAAABJRU5ErkJggg==">
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+
+<style>
+/* =====================================================================
+   AUSSEHEN (CSS)
+   Farben stehen als Variablen oben. Für den Dunkelmodus werden nur die
+   Variablen ausgetauscht – das Betriebssystem entscheidet, welcher gilt.
+   ===================================================================== */
+:root {
+  --bg: #f2f2f7;
+  --karte: #ffffff;
+  --text: #1c1c1e;
+  --text2: #6e6e73;
+  --linie: #d8d8dd;
+  --akzent: #16805c;
+  --akzent-text: #ffffff;
+  --akzent-hell: #e3f3ec;
+  --rot: #c62828;
+  --rot-hell: #fdecea;
+  --orange: #b25e00;
+  --orange-hell: #fff3e0;
+  --feld: #ffffff;
+  --schatten: 0 1px 3px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --karte: #1c1c1e;
+    --text: #f2f2f7;
+    --text2: #a1a1a6;
+    --linie: #3a3a3c;
+    --akzent: #34c38f;
+    --akzent-text: #04261a;
+    --akzent-hell: #12352a;
+    --rot: #ff6b6b;
+    --rot-hell: #3b1414;
+    --orange: #ffb547;
+    --orange-hell: #3a2a0f;
+    --feld: #2c2c2e;
+    --schatten: none;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+header {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg);
+  padding: calc(env(safe-area-inset-top) + 10px) 16px 8px;
+}
+header h1 { margin: 0; font-size: 28px; }
+
+main {
+  padding: 0 16px calc(env(safe-area-inset-bottom) + 96px);
+  max-width: 640px; margin: 0 auto;
+}
+
+h2 { font-size: 20px; margin: 24px 0 8px; }
+h3 { font-size: 17px; margin: 0 0 4px; }
+
+.karte {
+  background: var(--karte);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--schatten);
+}
+.klein { font-size: 15px; color: var(--text2); }
+.zentriert { text-align: center; }
+
+/* Große Kilometerstand-Anzeige */
+.stand-zahl { font-size: 40px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* Hinweise / Warnungen */
+.hinweis { border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.hinweis.warn { background: var(--orange-hell); color: var(--orange); }
+.hinweis.fehler { background: var(--rot-hell); color: var(--rot); }
+.hinweis.info { background: var(--akzent-hell); color: var(--text); }
+.hinweis button { margin-top: 10px; }
+.hinweis button:not(.primaer) { background: var(--karte); }
+
+.status-rot { color: var(--rot); font-weight: 600; }
+.status-orange { color: var(--orange); font-weight: 600; }
+.status-gruen { color: var(--akzent); font-weight: 600; }
+
+/* Schaltflächen */
+button, .knopf {
+  font: inherit;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--akzent-hell);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button.primaer { background: var(--akzent); color: var(--akzent-text); }
+button.gefahr { background: var(--rot-hell); color: var(--rot); }
+button.leise { background: transparent; color: var(--akzent); }
+button.voll { width: 100%; }
+button:active { opacity: .7; }
+button:disabled { opacity: .4; }
+.knopfreihe { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.knopfreihe > button { flex: 1 1 auto; }
+
+/* Vorlagen-Schnellerfassung */
+.schnell { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.schnell button { min-height: 72px; text-align: left; display: flex; flex-direction: column; justify-content: center; }
+.schnell .km { font-weight: 400; font-size: 15px; opacity: .85; }
+
+/* Summen-Kacheln */
+.summen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.summe { background: var(--karte); border-radius: 12px; padding: 10px 6px; text-align: center; box-shadow: var(--schatten); }
+.summe .wert { font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.summe .titel { font-size: 13px; color: var(--text2); }
+
+/* Listen */
+.liste { background: var(--karte); border-radius: 14px; overflow: hidden; box-shadow: var(--schatten); }
+.zeile { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--linie); }
+.zeile:last-child { border-bottom: none; }
+.zeile .inhalt {
+  flex: 1; min-width: 0;
+  background: none; border-radius: 0; text-align: left; font-weight: 400;
+  padding: 10px 0 10px 16px; display: flex; gap: 10px; align-items: center;
+}
+.zeile .inhalt .text { flex: 1; min-width: 0; }
+.zeile .inhalt .text > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zeile .zahl { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.zeile .symbol { background: none; min-width: 48px; padding: 0; color: var(--text2); font-size: 20px; }
+.zeile .pfeile { display: flex; }
+.leer { padding: 16px; color: var(--text2); text-align: center; }
+
+.abzeichen {
+  display: inline-block; font-size: 12px; font-weight: 700;
+  padding: 2px 8px; border-radius: 99px;
+  background: var(--orange-hell); color: var(--orange);
+  vertical-align: middle; margin-left: 4px;
+}
+
+/* Formulare */
+label { display: block; font-size: 15px; color: var(--text2); margin: 14px 0 4px; }
+input, select, textarea {
+  font: inherit; font-size: 17px; /* ≥16px verhindert das automatische Zoomen auf dem iPhone */
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--linie);
+  border-radius: 10px;
+  background: var(--feld);
+  color: var(--text);
+  -webkit-appearance: none; appearance: none;
+}
+input[type="date"] { display: block; }
+input::-webkit-date-and-time-value { text-align: left; }
+select {
+  background-image: linear-gradient(45deg, transparent 50%, var(--text2) 50%), linear-gradient(135deg, var(--text2) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%;
+  background-size: 6px 6px; background-repeat: no-repeat;
+  padding-right: 36px;
+}
+textarea { min-height: 80px; resize: vertical; }
+.feldhinweis { font-size: 14px; color: var(--text2); margin-top: 4px; }
+.feldhinweis.warn { color: var(--orange); }
+
+/* Fenster (Dialoge) */
+dialog {
+  border: none; padding: 0;
+  width: calc(100% - 16px); max-width: 560px;
+  max-height: calc(100% - env(safe-area-inset-top) - 24px);
+  margin: calc(env(safe-area-inset-top) + 12px) auto auto;
+  border-radius: 16px;
+  background: var(--karte); color: var(--text);
+  overflow: auto;
+}
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog .fensterinhalt { padding: 18px 16px 16px; }
+dialog h2 { margin-top: 0; }
+
+/* Untere Navigationsleiste */
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex;
+  background: var(--karte);
+  border-top: 1px solid var(--linie);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+nav button {
+  flex: 1; background: none; border-radius: 0;
+  min-height: 60px; padding: 6px 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: 12px; font-weight: 500; color: var(--text2);
+}
+nav button .ico { font-size: 22px; line-height: 1; }
+nav button.aktiv { color: var(--akzent); font-weight: 700; }
+
+/* Kurze Bestätigung unten ("Gespeichert") */
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  background: var(--text); color: var(--bg);
+  padding: 10px 18px; border-radius: 99px; font-weight: 600;
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20;
+  white-space: nowrap;
+}
+#toast.sichtbar { opacity: .95; }
+</style>
+</head>
+<body>
+
+<header><h1 id="seitentitel">Übersicht</h1></header>
+<main id="inhalt"></main>
+
+<nav>
+  <button type="button" data-action="tab" data-tab="uebersicht"><span class="ico">🚲</span>Übersicht</button>
+  <button type="button" data-action="tab" data-tab="wartung"><span class="ico">🔧</span>Wartung</button>
+  <button type="button" data-action="tab" data-tab="vorlagen"><span class="ico">📋</span>Vorlagen</button>
+  <button type="button" data-action="tab" data-tab="einstellungen"><span class="ico">⚙️</span>Einstellungen</button>
+</nav>
+
+<dialog id="fenster"><div class="fensterinhalt" id="fensterinhalt"></div></dialog>
+<dialog id="frage"><div class="fensterinhalt" id="frageinhalt"></div></dialog>
+<div id="toast"></div>
+<input type="file" id="importdatei" accept="application/json,.json" hidden>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   1. GRUNDEINSTELLUNGEN
+   ===================================================================== */
+
+// Unter diesem Namen liegen alle Daten im localStorage des Browsers.
+const SPEICHER_SCHLUESSEL = "radkm-daten";
+// Datum des letzten Exports (separat, damit ein Import es nicht verändert).
+const EXPORT_SCHLUESSEL = "radkm-letzter-export";
+// Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
+// und unten in MIGRATIONEN eine Umwandlung ergänzen.
+const DATEN_VERSION = 1;
+const EXPORT_ERINNERUNG_TAGE = 30;
+
+/* =====================================================================
+   2. HILFSFUNKTIONEN: Datum, Zahlen, Text
+   Datumswerte werden intern immer als Text "JJJJ-MM-TT" gespeichert.
+   ===================================================================== */
+
+function zweistellig(n) { return String(n).padStart(2, "0"); }
+
+function isoAusDate(d) {
+  return d.getFullYear() + "-" + zweistellig(d.getMonth() + 1) + "-" + zweistellig(d.getDate());
+}
+function heute() { return isoAusDate(new Date()); }
+
+// "JJJJ-MM-TT" → Date (lokal, 12 Uhr mittags, um Sommerzeit-Probleme zu vermeiden)
+function dateAusIso(iso) {
+  const [j, m, t] = iso.split("-").map(Number);
+  return new Date(j, m - 1, t, 12);
+}
+function istGueltigesDatum(iso) {
+  if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  return isoAusDate(dateAusIso(iso)) === iso;
+}
+// "2026-10-10" → "10.10.2026"
+function datumText(iso) {
+  if (!iso) return "–";
+  const [j, m, t] = iso.split("-");
+  return t + "." + m + "." + j;
+}
+const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+function wochentag(iso) { return WOCHENTAGE[dateAusIso(iso).getDay()]; }
+
+function plusTage(iso, tage) {
+  const d = dateAusIso(iso);
+  d.setDate(d.getDate() + tage);
+  return isoAusDate(d);
+}
+// Montag der Woche, in der das Datum liegt
+function montagDerWoche(iso) {
+  const tag = dateAusIso(iso).getDay(); // 0 = Sonntag
+  return plusTage(iso, -((tag + 6) % 7));
+}
+// Monate addieren; 31.01. + 1 Monat → 28./29.02.
+function plusMonate(iso, monate) {
+  const [j, m, t] = iso.split("-").map(Number);
+  const ziel = new Date(j, m - 1 + monate, 1, 12);
+  const letzterTag = new Date(ziel.getFullYear(), ziel.getMonth() + 1, 0).getDate();
+  ziel.setDate(Math.min(t, letzterTag));
+  return isoAusDate(ziel);
+}
+// Anzahl Tage von a nach b (positiv, wenn b später ist)
+function tageZwischen(a, b) {
+  const [j1, m1, t1] = a.split("-").map(Number);
+  const [j2, m2, t2] = b.split("-").map(Number);
+  return Math.round((Date.UTC(j2, m2 - 1, t2) - Date.UTC(j1, m1 - 1, t1)) / 86400000);
+}
+function tageText(n) { return n === 1 ? "1 Tag" : n + " Tagen"; }
+
+// Kilometer runden (2 Nachkommastellen), um Rechenungenauigkeiten zu vermeiden
+function runden(n) { return Math.round(n * 100) / 100; }
+
+const zahlFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
+// 1234.5 → "1.234,5"
+function kmText(n) { return n === null || n === undefined ? "–" : zahlFormat.format(runden(n)); }
+// 12.5 → "12,5" (für Eingabefelder, ohne Tausenderpunkt)
+function kmFeld(n) { return n === null || n === undefined ? "" : String(runden(n)).replace(".", ","); }
+// Eingabe → Zahl. Erlaubt "12,5" und "12.5"; "1.234,5" wird zu 1234.5.
+// Gibt null zurück, wenn die Eingabe keine gültige Zahl ≥ 0 ist.
+function kmLesen(text) {
+  let s = String(text).trim().replace(/\s/g, "");
+  if (s === "") return null;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  return runden(Number(s));
+}
+
+// Text sicher in HTML einsetzen (verhindert, dass z. B. "<" die Seite zerstört)
+function esc(text) {
+  return String(text ?? "").replace(/[&<>"']/g, z => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[z]));
+}
+function neueId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* =====================================================================
+   3. DATENMODELL: Laden, Prüfen, Umwandeln, Speichern
+   ===================================================================== */
+
+function standardWartungsarten() {
+  return [
+    { id: "grosse-inspektion", name: "Große Inspektion", intervallMonate: 12, intervallKm: null },
+    { id: "kleine-inspektion", name: "Kleine Inspektion", intervallMonate: null, intervallKm: null },
+    { id: "reparatur", name: "Reparatur", intervallMonate: null, intervallKm: null }
+  ];
+}
+function leereDaten() {
+  return {
+    version: DATEN_VERSION,
+    fahrrad: null,
+    vorlagen: [],
+    eintraege: [],
+    wartungsarten: standardWartungsarten(),
+    wartungsprotokoll: [],
+    termine: []
+  };
+}
+
+// Umwandlungen für ältere Datenversionen.
+// Beispiel für später: 1: d => { /* Daten anpassen */ d.version = 2; return d; }
+const MIGRATIONEN = {};
+
+function migrieren(roh) {
+  if (!roh || typeof roh !== "object" || Array.isArray(roh)) throw new Error("Die Datei enthält keine Rad-km-Daten.");
+  if (!Number.isInteger(roh.version) || roh.version < 1) throw new Error("Die Versionsnummer („version“) fehlt oder ist ungültig.");
+  if (roh.version > DATEN_VERSION) throw new Error("Die Daten stammen aus einer neueren App-Version (" + roh.version + "). Bitte die App aktualisieren.");
+  let d = roh;
+  while (d.version < DATEN_VERSION) {
+    const schritt = MIGRATIONEN[d.version];
+    if (!schritt) throw new Error("Keine Umwandlung für Version " + d.version + " vorhanden.");
+    d = schritt(d);
+  }
+  return d;
+}
+
+// Prüft die Daten vollständig und gibt eine bereinigte Kopie zurück.
+// Bei einem Fehler wird eine verständliche Meldung geworfen.
+function pruefen(d) {
+  const fehler = msg => { throw new Error(msg); };
+  const istText = v => typeof v === "string";
+  const istZahl = v => typeof v === "number" && Number.isFinite(v) && v >= 0;
+  const optText = (v, wo) => {
+    if (v === undefined || v === null) return "";
+    if (!istText(v)) fehler(wo + ": muss ein Text sein.");
+    return v;
+  };
+  const liste = (v, name) => {
+    if (v === undefined) return [];
+    if (!Array.isArray(v)) fehler("„" + name + "“ muss eine Liste sein.");
+    return v;
+  };
+
+  const erg = { version: DATEN_VERSION };
+
+  // Fahrrad
+  if (d.fahrrad === null || d.fahrrad === undefined) {
+    erg.fahrrad = null;
+  } else {
+    const f = d.fahrrad;
+    if (!istText(f.name) || !f.name.trim()) fehler("Fahrrad: Name fehlt.");
+    if (!istGueltigesDatum(f.startdatum)) fehler("Fahrrad: Startdatum ist ungültig (Format JJJJ-MM-TT).");
+    if (!istZahl(f.startKm)) fehler("Fahrrad: Start-Kilometerstand muss eine Zahl ≥ 0 sein.");
+    erg.fahrrad = { name: f.name.trim(), startdatum: f.startdatum, startKm: runden(f.startKm) };
+  }
+
+  // Vorlagen
+  erg.vorlagen = liste(d.vorlagen, "vorlagen").map((v, i) => {
+    const wo = "Vorlage Nr. " + (i + 1);
+    if (!istText(v.name) || !v.name.trim()) fehler(wo + ": Name fehlt.");
+    if (!istZahl(v.km)) fehler(wo + " („" + v.name + "“): km muss eine Zahl ≥ 0 sein.");
+    return { id: istText(v.id) && v.id ? v.id : neueId(), name: v.name.trim(), km: runden(v.km) };
+  });
+
+  // Einträge
+  const daten = new Set();
+  erg.eintraege = liste(d.eintraege, "eintraege").map((e, i) => {
+    const wo = "Eintrag Nr. " + (i + 1);
+    if (!istGueltigesDatum(e.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
+    if (daten.has(e.datum)) fehler("Doppeltes Datum " + datumText(e.datum) + ": pro Tag ist nur ein Eintrag erlaubt.");
+    daten.add(e.datum);
+    if (!istZahl(e.km)) fehler("Eintrag vom " + datumText(e.datum) + ": km muss eine Zahl ≥ 0 sein.");
+    const typ = e.typ === undefined ? "tag" : e.typ;
+    if (typ !== "tag" && typ !== "woche") fehler("Eintrag vom " + datumText(e.datum) + ": typ muss „tag“ oder „woche“ sein.");
+    const vorlage = optText(e.vorlage, "Eintrag vom " + datumText(e.datum) + " (vorlage)");
+    return {
+      id: istText(e.id) && e.id ? e.id : neueId(),
+      datum: e.datum,
+      km: runden(e.km),
+      vorlage: vorlage || null,
+      notiz: optText(e.notiz, "Eintrag vom " + datumText(e.datum) + " (notiz)"),
+      typ: typ
+    };
+  });
+
+  // Wartungsarten
+  const artIds = new Set();
+  erg.wartungsarten = d.wartungsarten === undefined ? standardWartungsarten() : liste(d.wartungsarten, "wartungsarten").map((a, i) => {
+    const wo = "Wartungsart Nr. " + (i + 1);
+    if (!istText(a.id) || !a.id) fehler(wo + ": id fehlt.");
+    if (artIds.has(a.id)) fehler(wo + ": id „" + a.id + "“ kommt doppelt vor.");
+    artIds.add(a.id);
+    if (!istText(a.name) || !a.name.trim()) fehler(wo + ": Name fehlt.");
+    const im = a.intervallMonate ?? null;
+    if (im !== null && !(Number.isInteger(im) && im >= 1)) fehler(wo + " („" + a.name + "“): intervallMonate muss eine ganze Zahl ≥ 1 oder null sein.");
+    const ik = a.intervallKm ?? null;
+    if (ik !== null && !(istZahl(ik) && ik > 0)) fehler(wo + " („" + a.name + "“): intervallKm muss eine Zahl > 0 oder null sein.");
+    return { id: a.id, name: a.name.trim(), intervallMonate: im, intervallKm: ik === null ? null : runden(ik) };
+  });
+  if (d.wartungsarten === undefined) erg.wartungsarten.forEach(a => artIds.add(a.id));
+
+  // Wartungsprotokoll
+  erg.wartungsprotokoll = liste(d.wartungsprotokoll, "wartungsprotokoll").map((p, i) => {
+    const wo = "Wartungsprotokoll Nr. " + (i + 1);
+    if (!istGueltigesDatum(p.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
+    if (!artIds.has(p.wartungsartId)) fehler(wo + " (" + datumText(p.datum) + "): unbekannte wartungsartId „" + p.wartungsartId + "“.");
+    const ks = p.kmStand ?? null;
+    if (ks !== null && !istZahl(ks)) fehler(wo + " (" + datumText(p.datum) + "): kmStand muss eine Zahl ≥ 0 oder null sein.");
+    let manuell = p.kmManuell;
+    if (manuell === undefined) manuell = ks !== null; // fehlt die Angabe, gilt ein vorhandener Wert als von Hand eingetragen
+    if (typeof manuell !== "boolean") fehler(wo + ": kmManuell muss true oder false sein.");
+    return {
+      id: istText(p.id) && p.id ? p.id : neueId(),
+      datum: p.datum,
+      wartungsartId: p.wartungsartId,
+      werkstatt: optText(p.werkstatt, wo + " (werkstatt)"),
+      kmStand: ks === null ? null : runden(ks),
+      kmManuell: manuell && ks !== null,
+      notiz: optText(p.notiz, wo + " (notiz)")
+    };
+  });
+
+  // Geplante Termine
+  const terminArten = new Set();
+  erg.termine = liste(d.termine, "termine").map((t, i) => {
+    const wo = "Termin Nr. " + (i + 1);
+    if (!artIds.has(t.wartungsartId)) fehler(wo + ": unbekannte wartungsartId „" + t.wartungsartId + "“.");
+    if (terminArten.has(t.wartungsartId)) fehler(wo + ": pro Wartungsart ist nur ein geplanter Termin erlaubt.");
+    terminArten.add(t.wartungsartId);
+    if (!istGueltigesDatum(t.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
+    return { wartungsartId: t.wartungsartId, datum: t.datum, werkstatt: optText(t.werkstatt, wo + " (werkstatt)") };
+  });
+
+  return erg;
+}
+
+// Die Daten der App – alles, was angezeigt wird, kommt von hier.
+let daten = leereDaten();
+let ladeFehler = null;
+
+function laden() {
+  let text;
+  try {
+    text = localStorage.getItem(SPEICHER_SCHLUESSEL);
+  } catch (e) {
+    ladeFehler = "Der Speicher des Browsers ist nicht verfügbar (privater Modus?). Daten können nicht gespeichert werden.";
+    return;
+  }
+  if (!text) return; // erster Start
+  try {
+    daten = pruefen(migrieren(JSON.parse(text)));
+  } catch (e) {
+    // Defekte Daten nicht überschreiben, sondern beiseitelegen
+    try { localStorage.setItem(SPEICHER_SCHLUESSEL + "-defekt-" + Date.now(), text); } catch (_) {}
+    ladeFehler = "Die gespeicherten Daten konnten nicht gelesen werden (" + e.message + "). Eine Kopie wurde beiseitegelegt. Bitte eine Sicherung importieren.";
+    daten = leereDaten();
+  }
+}
+
+function speichern() {
+  aktualisiereProtokollKm();
+  try {
+    localStorage.setItem(SPEICHER_SCHLUESSEL, JSON.stringify(daten));
+    return true;
+  } catch (e) {
+    alert("Speichern fehlgeschlagen: " + e.message);
+    return false;
+  }
+}
+
+function letzterExport() {
+  try { return localStorage.getItem(EXPORT_SCHLUESSEL); } catch (e) { return null; }
+}
+
+/* =====================================================================
+   4. BERECHNUNGEN
+   ===================================================================== */
+
+function eintragAm(iso) { return daten.eintraege.find(e => e.datum === iso) || null; }
+
+function summe(filter) {
+  return runden(daten.eintraege.filter(filter).reduce((s, e) => s + e.km, 0));
+}
+
+// Kilometerstand am Ende des Tages "iso". null, wenn kein Fahrrad angelegt
+// ist oder das Datum vor dem Startdatum liegt.
+function kmStandAm(iso) {
+  const f = daten.fahrrad;
+  if (!f || iso < f.startdatum) return null;
+  return runden(f.startKm + summe(e => e.datum >= f.startdatum && e.datum <= iso));
+}
+
+// Aktueller Kilometerstand = Start + alle Einträge ab dem Startdatum
+function aktuellerKmStand() {
+  const f = daten.fahrrad;
+  if (!f) return null;
+  return runden(f.startKm + summe(e => e.datum >= f.startdatum));
+}
+
+// Nicht von Hand überschriebene Kilometerstände im Protokoll neu berechnen
+function aktualisiereProtokollKm() {
+  daten.wartungsprotokoll.forEach(p => {
+    if (!p.kmManuell) p.kmStand = kmStandAm(p.datum);
+  });
+}
+
+function wochenEintragInWoche(iso, ausserId) {
+  const montag = montagDerWoche(iso);
+  return daten.eintraege.find(e => e.typ === "woche" && e.id !== ausserId && montagDerWoche(e.datum) === montag) || null;
+}
+
+function artName(id) {
+  const a = daten.wartungsarten.find(a => a.id === id);
+  return a ? a.name : "(unbekannt)";
+}
+
+// Status einer Wartungsart: letzte Durchführung, Termin, Fälligkeit, Anzeigetext
+function wartungsStatus(art) {
+  const h = heute();
+  const durchfuehrungen = daten.wartungsprotokoll
+    .filter(p => p.wartungsartId === art.id)
+    .sort((a, b) => b.datum.localeCompare(a.datum));
+  const letzte = durchfuehrungen[0] || null;
+  const termin = daten.termine.find(t => t.wartungsartId === art.id) || null;
+
+  let seitKm = null;
+  if (letzte) {
+    const aktuell = aktuellerKmStand();
+    seitKm = (letzte.kmStand !== null && aktuell !== null)
+      ? runden(aktuell - letzte.kmStand)
+      : summe(e => e.datum > letzte.datum);
+  }
+
+  const st = { art, letzte, termin, seitKm, datum: null, text: "", klasse: "", nochNie: false };
+
+  if (termin) {
+    const t = tageZwischen(h, termin.datum);
+    st.datum = termin.datum;
+    st.text = "Termin am " + datumText(termin.datum) + (termin.werkstatt ? " bei " + termin.werkstatt : "") +
+      (t > 0 ? " (in " + tageText(t) + ")" : t === 0 ? " (heute)" : " (vor " + tageText(-t) + ", noch nicht als erledigt eingetragen)");
+    st.klasse = t < 0 ? "status-orange" : "status-gruen";
+  } else if (art.intervallMonate) {
+    if (!letzte) {
+      st.nochNie = true;
+      st.text = "noch nicht durchgeführt";
+      st.klasse = "status-orange";
+    } else {
+      const faellig = plusMonate(letzte.datum, art.intervallMonate);
+      const t = tageZwischen(h, faellig);
+      st.datum = faellig;
+      if (t > 0) { st.text = "fällig in " + tageText(t) + " (" + datumText(faellig) + ")"; st.klasse = t <= 30 ? "status-orange" : "status-gruen"; }
+      else if (t === 0) { st.text = "heute fällig"; st.klasse = "status-rot"; }
+      else { st.text = "überfällig seit " + tageText(-t) + " (" + datumText(faellig) + ")"; st.klasse = "status-rot"; }
+    }
+  } else {
+    st.text = "ohne Intervall";
+  }
+  return st;
+}
+
+// Nächste fällige Wartung für die Startseite
+function naechsteWartung() {
+  const alle = daten.wartungsarten.map(wartungsStatus);
+  const mitDatum = alle.filter(s => s.datum).sort((a, b) => a.datum.localeCompare(b.datum));
+  if (mitDatum.length) return mitDatum[0];
+  return alle.find(s => s.nochNie) || null;
+}
+
+/* =====================================================================
+   5. KLEINE BAUSTEINE DER OBERFLÄCHE: Fenster, Rückfrage, Meldung
+   ===================================================================== */
+
+const fenster = document.getElementById("fenster");
+const fensterInhalt = document.getElementById("fensterinhalt");
+
+function fensterOeffnen(html) {
+  fensterInhalt.innerHTML = html;
+  if (!fenster.open) fenster.showModal();
+  fenster.scrollTop = 0;
+}
+function fensterSchliessen() { if (fenster.open) fenster.close(); }
+
+// Rückfrage mit zwei Schaltflächen. Liefert true (Ja) oder false (Nein/Abbrechen).
+function frage(text, jaText = "OK", neinText = "Abbrechen", gefaehrlich = false) {
+  const dlg = document.getElementById("frage");
+  document.getElementById("frageinhalt").innerHTML =
+    '<p style="margin-top:0">' + text + '</p>' +
+    '<div class="knopfreihe">' +
+    '<button type="button" data-antwort="nein">' + esc(neinText) + '</button>' +
+    '<button type="button" data-antwort="ja" class="' + (gefaehrlich ? "gefahr" : "primaer") + '">' + esc(jaText) + '</button>' +
+    '</div>';
+  return new Promise(fertig => {
+    const klick = ev => {
+      const b = ev.target.closest("[data-antwort]");
+      if (!b) return;
+      dlg.removeEventListener("click", klick);
+      dlg.close();
+      fertig(b.dataset.antwort === "ja");
+    };
+    dlg.addEventListener("click", klick);
+    dlg.addEventListener("cancel", () => { dlg.removeEventListener("click", klick); fertig(false); }, { once: true });
+    dlg.showModal();
+  });
+}
+
+let toastTimer;
+function meldung(text) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.classList.add("sichtbar");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("sichtbar"), 1800);
+}
+
+function wert(id) { return document.getElementById(id).value; }
+
+/* =====================================================================
+   6. BILDSCHIRME
+   Jeder Bildschirm ist eine Funktion, die HTML-Text erzeugt.
+   Nach jeder Änderung wird der aktuelle Bildschirm neu gezeichnet.
+   ===================================================================== */
+
+let aktiverTab = "uebersicht";
+let anzahlEintraege = 50;
+
+const TITEL = { uebersicht: "Übersicht", wartung: "Wartung", vorlagen: "Vorlagen", einstellungen: "Einstellungen" };
+
+function zeichnen() {
+  document.getElementById("seitentitel").textContent = TITEL[aktiverTab];
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("aktiv", b.dataset.tab === aktiverTab));
+  const bildschirme = { uebersicht: bildUebersicht, wartung: bildWartung, vorlagen: bildVorlagen, einstellungen: bildEinstellungen };
+  let html = ladeFehler ? '<div class="hinweis fehler">' + esc(ladeFehler) + '</div>' : "";
+  html += bildschirme[aktiverTab]();
+  document.getElementById("inhalt").innerHTML = html;
+}
+
+/* ---------- Übersicht ---------- */
+function bildUebersicht() {
+  const h = heute();
+  let html = "";
+
+  if (!daten.fahrrad) {
+    html += '<div class="hinweis info"><strong>Willkommen!</strong><br>Bitte lege zuerst dein Fahrrad mit Startdatum und Start-Kilometerstand an.' +
+      '<br><button type="button" class="primaer" data-action="tab" data-tab="einstellungen">Fahrrad anlegen</button></div>';
+  }
+
+  // Erinnerung an die Datensicherung
+  const le = letzterExport();
+  const exportAlter = le ? tageZwischen(le, h) : null;
+  if (daten.fahrrad && (le === null || exportAlter > EXPORT_ERINNERUNG_TAGE)) {
+    html += '<div class="hinweis warn"><strong>⚠️ Datensicherung fällig</strong><br>' +
+      (le === null ? "Du hast noch nie exportiert." : "Letzter Export vor " + tageText(exportAlter) + " (" + datumText(le) + ").") +
+      ' Die Daten liegen nur auf diesem Gerät.<br><button type="button" class="primaer" data-action="export">Jetzt exportieren</button></div>';
+  }
+
+  // Kilometerstand und nächste Wartung
+  html += '<div class="karte"><div class="klein">' + esc(daten.fahrrad ? daten.fahrrad.name : "Kilometerstand") + '</div>' +
+    '<div class="stand-zahl">' + kmText(aktuellerKmStand()) + ' km</div>';
+  const nw = naechsteWartung();
+  if (nw) {
+    html += '<div style="margin-top:8px">🔧 ' + esc(nw.art.name) + ': <span class="' + nw.klasse + '">' + esc(nw.text) + '</span></div>';
+  } else {
+    html += '<div class="klein" style="margin-top:8px">🔧 Keine Wartung fällig</div>';
+  }
+  html += '</div>';
+
+  // Schnellerfassung
+  const eHeute = eintragAm(h);
+  html += '<h2>Heute erfassen</h2>';
+  if (eHeute) {
+    html += '<div class="hinweis info">✓ Heute erfasst: <strong>' + kmText(eHeute.km) + ' km</strong>' +
+      (eHeute.vorlage ? " (" + esc(eHeute.vorlage) + ")" : "") +
+      '<br><button type="button" data-action="eintrag-bearbeiten" data-id="' + eHeute.id + '">Bearbeiten</button></div>';
+  }
+  html += '<div class="schnell">';
+  daten.vorlagen.forEach(v => {
+    html += '<button type="button" class="primaer" data-action="vorlage-erfassen" data-id="' + v.id + '">' +
+      '<span>' + esc(v.name) + '</span><span class="km">' + kmText(v.km) + ' km</span></button>';
+  });
+  html += '<button type="button" data-action="eintrag-neu"><span>Andere km</span><span class="km">frei eingeben</span></button>';
+  html += '</div>';
+  if (!daten.vorlagen.length) {
+    html += '<p class="klein">Tipp: Lege unter „Vorlagen“ deine Standard-Strecken an, dann erfasst du einen Tag mit zwei Klicks.</p>';
+  }
+
+  // Summen
+  const montag = montagDerWoche(h), sonntag = plusTage(montag, 6);
+  html += '<h2>Summen</h2><div class="summen">' +
+    kachel("Heute", summe(e => e.datum === h)) +
+    kachel("Woche", summe(e => e.datum >= montag && e.datum <= sonntag)) +
+    kachel("Monat", summe(e => e.datum.slice(0, 7) === h.slice(0, 7))) +
+    kachel("Jahr", summe(e => e.datum.slice(0, 4) === h.slice(0, 4))) +
+    '</div>';
+
+  // Liste der Einträge
+  const sortiert = [...daten.eintraege].sort((a, b) => b.datum.localeCompare(a.datum));
+  html += '<h2>Einträge <span class="klein">(' + sortiert.length + ')</span></h2><div class="liste">';
+  if (!sortiert.length) html += '<div class="leer">Noch keine Einträge.</div>';
+  sortiert.slice(0, anzahlEintraege).forEach(e => {
+    const vorStart = daten.fahrrad && e.datum < daten.fahrrad.startdatum;
+    const unten = [e.vorlage, e.notiz].filter(Boolean).map(esc).join(" · ");
+    html += '<div class="zeile">' +
+      '<button type="button" class="inhalt" data-action="eintrag-bearbeiten" data-id="' + e.id + '">' +
+      '<div class="text"><div>' + wochentag(e.datum) + ', ' + datumText(e.datum) +
+      (e.typ === "woche" ? '<span class="abzeichen">Woche</span>' : "") + '</div>' +
+      (unten ? '<div class="klein">' + unten + '</div>' : "") +
+      (vorStart ? '<div class="klein">vor dem Startdatum – zählt nicht zum Kilometerstand</div>' : "") +
+      '</div><span class="zahl">' + kmText(e.km) + ' km</span></button>' +
+      '<button type="button" class="symbol" data-action="eintrag-loeschen" data-id="' + e.id + '" aria-label="Löschen">🗑</button>' +
+      '</div>';
+  });
+  html += '</div>';
+  if (sortiert.length > anzahlEintraege) {
+    html += '<div class="knopfreihe"><button type="button" data-action="mehr">Mehr anzeigen</button></div>';
+  }
+  return html;
+}
+
+function kachel(titel, km) {
+  return '<div class="summe"><div class="wert">' + kmText(km) + '</div><div class="titel">' + titel + ' (km)</div></div>';
+}
+
+/* ---------- Eintrags-Formular ---------- */
+
+// Zustand des gerade geöffneten Eintrags-Formulars
+let formEintrag = null; // { id | null, typ, ursprungsDatum }
+
+// Öffnet das Formular. Gibt es für das Datum schon einen Eintrag,
+// wird dieser zum Bearbeiten geöffnet.
+function eintragOeffnen(vorgabe) {
+  const datum = vorgabe.datum || heute();
+  const vorhanden = vorgabe.id ? daten.eintraege.find(e => e.id === vorgabe.id) : eintragAm(datum);
+  if (vorhanden) {
+    eintragsFormular(vorhanden, vorgabe.id ? "" : "Für den " + datumText(vorhanden.datum) + " gibt es bereits einen Eintrag. Du kannst ihn hier bearbeiten.");
+  } else {
+    eintragsFormular({ id: null, datum, km: vorgabe.km ?? null, vorlage: vorgabe.vorlage || null, notiz: "", typ: "tag" }, "");
+  }
+}
+
+function eintragsFormular(e, hinweis) {
+  formEintrag = { id: e.id, typ: e.typ, ursprungsDatum: e.id ? e.datum : null };
+  let optionen = '<option value="">– keine –</option>';
+  let gefunden = false;
+  daten.vorlagen.forEach(v => {
+    const sel = v.name === e.vorlage;
+    if (sel) gefunden = true;
+    optionen += '<option value="' + esc(v.id) + '"' + (sel ? " selected" : "") + '>' + esc(v.name) + ' (' + kmText(v.km) + ' km)</option>';
+  });
+  // Vorlage wurde gelöscht oder umbenannt: Namen trotzdem behalten
+  if (e.vorlage && !gefunden) {
+    optionen += '<option value="__alt__" selected>' + esc(e.vorlage) + ' (Vorlage existiert nicht mehr)</option>';
+  }
+  formEintrag.alteVorlage = e.vorlage;
+
+  fensterOeffnen(
+    '<h2>' + (e.id ? "Eintrag bearbeiten" : "Neuer Eintrag") +
+    (e.typ === "woche" ? ' <span class="abzeichen">Woche</span>' : "") + '</h2>' +
+    (hinweis ? '<div class="hinweis info">' + esc(hinweis) + '</div>' : "") +
+    (e.typ === "woche" ? '<div class="klein">Importierte Wochensumme – das Datum ist der Montag bzw. erste Fahrtag der Woche.</div>' : "") +
+    '<label for="f-datum">Datum</label>' +
+    '<input type="date" id="f-datum" value="' + e.datum + '" data-change="eintrag-datum">' +
+    '<div class="feldhinweis warn" id="f-datum-hinweis"></div>' +
+    '<label for="f-vorlage">Vorlage (optional)</label>' +
+    '<select id="f-vorlage" data-change="eintrag-vorlage">' + optionen + '</select>' +
+    '<label for="f-km">Kilometer</label>' +
+    '<input type="text" id="f-km" inputmode="decimal" autocomplete="off" placeholder="z. B. 12,5" value="' + kmFeld(e.km) + '">' +
+    '<label for="f-notiz">Notiz (optional)</label>' +
+    '<input type="text" id="f-notiz" value="' + esc(e.notiz) + '">' +
+    '<div class="knopfreihe">' +
+    '<button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="eintrag-speichern">Speichern</button>' +
+    '</div>' +
+    (e.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="eintrag-loeschen" data-id="' + e.id + '">Eintrag löschen</button></div>' : "")
+  );
+  datumHinweis();
+}
+
+function datumHinweis() {
+  const d = wert("f-datum");
+  const el = document.getElementById("f-datum-hinweis");
+  el.textContent = (daten.fahrrad && d && d < daten.fahrrad.startdatum)
+    ? "Dieses Datum liegt vor dem Startdatum (" + datumText(daten.fahrrad.startdatum) + ") und zählt nicht zum Kilometerstand."
+    : "";
+}
+
+// Datum im Formular geändert: existiert dort schon ein Eintrag, wechseln
+function eintragDatumGeaendert() {
+  const d = wert("f-datum");
+  const vorhanden = istGueltigesDatum(d) ? eintragAm(d) : null;
+  if (vorhanden && vorhanden.id !== formEintrag.id) {
+    eintragsFormular(vorhanden, "Für den " + datumText(d) + " gibt es bereits einen Eintrag. Du kannst ihn hier bearbeiten.");
+    return;
+  }
+  datumHinweis();
+}
+
+function eintragVorlageGeaendert() {
+  const v = daten.vorlagen.find(v => v.id === wert("f-vorlage"));
+  if (v) document.getElementById("f-km").value = kmFeld(v.km);
+}
+
+async function eintragSpeichern() {
+  const datum = wert("f-datum");
+  const km = kmLesen(wert("f-km"));
+  if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
+  if (km === null) { alert("Bitte die Kilometer als Zahl eingeben, z. B. 12,5."); return; }
+  const anderer = eintragAm(datum);
+  if (anderer && anderer.id !== formEintrag.id) { alert("Für den " + datumText(datum) + " gibt es bereits einen Eintrag."); return; }
+
+  const vw = wert("f-vorlage");
+  const vorlage = vw === "__alt__" ? formEintrag.alteVorlage : (daten.vorlagen.find(v => v.id === vw)?.name || null);
+
+  // Warnung: Tages-Eintrag in einer Woche, für die es schon eine Wochensumme gibt
+  const neuOderVerschoben = !formEintrag.id || formEintrag.ursprungsDatum !== datum;
+  if (formEintrag.typ === "tag" && neuOderVerschoben) {
+    const w = wochenEintragInWoche(datum, formEintrag.id);
+    if (w) {
+      const mo = montagDerWoche(datum);
+      const ok = await frage("In der Woche vom " + datumText(mo) + " bis " + datumText(plusTage(mo, 6)) +
+        " gibt es bereits einen <strong>Wochen-Eintrag</strong> (" + kmText(w.km) + " km am " + datumText(w.datum) +
+        "). Die Kilometer würden dann doppelt zählen.<br><br>Trotzdem speichern?", "Trotzdem speichern", "Abbrechen");
+      if (!ok) return;
+    }
+  }
+
+  const notiz = wert("f-notiz").trim();
+  if (formEintrag.id) {
+    const e = daten.eintraege.find(e => e.id === formEintrag.id);
+    Object.assign(e, { datum, km, vorlage, notiz });
+  } else {
+    daten.eintraege.push({ id: neueId(), datum, km, vorlage, notiz, typ: "tag" });
+  }
+  if (speichern()) {
+    fensterSchliessen();
+    zeichnen();
+    meldung("Gespeichert: " + kmText(km) + " km");
+  }
+}
+
+async function eintragLoeschen(id) {
+  const e = daten.eintraege.find(e => e.id === id);
+  if (!e) return;
+  const ok = await frage("Eintrag vom " + datumText(e.datum) + " (" + kmText(e.km) + " km) wirklich löschen?", "Löschen", "Abbrechen", true);
+  if (!ok) return;
+  daten.eintraege = daten.eintraege.filter(x => x.id !== id);
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Eintrag gelöscht"); }
+}
+
+/* ---------- Wartung ---------- */
+function bildWartung() {
+  let html = "";
+  daten.wartungsarten.forEach(art => {
+    const st = wartungsStatus(art);
+    html += '<div class="karte"><h3>' + esc(art.name) + '</h3>' +
+      '<div class="' + st.klasse + '">' + esc(st.text) + '</div>';
+    if (st.letzte) {
+      html += '<div class="klein">Zuletzt: ' + datumText(st.letzte.datum) +
+        (st.letzte.werkstatt ? " bei " + esc(st.letzte.werkstatt) : "") +
+        (st.letzte.kmStand !== null ? " · " + kmText(st.letzte.kmStand) + " km" : "") + '</div>' +
+        '<div class="klein">Seit letzter Wartung gefahren: ' + kmText(st.seitKm) + ' km</div>';
+    } else if (!art.intervallMonate) {
+      html += '<div class="klein">Noch nicht durchgeführt</div>';
+    }
+    if (st.termin && art.intervallMonate) {
+      // Bei geplantem Termin zusätzlich die berechnete Fälligkeit klein zeigen
+      html += st.letzte ? '<div class="klein">Berechnet fällig: ' + datumText(plusMonate(st.letzte.datum, art.intervallMonate)) + '</div>' : "";
+    }
+    html += '<div class="knopfreihe">' +
+      '<button type="button" data-action="termin" data-id="' + esc(art.id) + '">' + (st.termin ? "Termin ändern" : "Termin planen") + '</button>' +
+      '<button type="button" class="primaer" data-action="wartung-erledigt" data-id="' + esc(art.id) + '">Erledigt eintragen</button>' +
+      '</div></div>';
+  });
+
+  // Protokoll
+  const prot = [...daten.wartungsprotokoll].sort((a, b) => b.datum.localeCompare(a.datum));
+  html += '<h2>Wartungsprotokoll</h2><div class="liste">';
+  if (!prot.length) html += '<div class="leer">Noch keine Wartung eingetragen.</div>';
+  prot.forEach(p => {
+    const unten = [p.werkstatt, p.notiz].filter(Boolean).map(esc).join(" · ");
+    html += '<div class="zeile">' +
+      '<button type="button" class="inhalt" data-action="protokoll-bearbeiten" data-id="' + p.id + '">' +
+      '<div class="text"><div>' + datumText(p.datum) + ' · <strong>' + esc(artName(p.wartungsartId)) + '</strong></div>' +
+      (unten ? '<div class="klein">' + unten + '</div>' : "") +
+      '</div><span class="zahl">' + (p.kmStand !== null ? kmText(p.kmStand) + ' km' : "") + '</span></button>' +
+      '<button type="button" class="symbol" data-action="protokoll-loeschen" data-id="' + p.id + '" aria-label="Löschen">🗑</button>' +
+      '</div>';
+  });
+  html += '</div>';
+
+  // Wartungsarten verwalten
+  html += '<h2>Wartungsarten</h2><div class="liste">';
+  daten.wartungsarten.forEach(a => {
+    const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" / ");
+    html += '<div class="zeile"><button type="button" class="inhalt" data-action="art-bearbeiten" data-id="' + esc(a.id) + '">' +
+      '<div class="text"><div>' + esc(a.name) + '</div><div class="klein">' + (iv ? "Intervall: " + iv : "ohne Intervall") + '</div></div>' +
+      '<span class="klein">›</span></button></div>';
+  });
+  html += '</div><div class="knopfreihe"><button type="button" data-action="art-neu">+ Neue Wartungsart</button></div>';
+  return html;
+}
+
+// Geplanter Termin
+function terminFormular(artId) {
+  const art = daten.wartungsarten.find(a => a.id === artId);
+  const t = daten.termine.find(t => t.wartungsartId === artId);
+  fensterOeffnen(
+    '<h2>Termin: ' + esc(art.name) + '</h2>' +
+    '<label for="t-datum">Datum</label><input type="date" id="t-datum" value="' + (t ? t.datum : "") + '">' +
+    '<label for="t-werkstatt">Werkstatt</label><input type="text" id="t-werkstatt" value="' + esc(t ? t.werkstatt : "") + '">' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="termin-speichern" data-id="' + esc(artId) + '">Speichern</button></div>' +
+    (t ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="termin-loeschen" data-id="' + esc(artId) + '">Termin entfernen</button></div>' : "")
+  );
+}
+function terminSpeichern(artId) {
+  const datum = wert("t-datum");
+  if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
+  daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
+  daten.termine.push({ wartungsartId: artId, datum, werkstatt: wert("t-werkstatt").trim() });
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Termin gespeichert"); }
+}
+async function terminLoeschen(artId) {
+  if (!await frage("Geplanten Termin wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
+  daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+
+// Zustand des Protokoll-Formulars
+let formProtokoll = null; // { id | null, manuell, terminUebernommen }
+
+async function wartungErledigt(artId) {
+  const t = daten.termine.find(t => t.wartungsartId === artId);
+  let vorgabe = { id: null, datum: heute(), wartungsartId: artId, werkstatt: "", kmStand: null, kmManuell: false, notiz: "" };
+  let uebernommen = false;
+  if (t) {
+    uebernommen = await frage("Für <strong>" + esc(artName(artId)) + "</strong> ist ein Termin am " + datumText(t.datum) +
+      (t.werkstatt ? " bei " + esc(t.werkstatt) : "") + " geplant. Diesen Termin ins Protokoll übernehmen?",
+      "Übernehmen", "Nein, anderes Datum");
+    if (uebernommen) { vorgabe.datum = t.datum; vorgabe.werkstatt = t.werkstatt; }
+  }
+  protokollFormular(vorgabe, uebernommen);
+}
+
+function protokollFormular(p, terminUebernommen) {
+  formProtokoll = { id: p.id, manuell: p.kmManuell, terminUebernommen: !!terminUebernommen };
+  const optionen = daten.wartungsarten.map(a =>
+    '<option value="' + esc(a.id) + '"' + (a.id === p.wartungsartId ? " selected" : "") + '>' + esc(a.name) + '</option>').join("");
+  fensterOeffnen(
+    '<h2>' + (p.id ? "Wartung bearbeiten" : "Wartung eintragen") + '</h2>' +
+    (terminUebernommen ? '<div class="hinweis info">Der geplante Termin wird nach dem Speichern entfernt.</div>' : "") +
+    '<label for="p-datum">Datum</label><input type="date" id="p-datum" value="' + p.datum + '" data-change="protokoll-datum">' +
+    '<label for="p-art">Wartungsart</label><select id="p-art">' + optionen + '</select>' +
+    '<label for="p-werkstatt">Werkstatt</label><input type="text" id="p-werkstatt" value="' + esc(p.werkstatt) + '">' +
+    '<label for="p-km">Kilometerstand</label>' +
+    '<input type="text" id="p-km" inputmode="decimal" autocomplete="off" data-input="protokoll-km">' +
+    '<div class="feldhinweis" id="p-km-hinweis"></div>' +
+    '<label for="p-notiz">Durchgeführte Arbeiten / Notiz</label><textarea id="p-notiz">' + esc(p.notiz) + '</textarea>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="protokoll-speichern">Speichern</button></div>' +
+    (p.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="protokoll-loeschen" data-id="' + p.id + '">Eintrag löschen</button></div>' : "")
+  );
+  document.getElementById("p-km").value = p.kmManuell ? kmFeld(p.kmStand) : kmFeld(kmStandAm(p.datum));
+  protokollKmHinweis();
+}
+
+function protokollKmHinweis() {
+  const d = wert("p-datum");
+  const berechnet = istGueltigesDatum(d) ? kmStandAm(d) : null;
+  const el = document.getElementById("p-km-hinweis");
+  if (formProtokoll.manuell) {
+    el.innerHTML = "Von Hand eingetragen. Berechnet wären: " + kmText(berechnet) + " km " +
+      '<button type="button" class="leise" data-action="protokoll-km-neu">Berechneten Wert verwenden</button>';
+  } else if (berechnet === null) {
+    el.textContent = "Kann nicht berechnet werden (kein Fahrrad angelegt oder Datum vor dem Startdatum). Du kannst den Wert von Hand eintragen.";
+  } else {
+    el.textContent = "Automatisch berechnet aus den Einträgen bis einschließlich diesem Datum. Du kannst den Wert überschreiben.";
+  }
+}
+function protokollDatumGeaendert() {
+  if (!formProtokoll.manuell) {
+    const d = wert("p-datum");
+    document.getElementById("p-km").value = istGueltigesDatum(d) ? kmFeld(kmStandAm(d)) : "";
+  }
+  protokollKmHinweis();
+}
+function protokollKmEingabe() {
+  if (!formProtokoll.manuell) { formProtokoll.manuell = true; protokollKmHinweis(); }
+}
+function protokollKmNeu() {
+  formProtokoll.manuell = false;
+  protokollDatumGeaendert();
+}
+
+function protokollSpeichern() {
+  const datum = wert("p-datum");
+  if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
+  const kmEingabe = wert("p-km").trim();
+  let manuell = formProtokoll.manuell && kmEingabe !== "";
+  let kmStand = null;
+  if (manuell) {
+    kmStand = kmLesen(kmEingabe);
+    if (kmStand === null) { alert("Bitte den Kilometerstand als Zahl eingeben, z. B. 1234,5."); return; }
+  }
+  const artId = wert("p-art");
+  const satz = { datum, wartungsartId: artId, werkstatt: wert("p-werkstatt").trim(), kmStand, kmManuell: manuell, notiz: wert("p-notiz").trim() };
+  if (formProtokoll.id) {
+    Object.assign(daten.wartungsprotokoll.find(p => p.id === formProtokoll.id), satz);
+  } else {
+    daten.wartungsprotokoll.push(Object.assign({ id: neueId() }, satz));
+  }
+  if (formProtokoll.terminUebernommen) {
+    daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
+  }
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Wartung gespeichert"); }
+}
+async function protokollLoeschen(id) {
+  const p = daten.wartungsprotokoll.find(p => p.id === id);
+  if (!p) return;
+  if (!await frage("Wartung „" + esc(artName(p.wartungsartId)) + "“ vom " + datumText(p.datum) + " wirklich löschen?", "Löschen", "Abbrechen", true)) return;
+  daten.wartungsprotokoll = daten.wartungsprotokoll.filter(x => x.id !== id);
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+
+// Wartungsarten
+function artFormular(id) {
+  const a = id ? daten.wartungsarten.find(a => a.id === id) : { name: "", intervallMonate: null, intervallKm: null };
+  fensterOeffnen(
+    '<h2>' + (id ? "Wartungsart bearbeiten" : "Neue Wartungsart") + '</h2>' +
+    '<label for="a-name">Name</label><input type="text" id="a-name" value="' + esc(a.name) + '">' +
+    '<label for="a-monate">Intervall in Monaten (optional)</label>' +
+    '<input type="text" id="a-monate" inputmode="numeric" value="' + (a.intervallMonate ?? "") + '">' +
+    '<label for="a-km">Intervall in km (optional, wird erst später ausgewertet)</label>' +
+    '<input type="text" id="a-km" inputmode="decimal" value="' + kmFeld(a.intervallKm) + '">' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="art-speichern" data-id="' + esc(id || "") + '">Speichern</button></div>' +
+    (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="art-loeschen" data-id="' + esc(id) + '">Wartungsart löschen</button></div>' : "")
+  );
+}
+function artSpeichern(id) {
+  const name = wert("a-name").trim();
+  if (!name) { alert("Bitte einen Namen eingeben."); return; }
+  const mText = wert("a-monate").trim();
+  const monate = mText === "" ? null : Number(mText);
+  if (monate !== null && !(Number.isInteger(monate) && monate >= 1)) { alert("Das Intervall in Monaten muss eine ganze Zahl ab 1 sein (oder leer)."); return; }
+  const kText = wert("a-km").trim();
+  const km = kText === "" ? null : kmLesen(kText);
+  if (kText !== "" && !(km > 0)) { alert("Das Intervall in km muss eine Zahl größer 0 sein (oder leer)."); return; }
+  if (id) {
+    Object.assign(daten.wartungsarten.find(a => a.id === id), { name, intervallMonate: monate, intervallKm: km });
+  } else {
+    daten.wartungsarten.push({ id: neueId(), name, intervallMonate: monate, intervallKm: km });
+  }
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+async function artLoeschen(id) {
+  if (daten.wartungsprotokoll.some(p => p.wartungsartId === id)) {
+    alert("Diese Wartungsart wird im Wartungsprotokoll verwendet und kann deshalb nicht gelöscht werden. Du kannst sie aber umbenennen.");
+    return;
+  }
+  if (!await frage("Wartungsart „" + esc(artName(id)) + "“ wirklich löschen? Ein geplanter Termin dafür wird ebenfalls entfernt.", "Löschen", "Abbrechen", true)) return;
+  daten.wartungsarten = daten.wartungsarten.filter(a => a.id !== id);
+  daten.termine = daten.termine.filter(t => t.wartungsartId !== id);
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+
+/* ---------- Vorlagen ---------- */
+function bildVorlagen() {
+  let html = '<p class="klein">Vorlagen sind deine Standard-Strecken. Die Kilometer gelten für den ganzen Tag. ' +
+    'Änderungen an Vorlagen verändern bereits erfasste Einträge nicht.</p><div class="liste">';
+  if (!daten.vorlagen.length) html += '<div class="leer">Noch keine Vorlagen.</div>';
+  daten.vorlagen.forEach((v, i) => {
+    html += '<div class="zeile">' +
+      '<button type="button" class="inhalt" data-action="vorlage-bearbeiten" data-id="' + v.id + '">' +
+      '<div class="text"><div>' + esc(v.name) + '</div></div><span class="zahl">' + kmText(v.km) + ' km</span></button>' +
+      '<div class="pfeile">' +
+      '<button type="button" class="symbol" data-action="vorlage-hoch" data-id="' + v.id + '" aria-label="Nach oben"' + (i === 0 ? " disabled" : "") + '>▲</button>' +
+      '<button type="button" class="symbol" data-action="vorlage-runter" data-id="' + v.id + '" aria-label="Nach unten"' + (i === daten.vorlagen.length - 1 ? " disabled" : "") + '>▼</button>' +
+      '</div></div>';
+  });
+  html += '</div><div class="knopfreihe"><button type="button" class="primaer" data-action="vorlage-neu">+ Neue Vorlage</button></div>';
+  return html;
+}
+function vorlageFormular(id) {
+  const v = id ? daten.vorlagen.find(v => v.id === id) : { name: "", km: null };
+  fensterOeffnen(
+    '<h2>' + (id ? "Vorlage bearbeiten" : "Neue Vorlage") + '</h2>' +
+    '<label for="v-name">Name</label><input type="text" id="v-name" placeholder="z. B. Arbeit hin und zurück" value="' + esc(v.name) + '">' +
+    '<label for="v-km">Kilometer (Gesamt für den Tag)</label>' +
+    '<input type="text" id="v-km" inputmode="decimal" placeholder="z. B. 12,5" value="' + kmFeld(v.km) + '">' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="vorlage-speichern" data-id="' + (id || "") + '">Speichern</button></div>' +
+    (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="vorlage-loeschen" data-id="' + id + '">Vorlage löschen</button></div>' : "")
+  );
+}
+function vorlageSpeichern(id) {
+  const name = wert("v-name").trim();
+  const km = kmLesen(wert("v-km"));
+  if (!name) { alert("Bitte einen Namen eingeben."); return; }
+  if (km === null) { alert("Bitte die Kilometer als Zahl eingeben, z. B. 12,5."); return; }
+  if (id) Object.assign(daten.vorlagen.find(v => v.id === id), { name, km });
+  else daten.vorlagen.push({ id: neueId(), name, km });
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+async function vorlageLoeschen(id) {
+  const v = daten.vorlagen.find(v => v.id === id);
+  if (!await frage("Vorlage „" + esc(v.name) + "“ wirklich löschen? Bereits erfasste Einträge bleiben unverändert.", "Löschen", "Abbrechen", true)) return;
+  daten.vorlagen = daten.vorlagen.filter(x => x.id !== id);
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+function vorlageVerschieben(id, richtung) {
+  const i = daten.vorlagen.findIndex(v => v.id === id);
+  const j = i + richtung;
+  if (j < 0 || j >= daten.vorlagen.length) return;
+  [daten.vorlagen[i], daten.vorlagen[j]] = [daten.vorlagen[j], daten.vorlagen[i]];
+  if (speichern()) zeichnen();
+}
+
+/* ---------- Einstellungen ---------- */
+function bildEinstellungen() {
+  const f = daten.fahrrad || { name: "", startdatum: heute(), startKm: null };
+  const le = letzterExport();
+  return '<h2 style="margin-top:8px">Fahrrad</h2><div class="karte">' +
+    '<label for="r-name" style="margin-top:0">Name</label><input type="text" id="r-name" placeholder="z. B. Mein Stadtrad" value="' + esc(f.name) + '">' +
+    '<label for="r-datum">Startdatum</label><input type="date" id="r-datum" value="' + f.startdatum + '">' +
+    '<label for="r-km">Start-Kilometerstand</label>' +
+    '<input type="text" id="r-km" inputmode="decimal" placeholder="z. B. 1234,5" value="' + kmFeld(f.startKm) + '">' +
+    '<div class="feldhinweis">Der Start-Kilometerstand gilt zu Beginn des Startdatums. Einträge ab diesem Tag (einschließlich) werden dazugezählt.</div>' +
+    '<div class="knopfreihe"><button type="button" class="primaer" data-action="fahrrad-speichern">Speichern</button></div></div>' +
+
+    '<h2>Datensicherung</h2><div class="karte">' +
+    '<p style="margin-top:0">Deine Daten liegen nur auf diesem Gerät im Speicher des Browsers. Sichere sie regelmäßig als Datei, z. B. in „Dateien“ oder iCloud.</p>' +
+    '<p class="klein">Letzter Export: ' + (le ? datumText(le) : "noch nie") + '</p>' +
+    '<button type="button" class="primaer voll" data-action="export">Daten exportieren</button>' +
+    '<div style="height:10px"></div>' +
+    '<button type="button" class="voll" data-action="import">Daten importieren …</button>' +
+    '<p class="klein">Beim Import werden alle vorhandenen Daten ersetzt. Vorher wird nachgefragt.</p></div>' +
+    '<p class="klein zentriert">Rad-km · Datenmodell Version ' + DATEN_VERSION + '</p>';
+}
+function fahrradSpeichern() {
+  const name = wert("r-name").trim();
+  const startdatum = wert("r-datum");
+  const startKm = kmLesen(wert("r-km"));
+  if (!name) { alert("Bitte einen Namen für das Fahrrad eingeben."); return; }
+  if (!istGueltigesDatum(startdatum)) { alert("Bitte ein gültiges Startdatum wählen."); return; }
+  if (startKm === null) { alert("Bitte den Start-Kilometerstand als Zahl eingeben, z. B. 1234,5."); return; }
+  daten.fahrrad = { name, startdatum, startKm };
+  if (speichern()) { zeichnen(); meldung("Fahrrad gespeichert"); }
+}
+
+/* =====================================================================
+   7. EXPORT UND IMPORT
+   ===================================================================== */
+
+function exportVermerken() {
+  try { localStorage.setItem(EXPORT_SCHLUESSEL, heute()); } catch (e) {}
+  zeichnen();
+}
+
+// Export: zuerst über das Teilen-Menü (iPhone), sonst als Download.
+// Wichtig: navigator.share muss direkt nach dem Antippen aufgerufen werden,
+// deshalb hier kein "await" vor dem Teilen.
+function exportieren() {
+  const inhalt = JSON.stringify(Object.assign({ exportiertAm: new Date().toISOString() }, daten), null, 2);
+  const dateiname = "rad-km-" + heute() + ".json";
+  let datei = null;
+  try { datei = new File([inhalt], dateiname, { type: "application/json" }); } catch (e) {}
+
+  if (datei && navigator.canShare && navigator.canShare({ files: [datei] })) {
+    navigator.share({ files: [datei], title: dateiname })
+      .then(() => { exportVermerken(); meldung("Export erstellt"); })
+      .catch(err => {
+        if (err && err.name === "AbortError") return; // vom Nutzer abgebrochen
+        herunterladen(inhalt, dateiname);
+      });
+  } else {
+    herunterladen(inhalt, dateiname);
+  }
+}
+function herunterladen(inhalt, dateiname) {
+  const url = URL.createObjectURL(new Blob([inhalt], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = dateiname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  exportVermerken();
+  meldung("Datei heruntergeladen");
+}
+
+function importStarten() {
+  const eingabe = document.getElementById("importdatei");
+  eingabe.value = "";
+  eingabe.click();
+}
+async function importDateiGewaehlt(datei) {
+  if (!datei) return;
+  let neu;
+  try {
+    const text = await datei.text();
+    let roh;
+    try { roh = JSON.parse(text); } catch (e) { throw new Error("Die Datei ist keine gültige JSON-Datei."); }
+    neu = pruefen(migrieren(roh));
+  } catch (e) {
+    alert("Import nicht möglich:\n" + e.message);
+    return;
+  }
+  const zusammenfassung =
+    "<strong>" + esc(datei.name) + "</strong><br>" +
+    "Fahrrad: " + (neu.fahrrad ? esc(neu.fahrrad.name) : "–") + "<br>" +
+    neu.eintraege.length + " Einträge, " + neu.vorlagen.length + " Vorlagen, " +
+    neu.wartungsarten.length + " Wartungsarten, " + neu.wartungsprotokoll.length + " Wartungen, " +
+    neu.termine.length + " geplante Termine.<br><br>" +
+    "<strong>Alle vorhandenen Daten in der App werden ersetzt.</strong> Fortfahren?";
+  if (!await frage(zusammenfassung, "Importieren und ersetzen", "Abbrechen", true)) return;
+  daten = neu;
+  ladeFehler = null;
+  if (speichern()) { zeichnen(); meldung("Import erfolgreich"); }
+}
+
+/* =====================================================================
+   8. BEDIENUNG: Klicks und Eingaben den Funktionen zuordnen
+   Jede Schaltfläche hat ein Attribut data-action="…", hier steht,
+   was dann passiert.
+   ===================================================================== */
+
+const AKTIONEN = {
+  "tab": el => { aktiverTab = el.dataset.tab; zeichnen(); window.scrollTo(0, 0); },
+  "fenster-zu": () => fensterSchliessen(),
+  "mehr": () => { anzahlEintraege += 50; zeichnen(); },
+
+  "vorlage-erfassen": el => {
+    const v = daten.vorlagen.find(v => v.id === el.dataset.id);
+    eintragOeffnen({ datum: heute(), km: v.km, vorlage: v.name });
+  },
+  "eintrag-neu": () => eintragOeffnen({ datum: heute() }),
+  "eintrag-bearbeiten": el => eintragOeffnen({ id: el.dataset.id }),
+  "eintrag-speichern": () => eintragSpeichern(),
+  "eintrag-loeschen": el => eintragLoeschen(el.dataset.id),
+
+  "termin": el => terminFormular(el.dataset.id),
+  "termin-speichern": el => terminSpeichern(el.dataset.id),
+  "termin-loeschen": el => terminLoeschen(el.dataset.id),
+  "wartung-erledigt": el => wartungErledigt(el.dataset.id),
+  "protokoll-bearbeiten": el => protokollFormular(daten.wartungsprotokoll.find(p => p.id === el.dataset.id), false),
+  "protokoll-speichern": () => protokollSpeichern(),
+  "protokoll-loeschen": el => protokollLoeschen(el.dataset.id),
+  "protokoll-km-neu": () => protokollKmNeu(),
+  "art-neu": () => artFormular(null),
+  "art-bearbeiten": el => artFormular(el.dataset.id),
+  "art-speichern": el => artSpeichern(el.dataset.id || null),
+  "art-loeschen": el => artLoeschen(el.dataset.id),
+
+  "vorlage-neu": () => vorlageFormular(null),
+  "vorlage-bearbeiten": el => vorlageFormular(el.dataset.id),
+  "vorlage-speichern": el => vorlageSpeichern(el.dataset.id || null),
+  "vorlage-loeschen": el => vorlageLoeschen(el.dataset.id),
+  "vorlage-hoch": el => vorlageVerschieben(el.dataset.id, -1),
+  "vorlage-runter": el => vorlageVerschieben(el.dataset.id, 1),
+
+  "fahrrad-speichern": () => fahrradSpeichern(),
+  "export": () => exportieren(),
+  "import": () => importStarten()
+};
+const AENDERUNGEN = {
+  "eintrag-datum": () => eintragDatumGeaendert(),
+  "eintrag-vorlage": () => eintragVorlageGeaendert(),
+  "protokoll-datum": () => protokollDatumGeaendert()
+};
+const EINGABEN = {
+  "protokoll-km": () => protokollKmEingabe()
+};
+
+document.addEventListener("click", ev => {
+  const el = ev.target.closest("[data-action]");
+  if (el && !el.disabled) AKTIONEN[el.dataset.action](el);
+});
+document.addEventListener("change", ev => {
+  const name = ev.target.dataset && ev.target.dataset.change;
+  if (name) AENDERUNGEN[name]();
+});
+document.addEventListener("input", ev => {
+  const name = ev.target.dataset && ev.target.dataset.input;
+  if (name) EINGABEN[name]();
+});
+document.getElementById("importdatei").addEventListener("change", ev => importDateiGewaehlt(ev.target.files[0]));
+
+// Tippen neben das Fenster schließt es
+fenster.addEventListener("click", ev => { if (ev.target === fenster) fensterSchliessen(); });
+
+// Beim Zurückkehren in die App (z. B. am nächsten Tag) "heute" neu berechnen
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !fenster.open) zeichnen(); });
+
+/* =====================================================================
+   9. START
+   ===================================================================== */
+laden();
+zeichnen();
+</script>
+</body>
+</html>
