@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rad-km · Tests</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 16px; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin: 20px 0 6px; }
+  .ok { color: #16805c; }
+  .fehler { color: #c62828; font-weight: 600; }
+  pre { white-space: pre-wrap; margin: 2px 0 8px 18px; font-size: 13px; }
+  #ergebnis { font-size: 18px; font-weight: 700; }
+  iframe { width: 1px; height: 1px; border: 0; position: absolute; left: -10px; }
+</style>
+</head>
+<body>
+<h1>Rad-km · Tests</h1>
+<p>Lädt <code>../index.html?test</code> unsichtbar und prüft Umwandlung, Zusammenfassung und saisonale Fälligkeit.
+Die Tests verwenden einen eigenen Speicherplatz; deine echten Daten werden nicht berührt.</p>
+<p id="ergebnis">Tests laufen …</p>
+<div id="protokoll"></div>
+
+<script>
+"use strict";
+const TEST_SCHLUESSEL = "radkm-test-daten";
+const protokollEl = document.getElementById("protokoll");
+let bestanden = 0, fehlgeschlagen = 0;
+
+function abschnitt(titel) {
+  const h = document.createElement("h2");
+  h.textContent = titel;
+  protokollEl.appendChild(h);
+}
+function zeile(ok, text, detail) {
+  const d = document.createElement("div");
+  d.className = ok ? "ok" : "fehler";
+  d.textContent = (ok ? "✓ " : "✗ ") + text;
+  protokollEl.appendChild(d);
+  if (detail) { const p = document.createElement("pre"); p.textContent = detail; protokollEl.appendChild(p); }
+  if (ok) bestanden++; else fehlgeschlagen++;
+}
+function gleich(text, ist, soll) {
+  const a = JSON.stringify(ist), b = JSON.stringify(soll);
+  zeile(a === b, text, a === b ? "" : "erwartet: " + b + "\nerhalten: " + a);
+}
+function wirft(text, fn, teil) {
+  try { fn(); zeile(false, text, "Es wurde kein Fehler gemeldet."); }
+  catch (e) { const ok = !teil || e.message.includes(teil); zeile(ok, text, ok ? "" : "Meldung: " + e.message); }
+}
+
+// index.html im unsichtbaren Rahmen laden und auf den Start warten
+function appLaden() {
+  return new Promise(fertig => {
+    const f = document.createElement("iframe");
+    f.src = "../index.html?test&t=" + Date.now();
+    f.onload = () => fertig(f.contentWindow);
+    document.body.appendChild(f);
+  });
+}
+
+async function start() {
+  const v1Text = await (await fetch("daten-v1.json", { cache: "no-store" })).text();
+  const v1 = JSON.parse(v1Text);
+
+  // ---------------------------------------------------------------
+  // 1. Umwandlung Version 1 → 2 beim Laden aus dem Speicher
+  // ---------------------------------------------------------------
+  localStorage.setItem(TEST_SCHLUESSEL, v1Text);
+  const w = await appLaden();
+  try {
+    abschnitt("1. Umwandlung einer Version-1-Datei beim Laden (localStorage)");
+    gleich("Kein Ladefehler", w.eval("ladeFehler"), null);
+    const d = JSON.parse(JSON.stringify(w.eval("daten")));
+    pruefeUmwandlung(d, v1);
+
+    // Die Version-1-Daten im Speicher bleiben unverändert, bis gespeichert wird
+    gleich("Gespeicherte Daten werden erst beim nächsten Speichern überschrieben", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, 1);
+
+    // -------------------------------------------------------------
+    // 2. Umwandlung beim Import, Export → Import
+    // -------------------------------------------------------------
+    abschnitt("2. Umwandlung beim Import und Export → Import");
+    const imp = JSON.parse(JSON.stringify(w.datenEinlesen(v1Text)));
+    pruefeUmwandlung(imp, v1);
+    const exportText = w.exportInhalt();
+    const exp = JSON.parse(exportText);
+    gleich("Export enthält version 2 und die Mängelliste", [exp.version, Array.isArray(exp.maengel)], [2, true]);
+    gleich("Export enthält die neuen Felder (Fahrrad, Wartungsart)",
+      [("rahmennummer" in exp.fahrrad), ("beschreibung" in exp.fahrrad), ("fensterVon" in exp.wartungsarten[0]), ("gueltigAbJahr" in exp.wartungsarten[0])],
+      [true, true, true, true]);
+    gleich("Export → Import ergibt dieselben Daten", JSON.parse(JSON.stringify(w.datenEinlesen(exportText))), d);
+
+    // Version-2-Daten mit allen neuen Feldern: Export → Import verlustfrei
+    const v2 = JSON.parse(JSON.stringify(d));
+    v2.fahrrad.rahmennummer = "WAW 12345";
+    v2.fahrrad.beschreibung = "Blau, 28 Zoll\nNabenschaltung";
+    v2.wartungsarten[1].fensterVon = 3; v2.wartungsarten[1].fensterBis = 4; v2.wartungsarten[1].gueltigAbJahr = 2027;
+    v2.maengel = [
+      { id: "m-1", datum: "2026-10-01", beschreibung: "Licht hinten wackelt", status: "offen", erledigtAm: null, protokollId: null },
+      { id: "m-2", datum: "2025-03-10", beschreibung: "Bremse quietscht", status: "erledigt", erledigtAm: "2025-03-15", protokollId: "p-1" }
+    ];
+    gleich("Version-2-Daten mit Mängeln, Zeitfenster und Rahmennummer: Import → Export → Import verlustfrei",
+      JSON.parse(JSON.stringify(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v2))))) ), v2);
+
+    // Fehlt "wartungsarten" in einer Version-1-Datei: Standardarten ohne Zeitfenster
+    const ohneArten = Object.assign({}, v1);
+    delete ohneArten.wartungsarten;
+    delete ohneArten.wartungsprotokoll;
+    delete ohneArten.termine;
+    gleich("Version 1 ohne „wartungsarten“: Standardarten ohne Zeitfenster",
+      w.datenEinlesen(JSON.stringify(ohneArten)).wartungsarten.map(a => [a.id, a.intervallMonate, a.fensterVon, a.fensterBis]),
+      [["grosse-inspektion", 12, null, null], ["kleine-inspektion", null, null, null], ["reparatur", null, null, null]]);
+    gleich("Neuinstallation: Standardarten mit Beispiel-Zeitfenstern",
+      w.leereDaten().wartungsarten.map(a => [a.id, a.fensterVon, a.fensterBis, a.gueltigAbJahr]),
+      [["grosse-inspektion", 10, 11, null], ["kleine-inspektion", 3, 4, null], ["reparatur", null, null, null]]);
+
+    // Fehlerhafte Daten werden abgelehnt
+    const mit = aend => JSON.stringify(Object.assign(JSON.parse(JSON.stringify(v2)), aend));
+    const art = aend => [Object.assign({}, v2.wartungsarten[0], aend)];
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 3 })), "neueren App-Version");
+    wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(mit({ wartungsarten: art({ fensterVon: 11, fensterBis: 2 }), wartungsprotokoll: [], termine: [], maengel: [] })), "Jahreswechsel");
+    wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(mit({ wartungsarten: art({ fensterVon: 3, fensterBis: null }), wartungsprotokoll: [], termine: [], maengel: [] })), "beide");
+    wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(mit({ wartungsarten: art({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 }), wartungsprotokoll: [], termine: [], maengel: [] })), "gueltigAbJahr");
+    wirft("Mangel mit unbekannter protokollId wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "erledigt", protokollId: "gibt-es-nicht" }] })), "protokollId");
+    wirft("Mangel mit falschem Status wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "kaputt" }] })), "status");
+    wirft("Mangel ohne Beschreibung wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: " " }] })), "Beschreibung");
+
+    // -------------------------------------------------------------
+    // 3. Zusammenfassung der Einträge
+    // -------------------------------------------------------------
+    abschnitt("3. Zusammenfassung der Einträge an den Grenzen");
+    const E = (datum, km, typ = "tag") => ({ id: "t" + datum, datum, km, vorlage: null, notiz: "", typ });
+    const testEintraege = [
+      E("2025-06-10", 10),
+      E("2025-12-29", 1),      // Mo, KW 1/2026, Teil im Dezember 2025
+      E("2026-01-02", 2),      // Fr, gleiche Woche, Teil im Januar 2026
+      E("2026-10-05", 5),      // KW 41
+      E("2026-10-12", 40, "woche"), // importierte Wochensumme KW 42
+      E("2026-10-26", 3),      // Mo KW 44
+      E("2026-10-31", 4),      // Sa KW 44 (Oktober-Teil)
+      E("2026-11-01", 7),      // So KW 44 (November-Teil)
+      E("2026-11-02", 8),      // Mo KW 45
+      E("2026-11-03", 9),
+      E("2026-12-28", 11),     // Mo KW 53
+      E("2026-12-31", 12),     // Do KW 53 (Dezember-Teil)
+      E("2027-01-01", 13),     // Fr KW 53 (Januar-Teil)
+      E("2027-01-03", 14),     // So KW 53
+      E("2027-01-04", 15)      // Mo KW 1/2027
+    ];
+    // Kurzform einer Zeile: "J 2026 = 101", "M Oktober 2026 = 52", "W KW 44 (Teil) 01.11.–01.11. = 7", "E 2026-11-01"
+    const kurz = z => z.art === "eintrag" ? "E " + z.eintrag.datum
+      : z.art === "woche" ? "W " + z.titel + " " + w.kurzDatum(z.von) + "–" + w.kurzDatum(z.bis) + " = " + z.km
+      : (z.art === "jahr" ? "J " : "M ") + z.titel + " = " + z.km;
+    // Wie in der App: am Stichtag gibt es nur Einträge bis zu diesem Tag
+    const gruppiert = stichtag => w.gruppieren(testEintraege.filter(e => e.datum <= stichtag), stichtag);
+    const fall = (stichtag, soll) => gleich("Stichtag " + w.wochentag(stichtag) + " " + w.datumText(stichtag), gruppiert(stichtag).map(kurz), soll);
+
+    fall("2026-11-01", [
+      "E 2026-11-01",
+      "E 2026-10-31", "E 2026-10-26",
+      "W KW 42 12.10.–18.10. = 40", "W KW 41 05.10.–11.10. = 5",
+      "M Januar 2026 = 2", "J 2025 = 11"]);
+    fall("2026-11-02", [
+      "E 2026-11-02",
+      "W KW 44 (Teil) 01.11.–01.11. = 7",
+      "M Oktober 2026 = 52", "M Januar 2026 = 2", "J 2025 = 11"]);
+    fall("2026-12-31", [
+      "E 2026-12-31", "E 2026-12-28",
+      "M November 2026 = 24", "M Oktober 2026 = 52", "M Januar 2026 = 2", "J 2025 = 11"]);
+    fall("2027-01-03", [
+      "E 2027-01-03", "E 2027-01-01",
+      "E 2026-12-31", "E 2026-12-28",
+      "M November 2026 = 24", "M Oktober 2026 = 52", "M Januar 2026 = 2", "J 2025 = 11"]);
+    fall("2027-01-04", [
+      "E 2027-01-04",
+      "W KW 53 (Teil) 01.01.–03.01. = 27",
+      "J 2026 = 101", "J 2025 = 11"]);
+
+    // Ebenen unterhalb der Jahres- und Monatszeilen
+    const j2026 = gruppiert("2027-01-04").find(z => z.titel === "2026");
+    gleich("Jahr 2026 → Monate", j2026.kinder.map(kurz), ["M Dezember 2026 = 23", "M November 2026 = 24", "M Oktober 2026 = 52", "M Januar 2026 = 2"]);
+    gleich("Dezember 2026 → Teilwoche KW 53", j2026.kinder[0].kinder.map(kurz), ["W KW 53 (Teil) 28.12.–31.12. = 23"]);
+    gleich("KW 53 (Teil) → Einträge", j2026.kinder[0].kinder[0].kinder.map(kurz), ["E 2026-12-31", "E 2026-12-28"]);
+    gleich("Oktober 2026 → Wochen", j2026.kinder[2].kinder.map(kurz),
+      ["W KW 44 (Teil) 26.10.–31.10. = 7", "W KW 42 12.10.–18.10. = 40", "W KW 41 05.10.–11.10. = 5"]);
+    const kw42 = j2026.kinder[2].kinder[1];
+    gleich("Importierter Wochen-Eintrag erscheint in seiner Woche als ein Eintrag",
+      kw42.kinder.map(z => [z.art, z.eintrag.datum, z.eintrag.typ, z.eintrag.km]), [["eintrag", "2026-10-12", "woche", 40]]);
+    gleich("Januar 2026 → Teilwoche KW 1", j2026.kinder[3].kinder.map(kurz), ["W KW 1 (Teil) 01.01.–04.01. = 2"]);
+    const j2025 = gruppiert("2027-01-04").find(z => z.titel === "2025");
+    gleich("Jahr 2025 → Dezember mit Teilwoche KW 1", j2025.kinder[0].kinder.map(kurz), ["W KW 1 (Teil) 29.12.–31.12. = 1"]);
+    gleich("Summe aller Zeilen = Summe aller Einträge",
+      w.runden(gruppiert("2027-01-04").reduce((s, z) => s + (z.art === "eintrag" ? z.eintrag.km : z.km), 0)),
+      w.runden(testEintraege.reduce((s, e) => s + e.km, 0)));
+    gleich("Kalenderwochen nach ISO 8601",
+      ["2025-12-29", "2026-01-04", "2026-10-26", "2026-12-28", "2027-01-03", "2027-01-04"].map(w.kalenderwoche), [1, 1, 44, 53, 53, 1]);
+
+    // -------------------------------------------------------------
+    // 4. Saisonale Fälligkeit
+    // -------------------------------------------------------------
+    abschnitt("4. Saisonale Fälligkeit");
+    const gross = { id: "g", name: "Große Inspektion", intervallMonate: 12, fensterVon: 10, fensterBis: 11, gueltigAbJahr: null };
+    const klein = { id: "k", name: "Kleine Inspektion", intervallMonate: null, fensterVon: 3, fensterBis: 4, gueltigAbJahr: null };
+    const klein2027 = Object.assign({}, klein, { gueltigAbJahr: 2027 });
+    const START = "2025-01-01";
+    const saison = (text, art, durch, h, soll, start = START) => {
+      const st = w.saisonStatus(art, durch, start, h);
+      gleich(text + " (heute " + w.datumText(h) + ")", [st.text, st.klasse], soll);
+    };
+    const R = "status-rot", O = "status-orange", G = "status-gruen";
+
+    saison("Vor dem Fenster", gross, ["2025-10-20"], "2026-08-01", ["fällig ab 01.10.", G]);
+    saison("Vor dem Fenster, weniger als 30 Tage", gross, ["2025-10-20"], "2026-09-15", ["fällig ab 01.10.", O]);
+    saison("Im Fenster ohne Durchführung", gross, ["2025-10-20"], "2026-10-15", ["fällig bis 30.11.", O]);
+    saison("Letzter Tag des Fensters", gross, ["2025-10-20"], "2026-11-30", ["fällig bis 30.11.", O]);
+    saison("Im Fenster durchgeführt", gross, ["2025-10-20", "2026-10-20"], "2026-11-05", ["erledigt, nächste ab 01.10.2027", G]);
+    saison("Im Fenster durchgeführt, nach dem Fenster", gross, ["2025-10-20", "2026-10-20"], "2026-12-15", ["erledigt, nächste ab 01.10.2027", G]);
+    saison("Nach dem Fenster ohne Durchführung", gross, ["2025-10-20"], "2026-12-01", ["überfällig seit 30.11.2026", R]);
+    saison("Überfällig über den Jahreswechsel", gross, ["2025-10-20"], "2027-01-10", ["überfällig seit 30.11.2026", R]);
+    saison("Überfällig auch im nächsten Fenster", gross, ["2025-10-20"], "2027-10-15", ["überfällig seit 30.11.2026", R]);
+    saison("Überfällig über mehrere Jahre: seit dem ältesten versäumten Fenster", gross, ["2025-10-20"], "2028-01-10", ["überfällig seit 30.11.2026", R]);
+    saison("Nachholung im selben Jahr", gross, ["2025-10-20", "2026-12-10"], "2026-12-20", ["erledigt (nachgeholt), nächste ab 01.10.2027", G]);
+    saison("Nachholung nach dem Jahreswechsel", gross, ["2025-10-20", "2027-02-01"], "2027-03-01", ["erledigt (nachgeholt), nächste ab 01.10.2027", G]);
+    saison("Nachholung zählt nicht für das nächste Fenster", gross, ["2025-10-20", "2027-02-01"], "2027-10-05", ["fällig bis 30.11.", O]);
+    saison("Nach Nachholung wieder im Fenster durchgeführt", gross, ["2025-10-20", "2027-02-01", "2027-10-10"], "2027-12-01", ["erledigt, nächste ab 01.10.2028", G]);
+    saison("Durchführung vor dem Fenster zählt nicht für das Fenster", gross, ["2025-10-20", "2026-06-01"], "2026-10-15", ["fällig bis 30.11.", O]);
+    saison("Durchführung vor dem Fenster: danach überfällig", gross, ["2025-10-20", "2026-06-01"], "2026-12-01", ["überfällig seit 30.11.2026", R]);
+    saison("Durchführung in der Zukunft zählt noch nicht", gross, ["2025-10-20", "2026-11-20"], "2026-11-10", ["fällig bis 30.11.", O]);
+    saison("Nie durchgeführt, Fahrrad seit 2025", gross, [], "2026-09-01", ["überfällig seit 30.11.2025", R]);
+    saison("Fahrrad nach dem Fenster angelegt", klein, [], "2026-10-24", ["fällig ab 01.03.2027", G], "2026-10-24");
+    saison("Fahrrad nach dem Fenster angelegt, im nächsten Jahr vor dem Fenster", klein, [], "2027-02-10", ["fällig ab 01.03.", O], "2026-10-24");
+
+    const vorGueltig = w.saisonStatus(klein2027, [], START, "2026-10-24");
+    gleich("Gültig ab 2027: im Jahr 2026 keine Fälligkeit (heute 24.10.2026)",
+      [vorGueltig.text, vorGueltig.klasse, vorGueltig.datum], ["noch nicht fällig (gültig ab 2027)", "", null]);
+    saison("Gültig ab 2027: vor dem ersten Fenster", klein2027, [], "2027-01-15", ["fällig ab 01.03.", G]);
+    saison("Gültig ab 2027: alte Durchführung, versäumtes Fenster 2026 zählt nicht", klein2027, ["2025-04-10"], "2027-02-10", ["fällig ab 01.03.", O]);
+    saison("Gültig ab 2027: im ersten Fenster", klein2027, [], "2027-04-30", ["fällig bis 30.04.", O]);
+    saison("Gültig ab 2027: erstes Fenster versäumt", klein2027, [], "2027-05-01", ["überfällig seit 30.04.2027", R]);
+    saison("Gültig ab 2027: Nachholung", klein2027, ["2027-06-01"], "2027-06-02", ["erledigt (nachgeholt), nächste ab 01.03.2028", G]);
+    saison("Gültig ab 2027: im ersten Fenster erledigt", klein2027, ["2027-03-20"], "2027-12-01", ["erledigt, nächste ab 01.03.2028", G]);
+
+    // Geplanter Termin hat Vorrang, Intervall ohne Zeitfenster bleibt erhalten
+    w.eval(`daten = leereDaten();
+      daten.fahrrad = { name: "T", startdatum: "2026-06-01", startKm: 0, rahmennummer: "", beschreibung: "" };
+      daten.wartungsarten[0].fensterVon = null; daten.wartungsarten[0].fensterBis = null;
+      daten.wartungsprotokoll.push({ id: "x", datum: "2025-10-20", wartungsartId: "grosse-inspektion", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" });
+      daten.termine.push({ wartungsartId: "kleine-inspektion", datum: "2026-11-05", werkstatt: "W" });`);
+    const stGross = w.wartungsStatus(w.eval("daten.wartungsarten[0]"), "2026-10-24");
+    gleich("Ohne Zeitfenster: Intervall in Monaten wird weiter ausgewertet", stGross.text, "überfällig seit 4 Tagen (20.10.2026)");
+    const stKlein = w.wartungsStatus(w.eval("daten.wartungsarten[1]"), "2026-10-24");
+    gleich("Geplanter Termin hat Vorrang vor dem Zeitfenster",
+      [stKlein.text, stKlein.datum, stKlein.regel.text], ["Termin am 05.11.2026 bei W (in 12 Tagen)", "2026-11-05", "fällig ab 01.03.2027"]);
+  } catch (e) {
+    zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
+  } finally {
+    localStorage.removeItem(TEST_SCHLUESSEL);
+  }
+
+  const erg = document.getElementById("ergebnis");
+  erg.className = fehlgeschlagen ? "fehler" : "ok";
+  erg.textContent = fehlgeschlagen
+    ? fehlgeschlagen + " von " + (bestanden + fehlgeschlagen) + " Tests fehlgeschlagen"
+    : "Alle " + bestanden + " Tests bestanden";
+  document.title = (fehlgeschlagen ? "FEHLER " : "OK ") + bestanden + "/" + (bestanden + fehlgeschlagen);
+}
+
+// Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
+function pruefeUmwandlung(d, v1) {
+  gleich("version = 2", d.version, 2);
+  gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
+    Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
+  gleich("Vorlagen vollständig erhalten", d.vorlagen, v1.vorlagen);
+  gleich("Anzahl Einträge", d.eintraege.length, v1.eintraege.length);
+  const erwartet = v1.eintraege.map(e => ({
+    datum: e.datum, km: e.km, vorlage: e.vorlage || null, notiz: e.notiz || "", typ: e.typ || "tag"
+  }));
+  gleich("Einträge vollständig erhalten (Datum, km, Vorlage, Notiz, Typ)",
+    d.eintraege.map(e => ({ datum: e.datum, km: e.km, vorlage: e.vorlage, notiz: e.notiz, typ: e.typ })), erwartet);
+  gleich("Vorhandene Eintrags-IDs bleiben erhalten",
+    d.eintraege.filter((e, i) => v1.eintraege[i].id).map(e => e.id), v1.eintraege.filter(e => e.id).map(e => e.id));
+  gleich("Eintrag ohne id bekommt eine neue id", typeof d.eintraege[4].id === "string" && d.eintraege[4].id.length > 0, true);
+  gleich("Wartungsarten erhalten, Zeitfenster leer", d.wartungsarten,
+    v1.wartungsarten.map(a => Object.assign({}, a, { fensterVon: null, fensterBis: null, gueltigAbJahr: null })));
+  gleich("Wartungsprotokoll vollständig erhalten", d.wartungsprotokoll, [
+    Object.assign({}, v1.wartungsprotokoll[0]),
+    Object.assign({}, v1.wartungsprotokoll[1]),
+    Object.assign({ werkstatt: "", notiz: "" }, v1.wartungsprotokoll[2], { kmManuell: true })
+  ].map(p => ({ id: p.id, datum: p.datum, wartungsartId: p.wartungsartId, werkstatt: p.werkstatt, kmStand: p.kmStand, kmManuell: p.kmManuell, notiz: p.notiz })));
+  gleich("Termine vollständig erhalten", d.termine, v1.termine);
+  gleich("Mängelliste ist leer", d.maengel, []);
+}
+
+start();
+</script>
+</body>
+</html>

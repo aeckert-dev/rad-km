@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "exportiertAm": "2026-09-30T18:00:00.000Z",
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5 },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2 },
+    { "id": "v-einkauf", "name": "Einkauf", "km": 3.5 }
+  ],
+  "eintraege": [
+    { "id": "e-vorstart", "datum": "2025-02-20", "km": 5, "notiz": "vor dem Startdatum" },
+    { "id": "e-woche1", "datum": "2025-03-03", "km": 40, "typ": "woche", "notiz": "aus Excel" },
+    { "id": "e-woche2", "datum": "2025-03-10", "km": 35.5, "typ": "woche" },
+    { "id": "e-tag1", "datum": "2025-03-17", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag" },
+    { "datum": "2025-03-18", "km": 12.5, "notiz": "ohne id, mit <Sonderzeichen> & „Anführungszeichen“" },
+    { "id": "e-tag3", "datum": "2026-09-29", "km": 3.5, "vorlage": "Einkauf", "notiz": null }
+  ],
+  "wartungsarten": [
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null },
+    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "intervallMonate": null, "intervallKm": null },
+    { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null },
+    { "id": "kette", "name": "Kette wechseln", "intervallMonate": null, "intervallKm": 3000 }
+  ],
+  "wartungsprotokoll": [
+    { "id": "p-1", "datum": "2025-03-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1300, "kmManuell": true, "notiz": "Bremsen eingestellt\nKette geölt" },
+    { "id": "p-2", "datum": "2025-03-18", "wartungsartId": "reparatur", "werkstatt": "",
+      "kmStand": 1302.7, "kmManuell": false, "notiz": "Schlauch geflickt" },
+    { "id": "p-3", "datum": "2026-09-29", "wartungsartId": "kette", "kmStand": 2000 }
+  ],
+  "termine": [
+    { "wartungsartId": "kleine-inspektion", "datum": "2026-11-05", "werkstatt": "Beispiel-Werkstatt" }
+  ]
+}

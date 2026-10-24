@@ -157,6 +157,19 @@ button:disabled { opacity: .4; }
 .zeile .pfeile { display: flex; }
 .leer { padding: 16px; color: var(--text2); text-align: center; }
 
+.zeile.gruppe .inhalt .pfeil { width: 14px; color: var(--text2); font-size: 13px; flex: none; }
+.zeile.gruppe .inhalt .titel { font-weight: 600; }
+
+/* Detailansicht (nur lesen) */
+.details { margin: 0; }
+.details dt { font-size: 15px; color: var(--text2); margin-top: 12px; }
+.details dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.umbrueche { white-space: pre-wrap; }
+
+/* Mängel zum Abhaken im Wartungsformular */
+.haken { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; color: var(--text); font-size: 17px; }
+.haken input { width: 24px; min-height: 24px; height: 24px; margin: 0; flex: none; -webkit-appearance: checkbox; appearance: auto; }
+
 .abzeichen {
   display: inline-block; font-size: 12px; font-weight: 700;
   padding: 2px 8px; border-radius: 99px;
@@ -256,13 +269,16 @@ nav button.aktiv { color: var(--akzent); font-weight: 700; }
    1. GRUNDEINSTELLUNGEN
    ===================================================================== */
 
+// Testmodus (Aufruf mit "?test", nur für tests/test.html): eigene
+// Speicherplätze, damit die Tests die echten Daten nie berühren.
+const TESTMODUS = new URLSearchParams(location.search).has("test");
 // Unter diesem Namen liegen alle Daten im localStorage des Browsers.
-const SPEICHER_SCHLUESSEL = "radkm-daten";
+const SPEICHER_SCHLUESSEL = TESTMODUS ? "radkm-test-daten" : "radkm-daten";
 // Datum des letzten Exports (separat, damit ein Import es nicht verändert).
-const EXPORT_SCHLUESSEL = "radkm-letzter-export";
+const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzter-export";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 1;
+const DATEN_VERSION = 2;
 const EXPORT_ERINNERUNG_TAGE = 30;
 
 /* =====================================================================
@@ -313,6 +329,20 @@ function plusMonate(iso, monate) {
   ziel.setDate(Math.min(t, letzterTag));
   return isoAusDate(ziel);
 }
+// "2026-10-10" → "10.10."
+function kurzDatum(iso) { return datumText(iso).slice(0, 6); }
+const MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+// Erster bzw. letzter Tag eines Monats (monat = 1 … 12)
+function monatsanfang(jahr, monat) { return jahr + "-" + zweistellig(monat) + "-01"; }
+function monatsende(jahr, monat) {
+  return jahr + "-" + zweistellig(monat) + "-" + zweistellig(new Date(jahr, monat, 0).getDate());
+}
+// Kalenderwoche nach ISO 8601: Die Woche gehört zu dem Jahr, in dem ihr Donnerstag liegt.
+function kalenderwoche(iso) {
+  const donnerstag = plusTage(montagDerWoche(iso), 3);
+  return Math.floor(tageZwischen(donnerstag.slice(0, 4) + "-01-01", donnerstag) / 7) + 1;
+}
+
 // Anzahl Tage von a nach b (positiv, wenn b später ist)
 function tageZwischen(a, b) {
   const [j1, m1, t1] = a.split("-").map(Number);
@@ -351,11 +381,17 @@ function neueId() {
    3. DATENMODELL: Laden, Prüfen, Umwandeln, Speichern
    ===================================================================== */
 
-function standardWartungsarten() {
+// Die Standard-Wartungsarten. Bei einer Neuinstallation (mitFenster) mit
+// jährlichem Zeitfenster; ohne für die Umwandlung von Version-1-Daten.
+function standardWartungsarten(mitFenster = true) {
+  const art = (id, name, intervallMonate, von, bis) => ({
+    id, name, intervallMonate, intervallKm: null,
+    fensterVon: mitFenster ? von : null, fensterBis: mitFenster ? bis : null, gueltigAbJahr: null
+  });
   return [
-    { id: "grosse-inspektion", name: "Große Inspektion", intervallMonate: 12, intervallKm: null },
-    { id: "kleine-inspektion", name: "Kleine Inspektion", intervallMonate: null, intervallKm: null },
-    { id: "reparatur", name: "Reparatur", intervallMonate: null, intervallKm: null }
+    art("grosse-inspektion", "Große Inspektion", 12, 10, 11),
+    art("kleine-inspektion", "Kleine Inspektion", null, 3, 4),
+    art("reparatur", "Reparatur", null, null, null)
   ];
 }
 function leereDaten() {
@@ -366,13 +402,30 @@ function leereDaten() {
     eintraege: [],
     wartungsarten: standardWartungsarten(),
     wartungsprotokoll: [],
-    termine: []
+    termine: [],
+    maengel: []
   };
 }
 
-// Umwandlungen für ältere Datenversionen.
-// Beispiel für später: 1: d => { /* Daten anpassen */ d.version = 2; return d; }
-const MIGRATIONEN = {};
+// Umwandlungen für ältere Datenversionen. Jede Funktion hebt die Daten um
+// genau eine Version an und lässt alle vorhandenen Angaben unverändert.
+const MIGRATIONEN = {
+  // Version 1 → 2: Rahmennummer und Beschreibung beim Fahrrad, Zeitfenster
+  // bei den Wartungsarten (bleiben leer), neue Mängelliste.
+  1: alt => {
+    const d = Object.assign({}, alt, { version: 2 });
+    if (d.fahrrad && typeof d.fahrrad === "object") {
+      d.fahrrad = Object.assign({ rahmennummer: "", beschreibung: "" }, d.fahrrad);
+    }
+    // In Version 1 bedeutete eine fehlende Liste: die Standard-Wartungsarten (ohne Zeitfenster)
+    const arten = d.wartungsarten === undefined ? standardWartungsarten(false) : d.wartungsarten;
+    d.wartungsarten = Array.isArray(arten)
+      ? arten.map(a => a && typeof a === "object" ? Object.assign({ fensterVon: null, fensterBis: null, gueltigAbJahr: null }, a) : a)
+      : arten;
+    if (d.maengel === undefined) d.maengel = [];
+    return d;
+  }
+};
 
 function migrieren(roh) {
   if (!roh || typeof roh !== "object" || Array.isArray(roh)) throw new Error("Die Datei enthält keine Rad-km-Daten.");
@@ -403,6 +456,10 @@ function pruefen(d) {
     if (!Array.isArray(v)) fehler("„" + name + "“ muss eine Liste sein.");
     return v;
   };
+  const objekte = (v, name) => liste(v, name).map((x, i) => {
+    if (!x || typeof x !== "object" || Array.isArray(x)) fehler("„" + name + "“ Nr. " + (i + 1) + " ist kein Objekt.");
+    return x;
+  });
 
   const erg = { version: DATEN_VERSION };
 
@@ -411,14 +468,21 @@ function pruefen(d) {
     erg.fahrrad = null;
   } else {
     const f = d.fahrrad;
+    if (typeof f !== "object" || Array.isArray(f)) fehler("Fahrrad: muss ein Objekt oder null sein.");
     if (!istText(f.name) || !f.name.trim()) fehler("Fahrrad: Name fehlt.");
     if (!istGueltigesDatum(f.startdatum)) fehler("Fahrrad: Startdatum ist ungültig (Format JJJJ-MM-TT).");
     if (!istZahl(f.startKm)) fehler("Fahrrad: Start-Kilometerstand muss eine Zahl ≥ 0 sein.");
-    erg.fahrrad = { name: f.name.trim(), startdatum: f.startdatum, startKm: runden(f.startKm) };
+    erg.fahrrad = {
+      name: f.name.trim(),
+      startdatum: f.startdatum,
+      startKm: runden(f.startKm),
+      rahmennummer: optText(f.rahmennummer, "Fahrrad (rahmennummer)").trim(),
+      beschreibung: optText(f.beschreibung, "Fahrrad (beschreibung)").trim()
+    };
   }
 
   // Vorlagen
-  erg.vorlagen = liste(d.vorlagen, "vorlagen").map((v, i) => {
+  erg.vorlagen = objekte(d.vorlagen, "vorlagen").map((v, i) => {
     const wo = "Vorlage Nr. " + (i + 1);
     if (!istText(v.name) || !v.name.trim()) fehler(wo + ": Name fehlt.");
     if (!istZahl(v.km)) fehler(wo + " („" + v.name + "“): km muss eine Zahl ≥ 0 sein.");
@@ -427,7 +491,7 @@ function pruefen(d) {
 
   // Einträge
   const daten = new Set();
-  erg.eintraege = liste(d.eintraege, "eintraege").map((e, i) => {
+  erg.eintraege = objekte(d.eintraege, "eintraege").map((e, i) => {
     const wo = "Eintrag Nr. " + (i + 1);
     if (!istGueltigesDatum(e.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
     if (daten.has(e.datum)) fehler("Doppeltes Datum " + datumText(e.datum) + ": pro Tag ist nur ein Eintrag erlaubt.");
@@ -448,22 +512,35 @@ function pruefen(d) {
 
   // Wartungsarten
   const artIds = new Set();
-  erg.wartungsarten = d.wartungsarten === undefined ? standardWartungsarten() : liste(d.wartungsarten, "wartungsarten").map((a, i) => {
+  const istMonat = v => Number.isInteger(v) && v >= 1 && v <= 12;
+  erg.wartungsarten = d.wartungsarten === undefined ? standardWartungsarten() : objekte(d.wartungsarten, "wartungsarten").map((a, i) => {
     const wo = "Wartungsart Nr. " + (i + 1);
     if (!istText(a.id) || !a.id) fehler(wo + ": id fehlt.");
     if (artIds.has(a.id)) fehler(wo + ": id „" + a.id + "“ kommt doppelt vor.");
     artIds.add(a.id);
     if (!istText(a.name) || !a.name.trim()) fehler(wo + ": Name fehlt.");
+    const wn = wo + " („" + a.name + "“)";
     const im = a.intervallMonate ?? null;
-    if (im !== null && !(Number.isInteger(im) && im >= 1)) fehler(wo + " („" + a.name + "“): intervallMonate muss eine ganze Zahl ≥ 1 oder null sein.");
+    if (im !== null && !(Number.isInteger(im) && im >= 1)) fehler(wn + ": intervallMonate muss eine ganze Zahl ≥ 1 oder null sein.");
     const ik = a.intervallKm ?? null;
-    if (ik !== null && !(istZahl(ik) && ik > 0)) fehler(wo + " („" + a.name + "“): intervallKm muss eine Zahl > 0 oder null sein.");
-    return { id: a.id, name: a.name.trim(), intervallMonate: im, intervallKm: ik === null ? null : runden(ik) };
+    if (ik !== null && !(istZahl(ik) && ik > 0)) fehler(wn + ": intervallKm muss eine Zahl > 0 oder null sein.");
+    const von = a.fensterVon ?? null, bis = a.fensterBis ?? null;
+    if ((von === null) !== (bis === null)) fehler(wn + ": fensterVon und fensterBis müssen beide gesetzt oder beide null sein.");
+    if (von !== null && !(istMonat(von) && istMonat(bis))) fehler(wn + ": fensterVon und fensterBis müssen Monate von 1 bis 12 sein.");
+    if (von !== null && von > bis) fehler(wn + ": Das Zeitfenster darf nicht über den Jahreswechsel gehen (fensterVon ≤ fensterBis).");
+    const ab = a.gueltigAbJahr ?? null;
+    if (ab !== null && !(Number.isInteger(ab) && ab >= 1900 && ab <= 9999)) fehler(wn + ": gueltigAbJahr muss eine Jahreszahl oder null sein.");
+    if (ab !== null && von === null) fehler(wn + ": gueltigAbJahr ist nur mit Zeitfenster erlaubt.");
+    return {
+      id: a.id, name: a.name.trim(), intervallMonate: im, intervallKm: ik === null ? null : runden(ik),
+      fensterVon: von, fensterBis: bis, gueltigAbJahr: ab
+    };
   });
   if (d.wartungsarten === undefined) erg.wartungsarten.forEach(a => artIds.add(a.id));
 
   // Wartungsprotokoll
-  erg.wartungsprotokoll = liste(d.wartungsprotokoll, "wartungsprotokoll").map((p, i) => {
+  const protIds = new Set();
+  erg.wartungsprotokoll = objekte(d.wartungsprotokoll, "wartungsprotokoll").map((p, i) => {
     const wo = "Wartungsprotokoll Nr. " + (i + 1);
     if (!istGueltigesDatum(p.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
     if (!artIds.has(p.wartungsartId)) fehler(wo + " (" + datumText(p.datum) + "): unbekannte wartungsartId „" + p.wartungsartId + "“.");
@@ -472,8 +549,11 @@ function pruefen(d) {
     let manuell = p.kmManuell;
     if (manuell === undefined) manuell = ks !== null; // fehlt die Angabe, gilt ein vorhandener Wert als von Hand eingetragen
     if (typeof manuell !== "boolean") fehler(wo + ": kmManuell muss true oder false sein.");
+    const id = istText(p.id) && p.id ? p.id : neueId();
+    if (protIds.has(id)) fehler(wo + ": id „" + id + "“ kommt doppelt vor.");
+    protIds.add(id);
     return {
-      id: istText(p.id) && p.id ? p.id : neueId(),
+      id,
       datum: p.datum,
       wartungsartId: p.wartungsartId,
       werkstatt: optText(p.werkstatt, wo + " (werkstatt)"),
@@ -485,7 +565,7 @@ function pruefen(d) {
 
   // Geplante Termine
   const terminArten = new Set();
-  erg.termine = liste(d.termine, "termine").map((t, i) => {
+  erg.termine = objekte(d.termine, "termine").map((t, i) => {
     const wo = "Termin Nr. " + (i + 1);
     if (!artIds.has(t.wartungsartId)) fehler(wo + ": unbekannte wartungsartId „" + t.wartungsartId + "“.");
     if (terminArten.has(t.wartungsartId)) fehler(wo + ": pro Wartungsart ist nur ein geplanter Termin erlaubt.");
@@ -494,7 +574,37 @@ function pruefen(d) {
     return { wartungsartId: t.wartungsartId, datum: t.datum, werkstatt: optText(t.werkstatt, wo + " (werkstatt)") };
   });
 
+  // Mängel
+  erg.maengel = objekte(d.maengel, "maengel").map((m, i) => {
+    const wo = "Mangel Nr. " + (i + 1);
+    if (!istGueltigesDatum(m.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
+    if (!istText(m.beschreibung) || !m.beschreibung.trim()) fehler(wo + " (" + datumText(m.datum) + "): Beschreibung fehlt.");
+    const status = m.status === undefined ? "offen" : m.status;
+    if (status !== "offen" && status !== "erledigt") fehler(wo + " (" + datumText(m.datum) + "): status muss „offen“ oder „erledigt“ sein.");
+    const am = m.erledigtAm ?? null;
+    if (am !== null && !istGueltigesDatum(am)) fehler(wo + " (" + datumText(m.datum) + "): erledigtAm ist ungültig (Format JJJJ-MM-TT).");
+    const pid = m.protokollId ?? null;
+    if (pid !== null && !protIds.has(pid)) fehler(wo + " (" + datumText(m.datum) + "): unbekannte protokollId „" + pid + "“.");
+    const erledigt = status === "erledigt";
+    return {
+      id: istText(m.id) && m.id ? m.id : neueId(),
+      datum: m.datum,
+      beschreibung: m.beschreibung.trim(),
+      status,
+      // Bei offenen Mängeln gibt es weder Erledigt-Datum noch Verknüpfung
+      erledigtAm: erledigt ? am : null,
+      protokollId: erledigt ? pid : null
+    };
+  });
+
   return erg;
+}
+
+// JSON-Text (aus dem Speicher oder einer Datei) → geprüfte Daten der aktuellen Version
+function datenEinlesen(text) {
+  let roh;
+  try { roh = JSON.parse(text); } catch (e) { throw new Error("Die Datei ist keine gültige JSON-Datei."); }
+  return pruefen(migrieren(roh));
 }
 
 // Die Daten der App – alles, was angezeigt wird, kommt von hier.
@@ -511,7 +621,7 @@ function laden() {
   }
   if (!text) return; // erster Start
   try {
-    daten = pruefen(migrieren(JSON.parse(text)));
+    daten = datenEinlesen(text);
   } catch (e) {
     // Defekte Daten nicht überschreiben, sondern beiseitelegen
     try { localStorage.setItem(SPEICHER_SCHLUESSEL + "-defekt-" + Date.now(), text); } catch (_) {}
@@ -577,9 +687,76 @@ function artName(id) {
   return a ? a.name : "(unbekannt)";
 }
 
-// Status einer Wartungsart: letzte Durchführung, Termin, Fälligkeit, Anzeigetext
-function wartungsStatus(art) {
-  const h = heute();
+function hatZeitfenster(art) { return art.fensterVon !== null && art.fensterVon !== undefined; }
+// Erster bzw. letzter Tag des Zeitfensters einer Wartungsart im Jahr "jahr"
+function fensterBeginn(art, jahr) { return monatsanfang(jahr, art.fensterVon); }
+function fensterEnde(art, jahr) { return monatsende(jahr, art.fensterBis); }
+// "Oktober–November" bzw. "Mai"
+function fensterText(art) {
+  return art.fensterVon === art.fensterBis ? MONATE[art.fensterVon - 1] : MONATE[art.fensterVon - 1] + "–" + MONATE[art.fensterBis - 1];
+}
+
+// Fälligkeit einer Wartungsart mit jährlichem Zeitfenster.
+//   durchfuehrungen: Datumswerte aus dem Wartungsprotokoll für diese Art
+//   startdatum: Startdatum des Fahrrads oder null
+//   h: Stichtag ("heute")
+// Regeln: Pro Jahr ist die Wartung im Fenster fällig. Zählt ein Fenster und
+// gibt es ab seinem Beginn keine Durchführung, ist die Wartung ab dem Tag nach
+// dem Fensterende überfällig – auch über den Jahreswechsel, bis sie
+// durchgeführt wird. Eine Durchführung nach dem Fensterende ist eine
+// Nachholung. Eine Durchführung vor dem Fenster zählt nicht für dieses Fenster.
+// Ein Fenster zählt ab "gueltigAbJahr" und nur, wenn es nicht vor dem
+// Startdatum des Fahrrads endet (ohne Fahrrad: ab dem laufenden Jahr).
+function saisonStatus(art, durchfuehrungen, startdatum, h) {
+  const jahr = Number(h.slice(0, 4));
+  const ab = art.gueltigAbJahr ?? null;
+  if (ab !== null && jahr < ab) {
+    return { text: "noch nicht fällig (gültig ab " + ab + ")", klasse: "", datum: null };
+  }
+  const bisher = durchfuehrungen.filter(d => d <= h).sort();
+  const letzte = bisher.length ? bisher[bisher.length - 1] : null;
+  const zaehlt = j => (ab === null || j >= ab) && (startdatum ? fensterEnde(art, j) >= startdatum : j >= jahr);
+  const imFenster = j => bisher.some(d => d >= fensterBeginn(art, j) && d <= fensterEnde(art, j));
+
+  // Ältestes versäumtes Fenster suchen
+  const erstesJahr = ab !== null ? ab : startdatum ? Number(startdatum.slice(0, 4)) : jahr;
+  for (let j = erstesJahr; j <= jahr; j++) {
+    const ende = fensterEnde(art, j);
+    if (zaehlt(j) && ende < h && (letzte === null || letzte < fensterBeginn(art, j))) {
+      return { text: "überfällig seit " + datumText(ende), klasse: "status-rot", datum: ende };
+    }
+  }
+
+  const beginn = fensterBeginn(art, jahr), ende = fensterEnde(art, jahr), naechster = fensterBeginn(art, jahr + 1);
+  if (h < beginn) {
+    // Vor dem Fenster: Wurde das Vorjahr erst nach dem Fenster nachgeholt, das anzeigen
+    if (letzte && zaehlt(jahr - 1) && letzte > fensterEnde(art, jahr - 1) && !imFenster(jahr - 1)) {
+      return { text: "erledigt (nachgeholt), nächste ab " + datumText(beginn), klasse: "status-gruen", datum: beginn };
+    }
+    return { text: "fällig ab " + kurzDatum(beginn), klasse: tageZwischen(h, beginn) <= 30 ? "status-orange" : "status-gruen", datum: beginn };
+  }
+  if (letzte && letzte >= beginn) {
+    return { text: (imFenster(jahr) ? "erledigt" : "erledigt (nachgeholt)") + ", nächste ab " + datumText(naechster), klasse: "status-gruen", datum: naechster };
+  }
+  if (h <= ende) return { text: "fällig bis " + kurzDatum(ende), klasse: "status-orange", datum: ende };
+  // Fenster dieses Jahres zählt nicht (z. B. Fahrrad erst danach angelegt)
+  return { text: "fällig ab " + datumText(naechster), klasse: "status-gruen", datum: naechster };
+}
+
+// Fälligkeit einer Wartungsart mit Intervall in Monaten (ohne Zeitfenster)
+function intervallStatus(art, letzte, h) {
+  if (!art.intervallMonate) return { text: "ohne Intervall", klasse: "", datum: null, nochNie: false };
+  if (!letzte) return { text: "noch nicht durchgeführt", klasse: "status-orange", datum: null, nochNie: true };
+  const faellig = plusMonate(letzte.datum, art.intervallMonate);
+  const t = tageZwischen(h, faellig);
+  if (t > 0) return { text: "fällig in " + tageText(t) + " (" + datumText(faellig) + ")", klasse: t <= 30 ? "status-orange" : "status-gruen", datum: faellig };
+  if (t === 0) return { text: "heute fällig", klasse: "status-rot", datum: faellig };
+  return { text: "überfällig seit " + tageText(-t) + " (" + datumText(faellig) + ")", klasse: "status-rot", datum: faellig };
+}
+
+// Status einer Wartungsart: letzte Durchführung, Termin, Fälligkeit, Anzeigetext.
+// "regel" ist die Fälligkeit ohne Berücksichtigung eines geplanten Termins.
+function wartungsStatus(art, h = heute()) {
   const durchfuehrungen = daten.wartungsprotokoll
     .filter(p => p.wartungsartId === art.id)
     .sort((a, b) => b.datum.localeCompare(a.datum));
@@ -594,39 +771,97 @@ function wartungsStatus(art) {
       : summe(e => e.datum > letzte.datum);
   }
 
-  const st = { art, letzte, termin, seitKm, datum: null, text: "", klasse: "", nochNie: false };
+  const regel = hatZeitfenster(art)
+    ? Object.assign({ nochNie: false }, saisonStatus(art, durchfuehrungen.map(p => p.datum), daten.fahrrad ? daten.fahrrad.startdatum : null, h))
+    : intervallStatus(art, letzte, h);
+  const st = { art, letzte, termin, seitKm, regel, datum: regel.datum, text: regel.text, klasse: regel.klasse, nochNie: regel.nochNie };
 
+  // Ein geplanter Termin hat Vorrang in der Anzeige
   if (termin) {
     const t = tageZwischen(h, termin.datum);
     st.datum = termin.datum;
     st.text = "Termin am " + datumText(termin.datum) + (termin.werkstatt ? " bei " + termin.werkstatt : "") +
       (t > 0 ? " (in " + tageText(t) + ")" : t === 0 ? " (heute)" : " (vor " + tageText(-t) + ", noch nicht als erledigt eingetragen)");
     st.klasse = t < 0 ? "status-orange" : "status-gruen";
-  } else if (art.intervallMonate) {
-    if (!letzte) {
-      st.nochNie = true;
-      st.text = "noch nicht durchgeführt";
-      st.klasse = "status-orange";
-    } else {
-      const faellig = plusMonate(letzte.datum, art.intervallMonate);
-      const t = tageZwischen(h, faellig);
-      st.datum = faellig;
-      if (t > 0) { st.text = "fällig in " + tageText(t) + " (" + datumText(faellig) + ")"; st.klasse = t <= 30 ? "status-orange" : "status-gruen"; }
-      else if (t === 0) { st.text = "heute fällig"; st.klasse = "status-rot"; }
-      else { st.text = "überfällig seit " + tageText(-t) + " (" + datumText(faellig) + ")"; st.klasse = "status-rot"; }
-    }
-  } else {
-    st.text = "ohne Intervall";
+    st.nochNie = false;
   }
   return st;
 }
 
 // Nächste fällige Wartung für die Startseite
 function naechsteWartung() {
-  const alle = daten.wartungsarten.map(wartungsStatus);
+  const alle = daten.wartungsarten.map(a => wartungsStatus(a));
   const mitDatum = alle.filter(s => s.datum).sort((a, b) => a.datum.localeCompare(b.datum));
   if (mitDatum.length) return mitDatum[0];
   return alle.find(s => s.nochNie) || null;
+}
+
+function offeneMaengel() {
+  return daten.maengel.filter(m => m.status === "offen").sort((a, b) => b.datum.localeCompare(a.datum));
+}
+function maengelText(n) { return n === 1 ? "1 offener Mangel" : n + " offene Mängel"; }
+
+// ---------- Zusammenfassung der Einträge (nur Anzeige) ----------
+// Eine Woche (Mo–So) ist ab dem folgenden Montag abgeschlossen. Ein Monat bzw.
+// ein Jahr ist abgeschlossen, wenn die Woche abgeschlossen ist, die seinen
+// letzten Tag enthält. Summen zählen nach Kalenderdatum; eine Woche über
+// einen Monatswechsel erscheint in jedem Monat als Teilwoche.
+function abgeschlossenBis(letzterTag, stichtag) {
+  return stichtag >= plusTage(montagDerWoche(letzterTag), 7);
+}
+
+// Liefert die Zeilen der obersten Ebene, neueste zuerst. Jede Gruppe hat
+//   { art: "jahr" | "monat" | "woche", schluessel, titel, von, bis, km, anzahl, kinder }
+// und jede Eintragszeile { art: "eintrag", schluessel, eintrag }.
+function gruppieren(eintraege, stichtag) {
+  const absteigend = (a, b) => b.localeCompare(a);
+  const nachSchluessel = (liste, f) => {
+    const m = new Map();
+    liste.forEach(e => { const k = f(e); if (!m.has(k)) m.set(k, []); m.get(k).push(e); });
+    return [...m.keys()].sort(absteigend).map(k => [k, m.get(k)]);
+  };
+  const eintragsZeilen = liste => [...liste].sort((a, b) => absteigend(a.datum, b.datum))
+    .map(e => ({ art: "eintrag", schluessel: "e" + e.id, eintrag: e }));
+  const gruppe = (art, schluessel, titel, von, bis, liste, kinder) => ({
+    art, schluessel, titel, von, bis, kinder,
+    km: runden(liste.reduce((s, e) => s + e.km, 0)), anzahl: liste.length
+  });
+
+  // Wochen innerhalb eines Monats (am Monatsrand als Teilwoche)
+  const wochenDesMonats = (ym, liste) => {
+    const [j, m] = ym.split("-").map(Number);
+    const anfang = monatsanfang(j, m), ende = monatsende(j, m);
+    return nachSchluessel(liste, e => montagDerWoche(e.datum)).map(([montag, wl]) => {
+      const sonntag = plusTage(montag, 6);
+      const teil = montag < anfang || sonntag > ende;
+      const von = montag < anfang ? anfang : montag, bis = sonntag > ende ? ende : sonntag;
+      return { montag, liste: wl, knoten: () => gruppe("woche", "w" + ym + "|" + montag,
+        "KW " + kalenderwoche(montag) + (teil ? " (Teil)" : ""), von, bis, wl, eintragsZeilen(wl)) };
+    });
+  };
+  const monatsKnoten = (ym, liste) => {
+    const [j, m] = ym.split("-").map(Number);
+    return gruppe("monat", "m" + ym, MONATE[m - 1] + " " + j, monatsanfang(j, m), monatsende(j, m), liste,
+      wochenDesMonats(ym, liste).map(w => w.knoten()));
+  };
+
+  const zeilen = [];
+  nachSchluessel(eintraege, e => e.datum.slice(0, 4)).forEach(([jahr, jl]) => {
+    const monate = nachSchluessel(jl, e => e.datum.slice(0, 7));
+    if (abgeschlossenBis(jahr + "-12-31", stichtag)) {
+      zeilen.push(gruppe("jahr", "j" + jahr, jahr, jahr + "-01-01", jahr + "-12-31", jl, monate.map(([ym, ml]) => monatsKnoten(ym, ml))));
+      return;
+    }
+    monate.forEach(([ym, ml]) => {
+      const [j, m] = ym.split("-").map(Number);
+      if (abgeschlossenBis(monatsende(j, m), stichtag)) { zeilen.push(monatsKnoten(ym, ml)); return; }
+      wochenDesMonats(ym, ml).forEach(w => {
+        if (abgeschlossenBis(plusTage(w.montag, 6), stichtag)) zeilen.push(w.knoten());
+        else zeilen.push(...eintragsZeilen(w.liste));
+      });
+    });
+  });
+  return zeilen;
 }
 
 /* =====================================================================
@@ -684,7 +919,9 @@ function wert(id) { return document.getElementById(id).value; }
    ===================================================================== */
 
 let aktiverTab = "uebersicht";
-let anzahlEintraege = 50;
+// Aufgeklappte Zeilen der Eintragsliste (nur solange die App geöffnet ist)
+const offeneGruppen = new Set();
+let erledigteMaengelOffen = false;
 
 const TITEL = { uebersicht: "Übersicht", wartung: "Wartung", vorlagen: "Vorlagen", einstellungen: "Einstellungen" };
 
@@ -697,6 +934,12 @@ function zeichnen() {
   document.getElementById("inhalt").innerHTML = html;
 }
 
+// Detailansicht (nur lesen): Liste aus [Bezeichnung, HTML-Wert]; leere Werte entfallen
+function detailListe(felder) {
+  return '<dl class="details">' + felder.filter(f => f[1] !== "" && f[1] !== null && f[1] !== undefined)
+    .map(f => '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>').join("") + '</dl>';
+}
+
 /* ---------- Übersicht ---------- */
 function bildUebersicht() {
   const h = heute();
@@ -704,7 +947,7 @@ function bildUebersicht() {
 
   if (!daten.fahrrad) {
     html += '<div class="hinweis info"><strong>Willkommen!</strong><br>Bitte lege zuerst dein Fahrrad mit Startdatum und Start-Kilometerstand an.' +
-      '<br><button type="button" class="primaer" data-action="tab" data-tab="einstellungen">Fahrrad anlegen</button></div>';
+      '<br><button type="button" class="primaer" data-action="fahrrad-aendern">Fahrrad anlegen</button></div>';
   }
 
   // Erinnerung an die Datensicherung
@@ -716,7 +959,7 @@ function bildUebersicht() {
       ' Die Daten liegen nur auf diesem Gerät.<br><button type="button" class="primaer" data-action="export">Jetzt exportieren</button></div>';
   }
 
-  // Kilometerstand und nächste Wartung
+  // Kilometerstand, nächste Wartung und offene Mängel
   html += '<div class="karte"><div class="klein">' + esc(daten.fahrrad ? daten.fahrrad.name : "Kilometerstand") + '</div>' +
     '<div class="stand-zahl">' + kmText(aktuellerKmStand()) + ' km</div>';
   const nw = naechsteWartung();
@@ -724,6 +967,10 @@ function bildUebersicht() {
     html += '<div style="margin-top:8px">🔧 ' + esc(nw.art.name) + ': <span class="' + nw.klasse + '">' + esc(nw.text) + '</span></div>';
   } else {
     html += '<div class="klein" style="margin-top:8px">🔧 Keine Wartung fällig</div>';
+  }
+  const anzahlMaengel = offeneMaengel().length;
+  if (anzahlMaengel) {
+    html += '<div class="status-orange" style="margin-top:4px">⚠️ ' + maengelText(anzahlMaengel) + '</div>';
   }
   html += '</div>';
 
@@ -733,7 +980,7 @@ function bildUebersicht() {
   if (eHeute) {
     html += '<div class="hinweis info">✓ Heute erfasst: <strong>' + kmText(eHeute.km) + ' km</strong>' +
       (eHeute.vorlage ? " (" + esc(eHeute.vorlage) + ")" : "") +
-      '<br><button type="button" data-action="eintrag-bearbeiten" data-id="' + eHeute.id + '">Bearbeiten</button></div>';
+      '<br><button type="button" data-action="eintrag-ansehen" data-id="' + eHeute.id + '">Anzeigen</button></div>';
   }
   html += '<div class="schnell">';
   daten.vorlagen.forEach(v => {
@@ -755,27 +1002,11 @@ function bildUebersicht() {
     kachel("Jahr", summe(e => e.datum.slice(0, 4) === h.slice(0, 4))) +
     '</div>';
 
-  // Liste der Einträge
-  const sortiert = [...daten.eintraege].sort((a, b) => b.datum.localeCompare(a.datum));
-  html += '<h2>Einträge <span class="klein">(' + sortiert.length + ')</span></h2><div class="liste">';
-  if (!sortiert.length) html += '<div class="leer">Noch keine Einträge.</div>';
-  sortiert.slice(0, anzahlEintraege).forEach(e => {
-    const vorStart = daten.fahrrad && e.datum < daten.fahrrad.startdatum;
-    const unten = [e.vorlage, e.notiz].filter(Boolean).map(esc).join(" · ");
-    html += '<div class="zeile">' +
-      '<button type="button" class="inhalt" data-action="eintrag-bearbeiten" data-id="' + e.id + '">' +
-      '<div class="text"><div>' + wochentag(e.datum) + ', ' + datumText(e.datum) +
-      (e.typ === "woche" ? '<span class="abzeichen">Woche</span>' : "") + '</div>' +
-      (unten ? '<div class="klein">' + unten + '</div>' : "") +
-      (vorStart ? '<div class="klein">vor dem Startdatum – zählt nicht zum Kilometerstand</div>' : "") +
-      '</div><span class="zahl">' + kmText(e.km) + ' km</span></button>' +
-      '<button type="button" class="symbol" data-action="eintrag-loeschen" data-id="' + e.id + '" aria-label="Löschen">🗑</button>' +
-      '</div>';
-  });
+  // Liste der Einträge, abgeschlossene Zeiträume zusammengefasst
+  html += '<h2>Einträge <span class="klein">(' + daten.eintraege.length + ')</span></h2><div class="liste">';
+  if (!daten.eintraege.length) html += '<div class="leer">Noch keine Einträge.</div>';
+  html += zeilenHtml(gruppieren(daten.eintraege, h), 0);
   html += '</div>';
-  if (sortiert.length > anzahlEintraege) {
-    html += '<div class="knopfreihe"><button type="button" data-action="mehr">Mehr anzeigen</button></div>';
-  }
   return html;
 }
 
@@ -783,18 +1014,74 @@ function kachel(titel, km) {
   return '<div class="summe"><div class="wert">' + kmText(km) + '</div><div class="titel">' + titel + ' (km)</div></div>';
 }
 
-/* ---------- Eintrags-Formular ---------- */
+// Zeilen der Eintragsliste; aufgeklappte Gruppen zeigen ihre Kinder eingerückt darunter
+function zeilenHtml(zeilen, tiefe) {
+  const einzug = ' style="padding-left:' + (16 + tiefe * 16) + 'px"';
+  return zeilen.map(z => {
+    if (z.art === "eintrag") return eintragsZeile(z.eintrag, einzug);
+    const offen = offeneGruppen.has(z.schluessel);
+    const zeitraum = z.art === "woche" ? kurzDatum(z.von) + "–" + kurzDatum(z.bis) : "";
+    const unten = [zeitraum, z.anzahl === 1 ? "1 Eintrag" : z.anzahl + " Einträge"].filter(Boolean).join(" · ");
+    return '<div class="zeile gruppe">' +
+      '<button type="button" class="inhalt" data-action="gruppe" data-key="' + esc(z.schluessel) + '" aria-expanded="' + offen + '"' + einzug + '>' +
+      '<span class="pfeil">' + (offen ? "▾" : "▸") + '</span>' +
+      '<div class="text"><div class="titel">' + esc(z.titel) + '</div><div class="klein">' + unten + '</div></div>' +
+      '<span class="zahl" style="padding-right:16px">' + kmText(z.km) + ' km</span></button></div>' +
+      (offen ? zeilenHtml(z.kinder, tiefe + 1) : "");
+  }).join("");
+}
+
+function eintragsZeile(e, einzug) {
+  const vorStart = daten.fahrrad && e.datum < daten.fahrrad.startdatum;
+  const unten = [e.vorlage, e.notiz].filter(Boolean).map(esc).join(" · ");
+  return '<div class="zeile">' +
+    '<button type="button" class="inhalt" data-action="eintrag-ansehen" data-id="' + e.id + '"' + einzug + '>' +
+    '<div class="text"><div>' + wochentag(e.datum) + ', ' + datumText(e.datum) +
+    (e.typ === "woche" ? '<span class="abzeichen">Woche</span>' : "") + '</div>' +
+    (unten ? '<div class="klein">' + unten + '</div>' : "") +
+    (vorStart ? '<div class="klein">vor dem Startdatum – zählt nicht zum Kilometerstand</div>' : "") +
+    '</div><span class="zahl" style="padding-right:16px">' + kmText(e.km) + ' km</span></button>' +
+    '</div>';
+}
+
+function gruppeUmschalten(schluessel) {
+  if (offeneGruppen.has(schluessel)) offeneGruppen.delete(schluessel);
+  else offeneGruppen.add(schluessel);
+  zeichnen();
+}
+
+/* ---------- Eintrag: Detailansicht und Formular ---------- */
+
+function eintragAnsicht(id, hinweis) {
+  const e = daten.eintraege.find(e => e.id === id);
+  if (!e) return;
+  const vorStart = daten.fahrrad && e.datum < daten.fahrrad.startdatum;
+  const stand = kmStandAm(e.datum);
+  fensterOeffnen(
+    '<h2>Eintrag' + (e.typ === "woche" ? ' <span class="abzeichen">Woche</span>' : "") + '</h2>' +
+    (hinweis ? '<div class="hinweis info">' + esc(hinweis) + '</div>' : "") +
+    detailListe([
+      ["Datum", wochentag(e.datum) + ", " + datumText(e.datum)],
+      ["Kilometer", kmText(e.km) + " km"],
+      ["Art", e.typ === "woche" ? "Importierte Wochensumme (Datum = Montag bzw. erster Fahrtag der Woche)" : "Tages-Eintrag"],
+      ["Vorlage", esc(e.vorlage || "")],
+      ["Notiz", esc(e.notiz)],
+      ["Kilometerstand am Ende des Tages", vorStart ? "vor dem Startdatum – zählt nicht zum Kilometerstand" : stand === null ? "" : kmText(stand) + " km"]
+    ]) +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    '<button type="button" class="primaer" data-action="eintrag-aendern" data-id="' + e.id + '">Ändern</button></div>'
+  );
+}
 
 // Zustand des gerade geöffneten Eintrags-Formulars
 let formEintrag = null; // { id | null, typ, ursprungsDatum }
 
-// Öffnet das Formular. Gibt es für das Datum schon einen Eintrag,
-// wird dieser zum Bearbeiten geöffnet.
-function eintragOeffnen(vorgabe) {
+// Neuer Eintrag. Gibt es für das Datum schon einen Eintrag, wird dieser angezeigt.
+function eintragNeu(vorgabe) {
   const datum = vorgabe.datum || heute();
-  const vorhanden = vorgabe.id ? daten.eintraege.find(e => e.id === vorgabe.id) : eintragAm(datum);
+  const vorhanden = eintragAm(datum);
   if (vorhanden) {
-    eintragsFormular(vorhanden, vorgabe.id ? "" : "Für den " + datumText(vorhanden.datum) + " gibt es bereits einen Eintrag. Du kannst ihn hier bearbeiten.");
+    eintragAnsicht(vorhanden.id, "Für den " + datumText(datum) + " gibt es bereits einen Eintrag. Mit „Ändern“ kannst du ihn bearbeiten.");
   } else {
     eintragsFormular({ id: null, datum, km: vorgabe.km ?? null, vorlage: vorgabe.vorlage || null, notiz: "", typ: "tag" }, "");
   }
@@ -830,7 +1117,8 @@ function eintragsFormular(e, hinweis) {
     '<label for="f-notiz">Notiz (optional)</label>' +
     '<input type="text" id="f-notiz" value="' + esc(e.notiz) + '">' +
     '<div class="knopfreihe">' +
-    '<button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    (e.id ? '<button type="button" data-action="eintrag-ansehen" data-id="' + e.id + '">Abbrechen</button>'
+          : '<button type="button" data-action="fenster-zu">Abbrechen</button>') +
     '<button type="button" class="primaer" data-action="eintrag-speichern">Speichern</button>' +
     '</div>' +
     (e.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="eintrag-loeschen" data-id="' + e.id + '">Eintrag löschen</button></div>' : "")
@@ -916,23 +1204,42 @@ function bildWartung() {
     const st = wartungsStatus(art);
     html += '<div class="karte"><h3>' + esc(art.name) + '</h3>' +
       '<div class="' + st.klasse + '">' + esc(st.text) + '</div>';
+    if (st.termin && st.regel.datum) {
+      // Bei geplantem Termin zusätzlich die Fälligkeit nach Regel klein zeigen
+      html += '<div class="klein">Ohne Termin: ' + esc(st.regel.text) + '</div>';
+    }
+    if (hatZeitfenster(art)) {
+      html += '<div class="klein">Zeitfenster: ' + fensterText(art) + (art.gueltigAbJahr ? ", gültig ab " + art.gueltigAbJahr : "") + '</div>';
+    }
     if (st.letzte) {
       html += '<div class="klein">Zuletzt: ' + datumText(st.letzte.datum) +
         (st.letzte.werkstatt ? " bei " + esc(st.letzte.werkstatt) : "") +
         (st.letzte.kmStand !== null ? " · " + kmText(st.letzte.kmStand) + " km" : "") + '</div>' +
         '<div class="klein">Seit letzter Wartung gefahren: ' + kmText(st.seitKm) + ' km</div>';
-    } else if (!art.intervallMonate) {
+    } else if (!st.nochNie) {
       html += '<div class="klein">Noch nicht durchgeführt</div>';
-    }
-    if (st.termin && art.intervallMonate) {
-      // Bei geplantem Termin zusätzlich die berechnete Fälligkeit klein zeigen
-      html += st.letzte ? '<div class="klein">Berechnet fällig: ' + datumText(plusMonate(st.letzte.datum, art.intervallMonate)) + '</div>' : "";
     }
     html += '<div class="knopfreihe">' +
       '<button type="button" data-action="termin" data-id="' + esc(art.id) + '">' + (st.termin ? "Termin ändern" : "Termin planen") + '</button>' +
       '<button type="button" class="primaer" data-action="wartung-erledigt" data-id="' + esc(art.id) + '">Erledigt eintragen</button>' +
       '</div></div>';
   });
+
+  // Mängel
+  const offen = offeneMaengel();
+  const erledigt = daten.maengel.filter(m => m.status === "erledigt")
+    .sort((a, b) => (b.erledigtAm || b.datum).localeCompare(a.erledigtAm || a.datum));
+  html += '<h2>Mängel <span class="klein">(' + offen.length + ' offen)</span></h2><div class="liste">';
+  if (!offen.length) html += '<div class="leer">Keine offenen Mängel.</div>';
+  offen.forEach(m => { html += mangelZeile(m); });
+  html += '</div><div class="knopfreihe"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
+  if (erledigt.length) {
+    html += '<div class="liste" style="margin-top:12px"><div class="zeile gruppe">' +
+      '<button type="button" class="inhalt" data-action="maengel-erledigt-umschalten" aria-expanded="' + erledigteMaengelOffen + '">' +
+      '<span class="pfeil">' + (erledigteMaengelOffen ? "▾" : "▸") + '</span>' +
+      '<div class="text"><div class="titel">Erledigte Mängel (' + erledigt.length + ')</div></div></button></div>' +
+      (erledigteMaengelOffen ? erledigt.map(mangelZeile).join("") : "") + '</div>';
+  }
 
   // Protokoll
   const prot = [...daten.wartungsprotokoll].sort((a, b) => b.datum.localeCompare(a.datum));
@@ -941,11 +1248,10 @@ function bildWartung() {
   prot.forEach(p => {
     const unten = [p.werkstatt, p.notiz].filter(Boolean).map(esc).join(" · ");
     html += '<div class="zeile">' +
-      '<button type="button" class="inhalt" data-action="protokoll-bearbeiten" data-id="' + p.id + '">' +
+      '<button type="button" class="inhalt" data-action="protokoll-ansehen" data-id="' + p.id + '">' +
       '<div class="text"><div>' + datumText(p.datum) + ' · <strong>' + esc(artName(p.wartungsartId)) + '</strong></div>' +
       (unten ? '<div class="klein">' + unten + '</div>' : "") +
-      '</div><span class="zahl">' + (p.kmStand !== null ? kmText(p.kmStand) + ' km' : "") + '</span></button>' +
-      '<button type="button" class="symbol" data-action="protokoll-loeschen" data-id="' + p.id + '" aria-label="Löschen">🗑</button>' +
+      '</div><span class="zahl" style="padding-right:16px">' + (p.kmStand !== null ? kmText(p.kmStand) + ' km' : "") + '</span></button>' +
       '</div>';
   });
   html += '</div>';
@@ -953,13 +1259,28 @@ function bildWartung() {
   // Wartungsarten verwalten
   html += '<h2>Wartungsarten</h2><div class="liste">';
   daten.wartungsarten.forEach(a => {
-    const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" / ");
+    let regel;
+    if (hatZeitfenster(a)) {
+      regel = "Zeitfenster: " + fensterText(a) + (a.gueltigAbJahr ? ", ab " + a.gueltigAbJahr : "");
+    } else {
+      const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" / ");
+      regel = iv ? "Intervall: " + iv : "ohne Intervall";
+    }
     html += '<div class="zeile"><button type="button" class="inhalt" data-action="art-bearbeiten" data-id="' + esc(a.id) + '">' +
-      '<div class="text"><div>' + esc(a.name) + '</div><div class="klein">' + (iv ? "Intervall: " + iv : "ohne Intervall") + '</div></div>' +
-      '<span class="klein">›</span></button></div>';
+      '<div class="text"><div>' + esc(a.name) + '</div><div class="klein">' + regel + '</div></div>' +
+      '<span class="klein" style="padding-right:16px">›</span></button></div>';
   });
   html += '</div><div class="knopfreihe"><button type="button" data-action="art-neu">+ Neue Wartungsart</button></div>';
   return html;
+}
+
+function mangelZeile(m) {
+  const unten = m.status === "erledigt"
+    ? "erledigt" + (m.erledigtAm ? " am " + datumText(m.erledigtAm) : "")
+    : "festgestellt am " + datumText(m.datum);
+  return '<div class="zeile"><button type="button" class="inhalt" data-action="mangel-ansehen" data-id="' + m.id + '">' +
+    '<div class="text"><div>' + esc(m.beschreibung) + '</div><div class="klein">' + unten + '</div></div>' +
+    '<span class="klein" style="padding-right:16px">›</span></button></div>';
 }
 
 // Geplanter Termin
@@ -988,6 +1309,28 @@ async function terminLoeschen(artId) {
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 
+// Mängel, die mit einem Protokoll-Eintrag verknüpft sind
+function maengelZuProtokoll(id) { return daten.maengel.filter(m => m.protokollId === id); }
+
+function protokollAnsicht(id) {
+  const p = daten.wartungsprotokoll.find(p => p.id === id);
+  if (!p) return;
+  const maengel = maengelZuProtokoll(p.id);
+  fensterOeffnen(
+    '<h2>Wartung</h2>' +
+    detailListe([
+      ["Datum", wochentag(p.datum) + ", " + datumText(p.datum)],
+      ["Wartungsart", esc(artName(p.wartungsartId))],
+      ["Werkstatt", esc(p.werkstatt)],
+      ["Kilometerstand", p.kmStand === null ? "–" : kmText(p.kmStand) + " km" + (p.kmManuell ? " (von Hand eingetragen)" : " (berechnet)")],
+      ["Durchgeführte Arbeiten / Notiz", p.notiz ? '<span class="umbrueche">' + esc(p.notiz) + '</span>' : ""],
+      ["Erledigte Mängel", maengel.map(m => "✓ " + esc(m.beschreibung)).join("<br>")]
+    ]) +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    '<button type="button" class="primaer" data-action="protokoll-aendern" data-id="' + p.id + '">Ändern</button></div>'
+  );
+}
+
 // Zustand des Protokoll-Formulars
 let formProtokoll = null; // { id | null, manuell, terminUebernommen }
 
@@ -1008,6 +1351,14 @@ function protokollFormular(p, terminUebernommen) {
   formProtokoll = { id: p.id, manuell: p.kmManuell, terminUebernommen: !!terminUebernommen };
   const optionen = daten.wartungsarten.map(a =>
     '<option value="' + esc(a.id) + '"' + (a.id === p.wartungsartId ? " selected" : "") + '>' + esc(a.name) + '</option>').join("");
+  // Zum Abhaken: alle offenen Mängel und die schon mit diesem Eintrag verknüpften
+  const verknuepft = p.id ? maengelZuProtokoll(p.id) : [];
+  const zumAbhaken = [...verknuepft, ...offeneMaengel()];
+  const maengelHtml = zumAbhaken.length
+    ? '<label>Erledigte Mängel abhaken</label>' + zumAbhaken.map(m =>
+        '<label class="haken"><input type="checkbox" name="p-mangel" value="' + m.id + '"' + (m.protokollId === p.id && p.id ? " checked" : "") + '>' +
+        '<span>' + esc(m.beschreibung) + ' <span class="klein">(' + datumText(m.datum) + ')</span></span></label>').join("")
+    : "";
   fensterOeffnen(
     '<h2>' + (p.id ? "Wartung bearbeiten" : "Wartung eintragen") + '</h2>' +
     (terminUebernommen ? '<div class="hinweis info">Der geplante Termin wird nach dem Speichern entfernt.</div>' : "") +
@@ -1018,7 +1369,10 @@ function protokollFormular(p, terminUebernommen) {
     '<input type="text" id="p-km" inputmode="decimal" autocomplete="off" data-input="protokoll-km">' +
     '<div class="feldhinweis" id="p-km-hinweis"></div>' +
     '<label for="p-notiz">Durchgeführte Arbeiten / Notiz</label><textarea id="p-notiz">' + esc(p.notiz) + '</textarea>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    maengelHtml +
+    '<div class="knopfreihe">' +
+    (p.id ? '<button type="button" data-action="protokoll-ansehen" data-id="' + p.id + '">Abbrechen</button>'
+          : '<button type="button" data-action="fenster-zu">Abbrechen</button>') +
     '<button type="button" class="primaer" data-action="protokoll-speichern">Speichern</button></div>' +
     (p.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="protokoll-loeschen" data-id="' + p.id + '">Eintrag löschen</button></div>' : "")
   );
@@ -1054,6 +1408,9 @@ function protokollKmNeu() {
   protokollDatumGeaendert();
 }
 
+// Mangel wieder öffnen (Verknüpfung und Erledigt-Datum entfernen)
+function mangelWiederOeffnen(m) { Object.assign(m, { status: "offen", erledigtAm: null, protokollId: null }); }
+
 function protokollSpeichern() {
   const datum = wert("p-datum");
   if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
@@ -1066,32 +1423,131 @@ function protokollSpeichern() {
   }
   const artId = wert("p-art");
   const satz = { datum, wartungsartId: artId, werkstatt: wert("p-werkstatt").trim(), kmStand, kmManuell: manuell, notiz: wert("p-notiz").trim() };
-  if (formProtokoll.id) {
-    Object.assign(daten.wartungsprotokoll.find(p => p.id === formProtokoll.id), satz);
+  let id = formProtokoll.id;
+  if (id) {
+    Object.assign(daten.wartungsprotokoll.find(p => p.id === id), satz);
   } else {
-    daten.wartungsprotokoll.push(Object.assign({ id: neueId() }, satz));
+    id = neueId();
+    daten.wartungsprotokoll.push(Object.assign({ id }, satz));
   }
+  // Abgehakte Mängel erledigen und verknüpfen; nicht mehr abgehakte wieder öffnen
+  const abgehakt = new Set([...document.querySelectorAll('input[name="p-mangel"]:checked')].map(el => el.value));
+  daten.maengel.forEach(m => {
+    if (abgehakt.has(m.id)) Object.assign(m, { status: "erledigt", erledigtAm: datum, protokollId: id });
+    else if (m.protokollId === id) mangelWiederOeffnen(m);
+  });
   if (formProtokoll.terminUebernommen) {
     daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
   }
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Wartung gespeichert"); }
+  if (speichern()) {
+    fensterSchliessen(); zeichnen();
+    meldung(abgehakt.size ? "Wartung gespeichert, " + (abgehakt.size === 1 ? "1 Mangel" : abgehakt.size + " Mängel") + " erledigt" : "Wartung gespeichert");
+  }
 }
 async function protokollLoeschen(id) {
   const p = daten.wartungsprotokoll.find(p => p.id === id);
   if (!p) return;
-  if (!await frage("Wartung „" + esc(artName(p.wartungsartId)) + "“ vom " + datumText(p.datum) + " wirklich löschen?", "Löschen", "Abbrechen", true)) return;
+  const verknuepft = maengelZuProtokoll(id);
+  const zusatz = verknuepft.length
+    ? "<br><br>" + (verknuepft.length === 1 ? "Der verknüpfte Mangel wird" : "Die " + verknuepft.length + " verknüpften Mängel werden") +
+      " wieder auf <strong>offen</strong> gesetzt:<br>" + verknuepft.map(m => "• " + esc(m.beschreibung)).join("<br>")
+    : "";
+  if (!await frage("Wartung „" + esc(artName(p.wartungsartId)) + "“ vom " + datumText(p.datum) + " wirklich löschen?" + zusatz, "Löschen", "Abbrechen", true)) return;
+  verknuepft.forEach(mangelWiederOeffnen);
   daten.wartungsprotokoll = daten.wartungsprotokoll.filter(x => x.id !== id);
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
+}
+
+/* ---------- Mängel ---------- */
+function mangelAnsicht(id) {
+  const m = daten.maengel.find(m => m.id === id);
+  if (!m) return;
+  const p = m.protokollId ? daten.wartungsprotokoll.find(p => p.id === m.protokollId) : null;
+  fensterOeffnen(
+    '<h2>Mangel</h2>' +
+    detailListe([
+      ["Festgestellt am", datumText(m.datum)],
+      ["Beschreibung", '<span class="umbrueche">' + esc(m.beschreibung) + '</span>'],
+      ["Status", m.status === "erledigt" ? '<span class="status-gruen">erledigt</span>' : '<span class="status-orange">offen</span>'],
+      ["Erledigt am", m.erledigtAm ? datumText(m.erledigtAm) : ""],
+      ["Erledigt mit Wartung", p ? '<button type="button" class="leise" style="padding:0;min-height:0" data-action="protokoll-ansehen" data-id="' + p.id + '">' +
+        esc(artName(p.wartungsartId)) + " vom " + datumText(p.datum) + '</button>' : ""]
+    ]) +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    '<button type="button" class="primaer" data-action="mangel-aendern" data-id="' + m.id + '">Ändern</button></div>'
+  );
+}
+
+function mangelFormular(id) {
+  const m = id ? daten.maengel.find(m => m.id === id) : { datum: heute(), beschreibung: "", status: "offen", erledigtAm: null, protokollId: null };
+  const p = m.protokollId ? daten.wartungsprotokoll.find(p => p.id === m.protokollId) : null;
+  fensterOeffnen(
+    '<h2>' + (id ? "Mangel bearbeiten" : "Mangel erfassen") + '</h2>' +
+    '<label for="m-datum">Festgestellt am</label><input type="date" id="m-datum" value="' + m.datum + '">' +
+    '<label for="m-text">Beschreibung</label><textarea id="m-text" placeholder="z. B. Vorderbremse quietscht">' + esc(m.beschreibung) + '</textarea>' +
+    '<label for="m-status">Status</label><select id="m-status" data-change="mangel-status">' +
+    '<option value="offen"' + (m.status === "offen" ? " selected" : "") + '>offen</option>' +
+    '<option value="erledigt"' + (m.status === "erledigt" ? " selected" : "") + '>erledigt</option></select>' +
+    '<div id="m-erledigt-feld"' + (m.status === "erledigt" ? "" : " hidden") + '>' +
+    '<label for="m-am">Erledigt am</label><input type="date" id="m-am" value="' + (m.erledigtAm || heute()) + '">' +
+    (p ? '<div class="feldhinweis">Verknüpft mit der Wartung „' + esc(artName(p.wartungsartId)) + '“ vom ' + datumText(p.datum) + '.</div>' : "") +
+    '</div>' +
+    '<div class="knopfreihe">' +
+    (id ? '<button type="button" data-action="mangel-ansehen" data-id="' + id + '">Abbrechen</button>'
+        : '<button type="button" data-action="fenster-zu">Abbrechen</button>') +
+    '<button type="button" class="primaer" data-action="mangel-speichern" data-id="' + (id || "") + '">Speichern</button></div>' +
+    (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="mangel-loeschen" data-id="' + id + '">Mangel löschen</button></div>' : "")
+  );
+}
+function mangelStatusGeaendert() {
+  document.getElementById("m-erledigt-feld").hidden = wert("m-status") !== "erledigt";
+}
+function mangelSpeichern(id) {
+  const datum = wert("m-datum");
+  const beschreibung = wert("m-text").trim();
+  const status = wert("m-status");
+  if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
+  if (!beschreibung) { alert("Bitte den Mangel beschreiben."); return; }
+  let erledigtAm = null;
+  if (status === "erledigt") {
+    erledigtAm = wert("m-am");
+    if (!istGueltigesDatum(erledigtAm)) { alert("Bitte ein gültiges Erledigt-Datum wählen."); return; }
+  }
+  const m = id ? daten.maengel.find(m => m.id === id) : null;
+  if (m) {
+    Object.assign(m, { datum, beschreibung, status, erledigtAm });
+    if (status === "offen") m.protokollId = null;
+  } else {
+    daten.maengel.push({ id: neueId(), datum, beschreibung, status, erledigtAm, protokollId: null });
+  }
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Mangel gespeichert"); }
+}
+async function mangelLoeschen(id) {
+  const m = daten.maengel.find(m => m.id === id);
+  if (!m) return;
+  if (!await frage("Mangel „" + esc(m.beschreibung) + "“ wirklich löschen?", "Löschen", "Abbrechen", true)) return;
+  daten.maengel = daten.maengel.filter(x => x.id !== id);
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 
 // Wartungsarten
 function artFormular(id) {
-  const a = id ? daten.wartungsarten.find(a => a.id === id) : { name: "", intervallMonate: null, intervallKm: null };
+  const a = id ? daten.wartungsarten.find(a => a.id === id)
+    : { name: "", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null };
+  const monatsAuswahl = (feld, wert) => '<select id="' + feld + '" data-change="art-fenster"><option value="">– kein Zeitfenster –</option>' +
+    MONATE.map((n, i) => '<option value="' + (i + 1) + '"' + (wert === i + 1 ? " selected" : "") + '>' + n + '</option>').join("") + '</select>';
   fensterOeffnen(
     '<h2>' + (id ? "Wartungsart bearbeiten" : "Neue Wartungsart") + '</h2>' +
     '<label for="a-name">Name</label><input type="text" id="a-name" value="' + esc(a.name) + '">' +
+    '<label for="a-von">Jährliches Zeitfenster: Monat von (optional)</label>' + monatsAuswahl("a-von", a.fensterVon) +
+    '<label for="a-bis">Monat bis</label>' + monatsAuswahl("a-bis", a.fensterBis) +
+    '<div id="a-fenster-feld"' + (a.fensterVon ? "" : " hidden") + '>' +
+    '<label for="a-ab">Gültig ab Jahr (optional)</label>' +
+    '<input type="text" id="a-ab" inputmode="numeric" placeholder="z. B. 2027" value="' + (a.gueltigAbJahr ?? "") + '">' +
+    '<div class="feldhinweis">Vor diesem Jahr wird keine Fälligkeit angezeigt. Leer = sofort gültig.</div></div>' +
     '<label for="a-monate">Intervall in Monaten (optional)</label>' +
     '<input type="text" id="a-monate" inputmode="numeric" value="' + (a.intervallMonate ?? "") + '">' +
+    '<div class="feldhinweis">Wird nur ausgewertet, wenn kein Zeitfenster gesetzt ist.</div>' +
     '<label for="a-km">Intervall in km (optional, wird erst später ausgewertet)</label>' +
     '<input type="text" id="a-km" inputmode="decimal" value="' + kmFeld(a.intervallKm) + '">' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
@@ -1099,19 +1555,33 @@ function artFormular(id) {
     (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="art-loeschen" data-id="' + esc(id) + '">Wartungsart löschen</button></div>' : "")
   );
 }
+function artFensterGeaendert() {
+  document.getElementById("a-fenster-feld").hidden = !(wert("a-von") || wert("a-bis"));
+}
 function artSpeichern(id) {
   const name = wert("a-name").trim();
   if (!name) { alert("Bitte einen Namen eingeben."); return; }
+  const von = wert("a-von") ? Number(wert("a-von")) : null;
+  const bis = wert("a-bis") ? Number(wert("a-bis")) : null;
+  if ((von === null) !== (bis === null)) { alert("Für das Zeitfenster bitte beide Monate wählen (oder beide leer lassen)."); return; }
+  if (von !== null && von > bis) { alert("Das Zeitfenster darf nicht über den Jahreswechsel gehen: „Monat von“ muss vor oder gleich „Monat bis“ sein."); return; }
+  let ab = null;
+  if (von !== null) {
+    const abText = wert("a-ab").trim();
+    ab = abText === "" ? null : Number(abText);
+    if (ab !== null && !(Number.isInteger(ab) && ab >= 1900 && ab <= 9999)) { alert("„Gültig ab Jahr“ muss eine Jahreszahl sein, z. B. 2027 (oder leer)."); return; }
+  }
   const mText = wert("a-monate").trim();
   const monate = mText === "" ? null : Number(mText);
   if (monate !== null && !(Number.isInteger(monate) && monate >= 1)) { alert("Das Intervall in Monaten muss eine ganze Zahl ab 1 sein (oder leer)."); return; }
   const kText = wert("a-km").trim();
   const km = kText === "" ? null : kmLesen(kText);
   if (kText !== "" && !(km > 0)) { alert("Das Intervall in km muss eine Zahl größer 0 sein (oder leer)."); return; }
+  const satz = { name, intervallMonate: monate, intervallKm: km, fensterVon: von, fensterBis: bis, gueltigAbJahr: ab };
   if (id) {
-    Object.assign(daten.wartungsarten.find(a => a.id === id), { name, intervallMonate: monate, intervallKm: km });
+    Object.assign(daten.wartungsarten.find(a => a.id === id), satz);
   } else {
-    daten.wartungsarten.push({ id: neueId(), name, intervallMonate: monate, intervallKm: km });
+    daten.wartungsarten.push(Object.assign({ id: neueId() }, satz));
   }
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
@@ -1180,15 +1650,24 @@ function vorlageVerschieben(id, richtung) {
 
 /* ---------- Einstellungen ---------- */
 function bildEinstellungen() {
-  const f = daten.fahrrad || { name: "", startdatum: heute(), startKm: null };
+  const f = daten.fahrrad;
   const le = letzterExport();
-  return '<h2 style="margin-top:8px">Fahrrad</h2><div class="karte">' +
-    '<label for="r-name" style="margin-top:0">Name</label><input type="text" id="r-name" placeholder="z. B. Mein Stadtrad" value="' + esc(f.name) + '">' +
-    '<label for="r-datum">Startdatum</label><input type="date" id="r-datum" value="' + f.startdatum + '">' +
-    '<label for="r-km">Start-Kilometerstand</label>' +
-    '<input type="text" id="r-km" inputmode="decimal" placeholder="z. B. 1234,5" value="' + kmFeld(f.startKm) + '">' +
-    '<div class="feldhinweis">Der Start-Kilometerstand gilt zu Beginn des Startdatums. Einträge ab diesem Tag (einschließlich) werden dazugezählt.</div>' +
-    '<div class="knopfreihe"><button type="button" class="primaer" data-action="fahrrad-speichern">Speichern</button></div></div>' +
+  let html = '<h2 style="margin-top:8px">Fahrrad</h2><div class="karte">';
+  if (f) {
+    html += detailListe([
+      ["Name", esc(f.name)],
+      ["Rahmennummer", esc(f.rahmennummer)],
+      ["Beschreibung", f.beschreibung ? '<span class="umbrueche">' + esc(f.beschreibung) + '</span>' : ""],
+      ["Startdatum", datumText(f.startdatum)],
+      ["Start-Kilometerstand", kmText(f.startKm) + " km"]
+    ]) +
+      '<div class="feldhinweis">Der Start-Kilometerstand gilt zu Beginn des Startdatums. Einträge ab diesem Tag (einschließlich) werden dazugezählt.</div>' +
+      '<div class="knopfreihe"><button type="button" class="primaer" data-action="fahrrad-aendern">Ändern</button></div>';
+  } else {
+    html += '<p style="margin-top:0">Noch kein Fahrrad angelegt.</p>' +
+      '<button type="button" class="primaer voll" data-action="fahrrad-aendern">Fahrrad anlegen</button>';
+  }
+  html += '</div>' +
 
     '<h2>Datensicherung</h2><div class="karte">' +
     '<p style="margin-top:0">Deine Daten liegen nur auf diesem Gerät im Speicher des Browsers. Sichere sie regelmäßig als Datei, z. B. in „Dateien“ oder iCloud.</p>' +
@@ -1198,6 +1677,23 @@ function bildEinstellungen() {
     '<button type="button" class="voll" data-action="import">Daten importieren …</button>' +
     '<p class="klein">Beim Import werden alle vorhandenen Daten ersetzt. Vorher wird nachgefragt.</p></div>' +
     '<p class="klein zentriert">Rad-km · Datenmodell Version ' + DATEN_VERSION + '</p>';
+  return html;
+}
+function fahrradFormular() {
+  const f = daten.fahrrad || { name: "", startdatum: heute(), startKm: null, rahmennummer: "", beschreibung: "" };
+  fensterOeffnen(
+    '<h2>' + (daten.fahrrad ? "Fahrrad bearbeiten" : "Fahrrad anlegen") + '</h2>' +
+    '<label for="r-name">Name</label><input type="text" id="r-name" placeholder="z. B. Mein Stadtrad" value="' + esc(f.name) + '">' +
+    '<label for="r-rahmen">Rahmennummer (optional)</label><input type="text" id="r-rahmen" autocomplete="off" value="' + esc(f.rahmennummer) + '">' +
+    '<label for="r-beschreibung">Beschreibung (optional)</label>' +
+    '<textarea id="r-beschreibung" placeholder="z. B. Farbe, Modell, Ausstattung">' + esc(f.beschreibung) + '</textarea>' +
+    '<label for="r-datum">Startdatum</label><input type="date" id="r-datum" value="' + f.startdatum + '">' +
+    '<label for="r-km">Start-Kilometerstand</label>' +
+    '<input type="text" id="r-km" inputmode="decimal" placeholder="z. B. 1234,5" value="' + kmFeld(f.startKm) + '">' +
+    '<div class="feldhinweis">Der Start-Kilometerstand gilt zu Beginn des Startdatums. Einträge ab diesem Tag (einschließlich) werden dazugezählt.</div>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="fahrrad-speichern">Speichern</button></div>'
+  );
 }
 function fahrradSpeichern() {
   const name = wert("r-name").trim();
@@ -1206,8 +1702,8 @@ function fahrradSpeichern() {
   if (!name) { alert("Bitte einen Namen für das Fahrrad eingeben."); return; }
   if (!istGueltigesDatum(startdatum)) { alert("Bitte ein gültiges Startdatum wählen."); return; }
   if (startKm === null) { alert("Bitte den Start-Kilometerstand als Zahl eingeben, z. B. 1234,5."); return; }
-  daten.fahrrad = { name, startdatum, startKm };
-  if (speichern()) { zeichnen(); meldung("Fahrrad gespeichert"); }
+  daten.fahrrad = { name, startdatum, startKm, rahmennummer: wert("r-rahmen").trim(), beschreibung: wert("r-beschreibung").trim() };
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Fahrrad gespeichert"); }
 }
 
 /* =====================================================================
@@ -1222,8 +1718,11 @@ function exportVermerken() {
 // Export: zuerst über das Teilen-Menü (iPhone), sonst als Download.
 // Wichtig: navigator.share muss direkt nach dem Antippen aufgerufen werden,
 // deshalb hier kein "await" vor dem Teilen.
+function exportInhalt() {
+  return JSON.stringify(Object.assign({ exportiertAm: new Date().toISOString() }, daten), null, 2);
+}
 function exportieren() {
-  const inhalt = JSON.stringify(Object.assign({ exportiertAm: new Date().toISOString() }, daten), null, 2);
+  const inhalt = exportInhalt();
   const dateiname = "rad-km-" + heute() + ".json";
   let datei = null;
   try { datei = new File([inhalt], dateiname, { type: "application/json" }); } catch (e) {}
@@ -1261,10 +1760,7 @@ async function importDateiGewaehlt(datei) {
   if (!datei) return;
   let neu;
   try {
-    const text = await datei.text();
-    let roh;
-    try { roh = JSON.parse(text); } catch (e) { throw new Error("Die Datei ist keine gültige JSON-Datei."); }
-    neu = pruefen(migrieren(roh));
+    neu = datenEinlesen(await datei.text());
   } catch (e) {
     alert("Import nicht möglich:\n" + e.message);
     return;
@@ -1274,7 +1770,8 @@ async function importDateiGewaehlt(datei) {
     "Fahrrad: " + (neu.fahrrad ? esc(neu.fahrrad.name) : "–") + "<br>" +
     neu.eintraege.length + " Einträge, " + neu.vorlagen.length + " Vorlagen, " +
     neu.wartungsarten.length + " Wartungsarten, " + neu.wartungsprotokoll.length + " Wartungen, " +
-    neu.termine.length + " geplante Termine.<br><br>" +
+    neu.termine.length + " geplante Termine, " + neu.maengel.length + " Mängel" +
+    (neu.maengel.length ? " (davon " + neu.maengel.filter(m => m.status === "offen").length + " offen)" : "") + ".<br><br>" +
     "<strong>Alle vorhandenen Daten in der App werden ersetzt.</strong> Fortfahren?";
   if (!await frage(zusammenfassung, "Importieren und ersetzen", "Abbrechen", true)) return;
   daten = neu;
@@ -1291,14 +1788,15 @@ async function importDateiGewaehlt(datei) {
 const AKTIONEN = {
   "tab": el => { aktiverTab = el.dataset.tab; zeichnen(); window.scrollTo(0, 0); },
   "fenster-zu": () => fensterSchliessen(),
-  "mehr": () => { anzahlEintraege += 50; zeichnen(); },
+  "gruppe": el => gruppeUmschalten(el.dataset.key),
 
   "vorlage-erfassen": el => {
     const v = daten.vorlagen.find(v => v.id === el.dataset.id);
-    eintragOeffnen({ datum: heute(), km: v.km, vorlage: v.name });
+    eintragNeu({ datum: heute(), km: v.km, vorlage: v.name });
   },
-  "eintrag-neu": () => eintragOeffnen({ datum: heute() }),
-  "eintrag-bearbeiten": el => eintragOeffnen({ id: el.dataset.id }),
+  "eintrag-neu": () => eintragNeu({ datum: heute() }),
+  "eintrag-ansehen": el => eintragAnsicht(el.dataset.id),
+  "eintrag-aendern": el => eintragsFormular(daten.eintraege.find(e => e.id === el.dataset.id), ""),
   "eintrag-speichern": () => eintragSpeichern(),
   "eintrag-loeschen": el => eintragLoeschen(el.dataset.id),
 
@@ -1306,10 +1804,17 @@ const AKTIONEN = {
   "termin-speichern": el => terminSpeichern(el.dataset.id),
   "termin-loeschen": el => terminLoeschen(el.dataset.id),
   "wartung-erledigt": el => wartungErledigt(el.dataset.id),
-  "protokoll-bearbeiten": el => protokollFormular(daten.wartungsprotokoll.find(p => p.id === el.dataset.id), false),
+  "protokoll-ansehen": el => protokollAnsicht(el.dataset.id),
+  "protokoll-aendern": el => protokollFormular(daten.wartungsprotokoll.find(p => p.id === el.dataset.id), false),
   "protokoll-speichern": () => protokollSpeichern(),
   "protokoll-loeschen": el => protokollLoeschen(el.dataset.id),
   "protokoll-km-neu": () => protokollKmNeu(),
+  "mangel-neu": () => mangelFormular(null),
+  "mangel-ansehen": el => mangelAnsicht(el.dataset.id),
+  "mangel-aendern": el => mangelFormular(el.dataset.id),
+  "mangel-speichern": el => mangelSpeichern(el.dataset.id || null),
+  "mangel-loeschen": el => mangelLoeschen(el.dataset.id),
+  "maengel-erledigt-umschalten": () => { erledigteMaengelOffen = !erledigteMaengelOffen; zeichnen(); },
   "art-neu": () => artFormular(null),
   "art-bearbeiten": el => artFormular(el.dataset.id),
   "art-speichern": el => artSpeichern(el.dataset.id || null),
@@ -1322,6 +1827,7 @@ const AKTIONEN = {
   "vorlage-hoch": el => vorlageVerschieben(el.dataset.id, -1),
   "vorlage-runter": el => vorlageVerschieben(el.dataset.id, 1),
 
+  "fahrrad-aendern": () => fahrradFormular(),
   "fahrrad-speichern": () => fahrradSpeichern(),
   "export": () => exportieren(),
   "import": () => importStarten()
@@ -1329,7 +1835,9 @@ const AKTIONEN = {
 const AENDERUNGEN = {
   "eintrag-datum": () => eintragDatumGeaendert(),
   "eintrag-vorlage": () => eintragVorlageGeaendert(),
-  "protokoll-datum": () => protokollDatumGeaendert()
+  "protokoll-datum": () => protokollDatumGeaendert(),
+  "mangel-status": () => mangelStatusGeaendert(),
+  "art-fenster": () => artFensterGeaendert()
 };
 const EINGABEN = {
   "protokoll-km": () => protokollKmEingabe()
