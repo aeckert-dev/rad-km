@@ -195,6 +195,24 @@ werden sollen. Ohne deine Zustimmung bleiben sie unverändert.
 
 ### Wartung
 
+- **Reihenfolge im Reiter Wartung:**
+  1. Offene Mängel (nur wenn vorhanden).
+  2. Überfällige Wartungen, die am längsten überfällige zuerst. Dazu zählt
+     auch ein geplanter Termin, der verstrichen ist, ohne dass die Wartung
+     eingetragen wurde.
+  3. Anstehende Wartungen, chronologisch nach dem maßgeblichen Datum:
+     geplanter Termin; vor dem Zeitfenster dessen Beginn, im Zeitfenster
+     dessen Ende; bei Intervall das Fälligkeitsdatum, bei km das
+     prognostizierte Datum. Danach Wartungen mit km-Intervall, für die noch
+     keine Prognose möglich ist.
+  4. Wartungsarten ohne Fälligkeit (z. B. Reparatur) oder noch nicht gültig
+     („Gültig ab Jahr“).
+  5. Einmalige, erledigte Wartungen.
+  6. Danach „Mangel erfassen“ (wenn es keine offenen Mängel gibt) und die
+     erledigten Mängel, das Wartungsprotokoll und die Wartungsarten.
+  - Innerhalb gleicher Daten und in den Gruppen 4 und 5 gilt die Reihenfolge
+    der Wartungsarten. Die nächste Wartung auf der Übersicht ist die erste
+    überfällige bzw. anstehende.
 - **Wartungsarten:**
   - Bei einer Neuinstallation voreingestellt: „Große Inspektion“ (Zeitfenster
     Oktober–November), „Kleine Inspektion“ (Zeitfenster März–April) und
@@ -268,8 +286,8 @@ werden sollen. Ohne deine Zustimmung bleiben sie unverändert.
 
 - **Mangel erfassen** im Reiter Wartung: Datum (Standard heute),
   Beschreibung und Status „offen“ oder „erledigt“.
-- Offene Mängel stehen oben, erledigte darunter in einem einklappbaren
-  Bereich.
+- Offene Mängel stehen ganz oben im Reiter Wartung, erledigte unter den
+  Wartungen in einem einklappbaren Bereich.
 - Auf der Übersicht steht bei der nächsten Wartung die Anzahl offener Mängel,
   z. B. „3 offene Mängel“.
 - **Erledigt eintragen** einer Wartung bietet die offenen Mängel zum Abhaken
@@ -577,8 +595,8 @@ damit nichts verloren geht.
 - die Umwandlung von Version 1 und 2 auf Version 3 (`tests/daten-v1.json`,
   `tests/daten-v2.json`, erfundene Werte) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
-- die saisonale Fälligkeit, Verschleißteile (km zuerst / Zeit zuerst) und
-  einmalige Wartungen,
+- die saisonale Fälligkeit, Verschleißteile (km zuerst / Zeit zuerst),
+  einmalige Wartungen und die Reihenfolge im Reiter Wartung,
 - Prognosen und Jahresziel mit festen Testdaten und Stichtagen,
 - Löschen mit „Rückgängig“,
 - die Prüfung der Sicherungsdatei vor dem Teilen (das Teilen-Menü wird dabei

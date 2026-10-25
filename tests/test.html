@@ -923,6 +923,65 @@ async function start() {
     let swGueltig = true;
     try { new Function(swText); } catch (e) { swGueltig = false; }
     gleich("sw.js ist vorhanden und gültiges JavaScript", swGueltig, true);
+
+    // -------------------------------------------------------------
+    // 21. Reihenfolge im Reiter Wartung
+    // -------------------------------------------------------------
+    abschnitt("21. Reihenfolge im Reiter Wartung (Stichtag Mi 28.10.2026)");
+    const HR = "2026-10-28";
+    const zehnImOktober = [];
+    for (let d = "2026-10-01"; d <= "2026-10-27"; d = w.plusTage(d, 1)) zehnImOktober.push(E(d, 10));
+    // Absichtlich vermischte Reihenfolge der Wartungsarten
+    setze({ fahrrad: F("2025-01-01", 0), eintraege: zehnImOktober,
+      wartungsarten: [
+        A("reparatur", { name: "Reparatur" }),                                                     // ohne Fälligkeit
+        A("erst", { name: "Erstinspektion", einmalig: true, intervallMonate: 3 }),                 // einmalig, erledigt
+        A("kette", { name: "Kette", intervallKm: 300 }),                                           // km: prognostiziert 08.12.2026
+        A("fenster-ende", { name: "Herbstcheck", fensterVon: 10, fensterBis: 12, gueltigAbJahr: 2026 }), // im Fenster: bis 31.12.
+        A("klein", { name: "Kleine Inspektion", fensterVon: 3, fensterBis: 4, gueltigAbJahr: 2028 }),   // noch nicht gültig
+        A("termin", { name: "Licht", }),                                                           // Termin 05.11.2026
+        A("gross", { name: "Große Inspektion", fensterVon: 10, fensterBis: 11 }),                  // überfällig seit 30.11.2025
+        A("heute", { name: "Reifendruck", intervallMonate: 1 }),                                   // heute fällig
+        A("fenster-beginn", { name: "Winterreifen", fensterVon: 12, fensterBis: 12, gueltigAbJahr: 2026 }), // vor dem Fenster: ab 01.12.
+        A("alt-termin", { name: "Bremsen", }),                                                     // Termin 20.10.2026 verstrichen
+        A("monate", { name: "Schaltung", intervallMonate: 6 })                                     // überfällig seit 01.09.2026
+      ],
+      wartungsprotokoll: [P("p-erst", "2025-04-01", "erst", null), P("p-heute", "2026-09-28", "heute", null), P("p-monate", "2026-03-01", "monate", null)],
+      termine: [{ wartungsartId: "termin", datum: "2026-11-05", werkstatt: "" }, { wartungsartId: "alt-termin", datum: "2026-10-20", werkstatt: "" }],
+      maengel: [{ id: "m-offen", datum: "2026-10-10", beschreibung: "Licht hinten wackelt", status: "offen" },
+        { id: "m-erledigt", datum: "2026-05-01", beschreibung: "Bremse quietscht", status: "erledigt", erledigtAm: "2026-05-10" }] });
+    const karten = w.wartungsKarten(HR);
+    gleich("Maßgebliche Daten und Gruppen", karten.map(s => [s.art.id, s.datum, w.wartungsGruppe(s, HR)]), [
+      ["gross", "2025-11-30", 1], ["monate", "2026-09-01", 1], ["alt-termin", "2026-10-20", 1],
+      ["heute", "2026-10-28", 2], ["termin", "2026-11-05", 2], ["fenster-beginn", "2026-12-01", 2], ["kette", "2026-12-08", 2], ["fenster-ende", "2026-12-31", 2],
+      ["reparatur", null, 4], ["klein", null, 4],
+      ["erst", null, 5]]);
+    gleich("Überfällig (am längsten zuerst), anstehend nach Datum (Termin, Beginn bzw. Ende des Zeitfensters, km-Prognose), " +
+      "ohne Fälligkeit bzw. noch nicht gültig, einmalig erledigt",
+      karten.map(s => s.art.name), ["Große Inspektion", "Schaltung", "Bremsen", "Reifendruck", "Licht", "Winterreifen", "Kette", "Herbstcheck",
+        "Reparatur", "Kleine Inspektion", "Erstinspektion"]);
+    gleich("Startseite: nächste Wartung = am längsten überfällige", w.naechsteWartung(HR).art.id, "gross");
+    const seiteWartung = () => {
+      const ablage = w.document.createElement("div");
+      ablage.innerHTML = w.bildWartung(HR);
+      return [...ablage.querySelectorAll(":scope > h2, :scope > .karte > h3")].map(el => (el.tagName === "H2" ? "## " : "") + el.textContent);
+    };
+    gleich("Seite: offene Mängel ganz oben, dann die Wartungen, dann erledigte Mängel, Wartungsprotokoll und Wartungsarten", seiteWartung(), [
+      "## Offene Mängel (1)",
+      "Große Inspektion", "Schaltung", "Bremsen", "Reifendruck", "Licht", "Winterreifen", "Kette", "Herbstcheck", "Reparatur", "Kleine Inspektion", "Erstinspektion",
+      "## Mängel", "## Wartungsprotokoll", "## Wartungsarten"]);
+    w.eval("daten.maengel = daten.maengel.filter(m => m.status === 'erledigt')");
+    const ohneOffene = w.document.createElement("div");
+    ohneOffene.innerHTML = w.bildWartung(HR);
+    gleich("Ohne offene Mängel: kein Block oben; „+ Mangel erfassen“ und erledigte Mängel unter den Wartungen",
+      [seiteWartung()[0], seiteWartung()[11], ohneOffene.querySelectorAll('[data-action="mangel-neu"]').length, !!ohneOffene.querySelector('[data-action="maengel-erledigt-umschalten"]')],
+      ["Große Inspektion", "## Mängel", 1, true]);
+    setze({ fahrrad: F("2026-01-01", 0), eintraege: [], wartungsarten: [
+      A("reparatur", { name: "Reparatur" }), A("kette", { name: "Kette", intervallKm: 500 }), A("monate", { name: "Inspektion", intervallMonate: 12 })] });
+    gleich("Ohne Fahrten (keine km-Prognose): km-Intervall nach den Wartungen mit Datum, vor denen ohne Fälligkeit",
+      w.wartungsKarten(HR).map(s => [s.art.id, w.wartungsGruppe(s, HR)]), [["monate", 2], ["kette", 3], ["reparatur", 4]]);
+    w.eval("daten.wartungsarten = daten.wartungsarten.filter(a => a.id !== 'monate')");
+    gleich("Startseite: ohne Datum ist die km-Grenze die nächste Wartung", w.naechsteWartung(HR).text, "fällig bei ca. 500 km");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

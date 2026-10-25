@@ -1102,17 +1102,33 @@ function wartungsStatus(art, h = heute()) {
   return st;
 }
 
-// Alle Wartungsarten in Anzeigereihenfolge: erledigte einmalige am Ende
-function wartungsKarten(h = heute()) {
-  return daten.wartungsarten.map(a => wartungsStatus(a, h)).sort((a, b) => Number(a.erledigt) - Number(b.erledigt));
+// Gruppe einer Wartungsart für die Reihenfolge im Reiter Wartung:
+//   1 überfällig (maßgebliches Datum vor heute, auch ein verstrichener Termin)
+//   2 anstehend mit Datum: geplanter Termin; vor dem Zeitfenster dessen Beginn,
+//     im Zeitfenster dessen Ende; bei Intervall das (prognostizierte) Datum
+//   3 anstehend ohne Datum (km-Grenze ohne Schätzung)
+//   4 ohne Fälligkeit (z. B. Reparatur) oder noch nicht gültig (Gültig ab Jahr)
+//   5 einmalige Wartung, erledigt
+function wartungsGruppe(st, h) {
+  if (st.erledigt) return 5;
+  if (st.datum) return st.datum < h ? 1 : 2;
+  const art = st.art;
+  return !hatZeitfenster(art) && (art.intervallMonate || art.intervallKm) ? 3 : 4;
 }
 
-// Nächste fällige Wartung für die Startseite
+// Alle Wartungsarten in Anzeigereihenfolge: nach Gruppe, in den Gruppen 1 und 2
+// nach Datum (am längsten überfällig bzw. am frühesten fällig zuerst), sonst in
+// der Reihenfolge der Wartungsarten
+function wartungsKarten(h = heute()) {
+  return daten.wartungsarten
+    .map((a, i) => { const st = wartungsStatus(a, h); return { st, i, gruppe: wartungsGruppe(st, h) }; })
+    .sort((a, b) => a.gruppe - b.gruppe || (a.gruppe <= 2 ? a.st.datum.localeCompare(b.st.datum) : 0) || a.i - b.i)
+    .map(x => x.st);
+}
+
+// Nächste fällige Wartung für die Startseite: die erste überfällige bzw. anstehende
 function naechsteWartung(h = heute()) {
-  const alle = wartungsKarten(h).filter(s => !s.erledigt);
-  const mitDatum = alle.filter(s => s.datum).sort((a, b) => a.datum.localeCompare(b.datum));
-  if (mitDatum.length) return mitDatum[0];
-  return alle.find(s => s.nochNie) || null;
+  return wartungsKarten(h).find(st => wartungsGruppe(st, h) <= 3) || null;
 }
 
 function offeneMaengel() {
@@ -1697,9 +1713,21 @@ async function eintragLoeschen(id) {
 }
 
 /* ---------- Wartung ---------- */
-function bildWartung() {
+function bildWartung(h = heute()) {
   let html = "";
-  wartungsKarten().forEach(st => {
+
+  // Offene Mängel ganz oben (nur wenn vorhanden)
+  const offen = offeneMaengel();
+  const erledigt = daten.maengel.filter(m => m.status === "erledigt")
+    .sort((a, b) => (b.erledigtAm || b.datum).localeCompare(a.erledigtAm || a.datum));
+  if (offen.length) {
+    html += '<h2 style="margin-top:8px">Offene Mängel <span class="klein">(' + offen.length + ')</span></h2><div class="liste">' +
+      offen.map(mangelZeile).join("") + '</div>' +
+      '<div class="knopfreihe" style="margin-bottom:12px"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
+  }
+
+  // Wartungsarten: überfällig, anstehend, ohne Fälligkeit, einmalig erledigt
+  wartungsKarten(h).forEach(st => {
     const art = st.art;
     html += '<div class="karte"><h3>' + esc(art.name) + '</h3>' +
       '<div class="' + st.klasse + '">' + esc(st.text) + '</div>';
@@ -1735,16 +1763,14 @@ function bildWartung() {
       '</div></div>';
   });
 
-  // Mängel
-  const offen = offeneMaengel();
-  const erledigt = daten.maengel.filter(m => m.status === "erledigt")
-    .sort((a, b) => (b.erledigtAm || b.datum).localeCompare(a.erledigtAm || a.datum));
-  html += '<h2>Mängel <span class="klein">(' + offen.length + ' offen)</span></h2><div class="liste">';
-  if (!offen.length) html += '<div class="leer">Keine offenen Mängel.</div>';
-  offen.forEach(m => { html += mangelZeile(m); });
-  html += '</div><div class="knopfreihe"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
+  // Mängel erfassen (ohne offene Mängel) und erledigte Mängel
+  if (!offen.length || erledigt.length) html += '<h2>Mängel</h2>';
+  if (!offen.length) {
+    html += '<div class="liste"><div class="leer">Keine offenen Mängel.</div></div>' +
+      '<div class="knopfreihe"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
+  }
   if (erledigt.length) {
-    html += '<div class="liste" style="margin-top:12px"><div class="zeile gruppe">' +
+    html += '<div class="liste"' + (offen.length ? "" : ' style="margin-top:12px"') + '><div class="zeile gruppe">' +
       '<button type="button" class="inhalt" data-action="maengel-erledigt-umschalten" aria-expanded="' + erledigteMaengelOffen + '">' +
       CHEVRON +
       '<div class="text"><div class="titel">Erledigte Mängel (' + erledigt.length + ')</div></div></button></div>' +
