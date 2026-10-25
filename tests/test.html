@@ -558,8 +558,10 @@ async function start() {
 
     neuerVersuch();
     await w.jetztSichern();
-    gleich("Prüfung erfolgreich: Teilen-Menü mit der Datei „rad-km-JJJJ-MM-TT.json“",
-      [geteilt.length, geteilt[0].files.length, geteilt[0].files[0].name, alerts], [1, 1, "rad-km-" + w.heute() + ".json", []]);
+    gleich("Prüfung erfolgreich: Teilen-Menü mit der Datei „rad-km-JJJJ-MM-TT-HHMM.json“",
+      [geteilt.length, geteilt[0].files.length, new RegExp("^rad-km-" + w.heute() + "-\\d{4}\\.json$").test(geteilt[0].files[0].name), alerts], [1, 1, true, []]);
+    gleich("Teilen übergibt nur die Datei, ohne Titel und Text (sonst legt „In Dateien sichern“ eine zusätzliche Textdatei an)",
+      Object.keys(geteilt[0]), ["files"]);
     const geteilterText = await geteilt[0].files[0].text();
     gleichInhalt("Die geteilte Datei enthält genau den aktuellen Stand (auch Umlaute, Emoji und Sonderzeichen)",
       kopie(w.datenEinlesen(geteilterText)), kopie(w.eval("daten")));
@@ -626,7 +628,7 @@ async function start() {
     gleich("Anderer Fehler beim Teilen: dieselbe geprüfte Datei wird heruntergeladen",
       [downloads.length, downloads[0].name, JSON.stringify(kanonisch(w.datenEinlesen(downloads[0].inhalt))) === datenText(),
         letzte(), toastText(), zustand() === ausgang],
-      [1, "rad-km-" + w.heute() + ".json", true, w.heute(), "Sicherung heruntergeladen – Inhalt geprüft: 6 Einträge, 91,2 km", true]);
+      [1, geteilt[0].files[0].name, true, w.heute(), "Sicherung heruntergeladen – Inhalt geprüft: 6 Einträge, 91,2 km", true]);
     neuerVersuch();
     Object.defineProperty(w.navigator, "canShare", { value: undefined, configurable: true, writable: true });
     await w.jetztSichern();
@@ -711,6 +713,216 @@ async function start() {
     pfeil = knopf.querySelector("svg.chevron");
     gleich("Antippen der Zeile (auch neben dem Pfeil) klappt auf, der Chevron zeigt nach unten",
       [knopf.getAttribute("aria-expanded"), w.getComputedStyle(pfeil).transform !== "none", !!w.document.querySelector('[data-key="m2024-05"]')], ["true", true, true]);
+
+    // -------------------------------------------------------------
+    // 15. Dateiname der Sicherung
+    // -------------------------------------------------------------
+    abschnitt("15. Dateiname der Sicherung mit Uhrzeit");
+    gleich("rad-km-JJJJ-MM-TT-HHMM.json (lokale Zeit, zweistellig)",
+      [w.sicherungsDateiname(new w.Date(2026, 9, 25, 9, 5)), w.sicherungsDateiname(new w.Date(2027, 0, 3, 23, 59))],
+      ["rad-km-2026-10-25-0905.json", "rad-km-2027-01-03-2359.json"]);
+
+    // -------------------------------------------------------------
+    // 16. Fahrtage ohne Eintrag, „Nachtragen“ und „Keine Fahrt“
+    // -------------------------------------------------------------
+    abschnitt("16. Fahrtage ohne Eintrag (Stichtag Mi 28.10.2026, Fahrtage Mo, Di, Fr)");
+    const L = (datum, km, typ = "tag") => ({ id: "l" + datum, datum, km, typ });
+    const lueckenDaten = () => setze({ fahrrad: F("2026-10-01", 0), eintraege: [
+      L("2026-10-16", 14.2),          // Fr: erfasst
+      L("2026-10-19", 0),             // Mo: keine Fahrt (0 km) zählt als erfasst
+      L("2026-10-22", 14.2),          // Do: kein Fahrtag
+      L("2026-10-26", 30, "woche")    // Wochensumme deckt Mo 26.10. und Di 27.10. ab
+    ] });
+    lueckenDaten();
+    const HL = "2026-10-28";
+    gleich("Letzte 14 Tage bis gestern: Di 20.10. und Fr 23.10. fehlen", w.fehlendeFahrtage(HL), ["2026-10-20", "2026-10-23"]);
+    const hinweis = ohneTags(w.lueckenHinweis(HL));
+    wahr("Startseite: „2 Fahrtage ohne Eintrag: Di 20.10., Fr 23.10.“, je Tag „Nachtragen“ und „Keine Fahrt“",
+      hinweis.startsWith("2 Fahrtage ohne Eintrag: Di 20.10., Fr 23.10.") &&
+      (w.lueckenHinweis(HL).match(/data-action="nachtragen"/g) || []).length === 2 &&
+      (w.lueckenHinweis(HL).match(/data-action="keine-fahrt"/g) || []).length === 2, hinweis);
+    w.eval(`daten.fahrrad.startdatum = "2026-10-21"`);
+    gleich("Nur Tage ab dem Startdatum", w.fehlendeFahrtage(HL), ["2026-10-23"]);
+    w.eval(`daten.fahrrad.startdatum = "2026-10-01"; daten.einstellungen.fahrtage = [3]`);
+    gleich("Andere Fahrtage (Mi): heute zählt noch nicht", w.fehlendeFahrtage(HL), ["2026-10-14", "2026-10-21"]);
+    w.eval(`daten.einstellungen.fahrtage = []`);
+    gleich("Ohne Fahrtage kein Hinweis", [w.fehlendeFahrtage(HL), w.lueckenHinweis(HL)], [[], ""]);
+    lueckenDaten();
+    w.speichern();
+    const speicherVorKeineFahrt = localStorage.getItem(TEST_SCHLUESSEL);
+    w.keineFahrt("2026-10-20");
+    gleich("„Keine Fahrt“ legt mit einem Tipper einen Eintrag mit 0 km an und speichert ihn",
+      [kopie(w.eval("eintragAm('2026-10-20')")).km, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.some(e => e.datum === "2026-10-20" && e.km === 0), w.fehlendeFahrtage(HL), toast()],
+      [0, true, ["2026-10-23"], ["Keine Fahrt am Di 20.10.", true]]);
+    w.rueckgaengig();
+    gleich("… mit „Rückgängig“", [w.eval("eintragAm('2026-10-20')"), localStorage.getItem(TEST_SCHLUESSEL) === speicherVorKeineFahrt], [null, true]);
+    w.keineFahrt("2026-10-16");
+    gleich("„Keine Fahrt“ ändert keinen vorhandenen Eintrag", w.eval("eintragAm('2026-10-16').km"), 14.2);
+    const zeileKeine = w.eintragsZeile({ id: "k", datum: "2026-10-19", km: 0, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }, "");
+    wahr("Liste: Eintrag mit 0 km dezent als „keine Fahrt“", zeileKeine.includes('class="zeile keine-fahrt"') && ohneTags(zeileKeine).endsWith("keine Fahrt"), zeileKeine);
+    w.eintragAnsicht("l2026-10-19");
+    wahr("Detailansicht: „0 km (keine Fahrt)“", w.document.getElementById("fensterinhalt").textContent.includes("0 km (keine Fahrt)"));
+    w.fensterSchliessen();
+    // Startseite mit dem echten Datum: alle Wochentage als Fahrtage, Startdatum vor 30 Tagen, keine Einträge
+    setze({ fahrrad: F(w.plusTage(w.heute(), -30), 0), einstellungen: { fahrtage: [1, 2, 3, 4, 5, 6, 7] }, eintraege: [] });
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    gleich("Startseite: 14 fehlende Fahrtage mit je zwei Schaltflächen",
+      [w.document.querySelectorAll('#inhalt [data-action="keine-fahrt"]').length, w.document.querySelectorAll('#inhalt [data-action="nachtragen"]').length], [14, 14]);
+    w.document.querySelector('#inhalt [data-action="keine-fahrt"]').click();
+    gleich("Tipper auf „Keine Fahrt“: Eintrag mit 0 km für den ältesten fehlenden Tag",
+      [w.eval("daten.eintraege.length"), w.eval("daten.eintraege[0].datum"), w.eval("daten.eintraege[0].km"), w.document.querySelectorAll('#inhalt [data-action="keine-fahrt"]').length],
+      [1, w.plusTage(w.heute(), -14), 0, 13]);
+    w.document.querySelector('#inhalt [data-action="nachtragen"]').click();
+    gleich("Tipper auf „Nachtragen“: Erfassung für diesen Tag",
+      [w.eval("fenster.open"), w.document.getElementById("f-datum").value, w.document.querySelector("#fensterinhalt h2").textContent], [true, w.plusTage(w.heute(), -13), "Neuer Eintrag"]);
+    w.fensterSchliessen();
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    const fahrtagFelder = () => [...w.document.querySelectorAll('input[data-change="fahrtag"]')];
+    gleich("Einstellungen: sieben Fahrtage zum Ankreuzen", fahrtagFelder().map(f => f.nextElementSibling.textContent + (f.checked ? "✓" : "")),
+      ["Mo✓", "Di✓", "Mi✓", "Do✓", "Fr✓", "Sa✓", "So✓"]);
+    [3, 4, 6, 7].forEach(t => { fahrtagFelder()[t - 1].click(); });
+    gleich("Abwählen speichert sofort, aufsteigend sortiert (Voreinstellung Mo, Di, Fr wiederhergestellt)",
+      [w.eval("daten.einstellungen.fahrtage"), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.fahrtage], [[1, 2, 5], [1, 2, 5]]);
+    fahrtagFelder()[6].click();
+    gleich("Sonntag dazu", w.eval("daten.einstellungen.fahrtage"), [1, 2, 5, 7]);
+
+    // -------------------------------------------------------------
+    // 17. Arbeitsweg
+    // -------------------------------------------------------------
+    abschnitt("17. Merkmal „Arbeitsweg“ an Vorlagen und Einträgen");
+    v2Laden();
+    let fragen = [];
+    let frageErgebnis = true;
+    w.frage = async text => { fragen.push(ohneTags(text)); return frageErgebnis; };
+    const arbeitswege = () => w.eval("daten.eintraege").filter(e => e.arbeitsweg).map(e => e.id);
+    w.vorlageFormular("v-arbeit");
+    w.document.getElementById("v-arbeitsweg").checked = true;
+    await w.vorlageSpeichern("v-arbeit");
+    gleich("Merkmal gesetzt: Rückfrage für die bisherigen Einträge; mit „Ja“ zählen sie als Arbeitsweg",
+      [fragen, w.eval("daten.vorlagen[0].arbeitsweg"), arbeitswege(), toast()[0]],
+      [["Die 3 bisherigen Einträge mit der Vorlage „Arbeit hin und zurück“ ebenfalls als Arbeitsweg zählen?"], true, ["e-tag1", "e-tag2", "e-tag3"], "Vorlage gespeichert, 3 Einträge angepasst"]);
+    fragen = []; frageErgebnis = false;
+    w.vorlageFormular("v-arbeit");
+    w.document.getElementById("v-arbeitsweg").checked = false;
+    await w.vorlageSpeichern("v-arbeit");
+    gleich("Merkmal entfernt, Antwort „Nein“: bisherige Einträge bleiben unverändert",
+      [fragen, w.eval("daten.vorlagen[0].arbeitsweg"), arbeitswege()],
+      [["Die 3 bisherigen Einträge mit der Vorlage „Arbeit hin und zurück“ ebenfalls nicht mehr als Arbeitsweg zählen?"], false, ["e-tag1", "e-tag2", "e-tag3"]]);
+    fragen = []; frageErgebnis = true;
+    w.vorlageFormular("v-arbeit");
+    w.document.getElementById("v-name").value = "Büro";
+    w.document.getElementById("v-arbeitsweg").checked = true;
+    await w.vorlageSpeichern("v-arbeit");
+    gleich("Umbenannt und Merkmal gesetzt, alle Einträge schon Arbeitsweg: keine Rückfrage", [fragen, w.eval("daten.vorlagen[0].name")], [[], "Büro"]);
+    w.eval("daten.eintraege = daten.eintraege.filter(e => e.datum !== heute())");
+    w.eval("AKTIONEN['vorlage-erfassen']({ dataset: { id: 'v-arbeit' } })");
+    gleich("Erfassen über die Vorlage: Häkchen „Arbeitsweg“ ist gesetzt", w.document.getElementById("f-arbeitsweg").checked, true);
+    w.document.getElementById("f-vorlage").value = "v-einkauf";
+    w.eintragVorlageGeaendert();
+    const ohneArbeit = w.document.getElementById("f-arbeitsweg").checked;
+    w.document.getElementById("f-vorlage").value = "v-arbeit";
+    w.eintragVorlageGeaendert();
+    gleich("Andere Vorlage gewählt: Häkchen folgt der Vorlage", [ohneArbeit, w.document.getElementById("f-arbeitsweg").checked], [false, true]);
+    await w.eintragSpeichern();
+    gleich("Gespeichert: Eintrag mit Merkmal Arbeitsweg (zwei Tipper wie bisher)", [w.eval("eintragAm(heute()).arbeitsweg"), w.eval("eintragAm(heute()).vorlage")], [true, "Büro"]);
+    w.eintragsFormular(kopie(w.eval("eintragAm(heute())")), "");
+    w.document.getElementById("f-arbeitsweg").checked = false;
+    await w.eintragSpeichern();
+    gleich("Im Eintrag lässt sich das Merkmal ändern", w.eval("eintragAm(heute()).arbeitsweg"), false);
+    w.eintragsFormular(kopie(w.eval("daten.eintraege.find(e => e.typ === 'woche')")), "");
+    gleich("Wochensumme: kein Häkchen „Arbeitsweg“", w.document.getElementById("f-arbeitsweg"), null);
+    w.fensterSchliessen();
+    w.eintragAnsicht("e-tag1");
+    wahr("Detailansicht zeigt „Arbeitsweg: ja“", w.document.getElementById("fensterinhalt").textContent.includes("Arbeitswegja"));
+    w.fensterSchliessen();
+    wahr("Vorlagenliste kennzeichnet die Vorlage", ohneTags(w.bildVorlagen()).includes("Büro Arbeitsweg 14,2 km"), ohneTags(w.bildVorlagen()));
+
+    // -------------------------------------------------------------
+    // 18. Kennzahlen
+    // -------------------------------------------------------------
+    abschnitt("18. Kennzahlen: Radtage, Ø pro Radtag, Arbeitstage, längste Serie (Stichtag 01.03.2026)");
+    const K = (datum, km, arbeitsweg = false, typ = "tag") => ({ id: "k" + datum, datum, km, arbeitsweg, typ });
+    setze({ fahrrad: F("2025-12-01", 0), eintraege: [
+      K("2025-12-29", 10), K("2025-12-30", 10),                     // Mo, Di
+      K("2026-01-02", 12, true), K("2026-01-05", 8, true),          // Fr, Mo
+      K("2026-01-06", 0),                                           // Di: keine Fahrt → Serie unterbrochen, kein Radtag
+      K("2026-01-07", 20),                                          // Mi: kein Fahrtag, aber Radtag
+      K("2026-01-09", 10), K("2026-01-12", 10, true), K("2026-01-13", 10), // Fr, Mo, Di
+      K("2026-01-19", 5),                                           // Mo (Fr 16.01. fehlt)
+      K("2026-02-02", 100, false, "woche"),                         // Wochensumme
+      K("2026-03-05", 7)                                            // nach dem Stichtag
+    ] });
+    let kz = w.jahresKennzahlen("2026-03-01");
+    const runde = z => [z.km, z.radtage, z.schnitt === null ? null : Math.round(z.schnitt * 1000) / 1000, z.arbeitstage, z.serie, z.wochensummen, z.wochenKm];
+    gleich("2026: 175 km (mit Wochensumme), 7 Radtage (ohne 0 km und Wochensumme), Ø 10,714 km, 3 Arbeitstage, Serie 3, 1 Wochensumme mit 100 km",
+      runde(kz.jahre[0]), [175, 7, 10.714, 3, 3, 1, 100]);
+    gleich("2025: 20 km, 2 Radtage, Ø 10 km, Serie 2", runde(kz.jahre[1]), [20, 2, 10, 0, 2, 0, 0]);
+    gleich("Gesamt: Serie über den Jahreswechsel (Mo 29.12., Di 30.12., Fr 02.01., Mo 05.01.) = 4", runde(kz.gesamt), [195, 9, 10.556, 3, 4, 1, 100]);
+    gleich("Jahre neueste zuerst, Einträge nach dem Stichtag zählen nicht", kz.jahre.map(z => z.jahr), [2026, 2025]);
+    w.eval("daten.einstellungen.fahrtage = [1, 2, 3, 5]");
+    kz = w.jahresKennzahlen("2026-03-01");
+    gleich("Fahrtage mit Mittwoch: andere Serien (2026: Mi 07.01. bis Di 13.01. = 4)", [kz.jahre[0].serie, kz.jahre[1].serie, kz.gesamt.serie], [4, 2, 4]);
+    w.eval("daten.einstellungen.fahrtage = []");
+    gleich("Ohne Fahrtage keine Serie", w.jahresKennzahlen("2026-03-01").gesamt.serie, 0);
+    w.eval("daten.einstellungen.fahrtage = [1, 2, 5]; aktiverTab = 'statistik'; statistikMonat = null; statistikTabelleOffen = false; zeichnen()");
+    const statText = w.document.getElementById("inhalt").textContent;
+    wahr("Statistik: Tabelle mit Jahren und Gesamt, Hinweis „ohne Wochensummen“ und zur Wochensumme 2026",
+      w.document.querySelectorAll("#inhalt table.tabelle tbody tr").length >= 3 && statText.includes("Radtage, Ø km, Arbeitstage und Serie ohne Wochensummen.") &&
+      statText.includes("2026: 1 Wochensumme (100 km) in „km“ enthalten, aber nicht als Radtage gezählt.") && statText.includes("Fahrtage (Mo, Di, Fr)"), statText);
+
+    // -------------------------------------------------------------
+    // 19. Diagramm km pro Monat
+    // -------------------------------------------------------------
+    abschnitt("19. Diagramm: km pro Monat im laufenden Jahr und im Vorjahr");
+    setze({ fahrrad: F("2025-01-01", 0), eintraege: [
+      K("2026-01-05", 40), K("2026-01-20", 35), K("2026-02-02", 100, false, "woche"),
+      K("2025-01-10", 50), K("2025-03-03", 30), K("2025-12-01", 20)
+    ] });
+    gleich("Monatssummen (mit Wochensummen)", [w.monatsSummen(2026).slice(0, 3), w.monatsSummen(2025)], [[75, 100, 0], [50, 0, 30, 0, 0, 0, 0, 0, 0, 0, 0, 20]]);
+    const ablage = w.document.createElement("div");
+    w.document.body.appendChild(ablage);
+    ablage.innerHTML = w.monatsDiagramm(2026, "2026-02-15", 0);
+    const hoehe = sel => [...ablage.querySelectorAll(sel)].map(p => Math.round(p.getBBox().height));
+    gleich("Säulen: 2026 nur bis zum laufenden Monat (Jan, Feb), Vorjahr alle Monate mit km (Jan, Mär, Dez)",
+      [ablage.querySelectorAll("path.jahr").length, ablage.querySelectorAll("path.vorjahr").length], [2, 3]);
+    gleich("Säulenhöhen proportional (100 km = volle Höhe 160): 2026 Jan 75 / Feb 100, Vorjahr 50 / 30 / 20", [hoehe("path.jahr"), hoehe("path.vorjahr")], [[120, 160], [80, 48, 32]]);
+    gleich("Achse in runden Schritten, Monatsbeschriftung", [[...ablage.querySelectorAll("text[text-anchor=end]")].map(t => t.textContent), [...ablage.querySelectorAll("text[text-anchor=middle]")].map(t => t.textContent).join(" ")],
+      [["0", "50", "100"], "Jan Feb Mär Apr Mai Jun Jul Aug Sep Okt Nov Dez"]);
+    gleich("Legende und Werte des gewählten Monats (Wert vorn, Jahr dahinter, Unterschied)",
+      [ablage.querySelector(".legende").textContent, ablage.querySelector(".monatswert").textContent.replace(/\s+/g, " ")], ["20262025", "Januar 75 km 2026 · 50 km 2025 (+25 km)"]);
+    ablage.innerHTML = w.monatsDiagramm(2026, "2026-02-15", 2);
+    gleich("Kommender Monat im laufenden Jahr: noch kein Wert", ablage.querySelector(".monatswert").textContent.replace(/\s+/g, " "), "März – 2026 · 30 km 2025");
+    ablage.innerHTML = w.monatsDiagramm(2024, "2026-02-15", 0);
+    gleich("Ohne Einträge: Hinweis statt Diagramm", [!!ablage.querySelector("svg"), ablage.textContent.includes("Für 2023 und 2024 gibt es noch keine Einträge.")], [false, true]);
+    ablage.remove();
+    setze({ fahrrad: F("2025-01-01", 0), eintraege: [] });
+    w.eval(`daten.eintraege.push({ id: "d1", datum: heute().slice(0, 4) + "-01-15", km: 12, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }); aktiverTab = 'statistik'; zeichnen()`);
+    gleich("Statistik: zwölf antippbare Monate", w.document.querySelectorAll('#inhalt [data-action="statistik-monat"]').length, 12);
+    w.document.querySelector('#inhalt [data-action="statistik-monat"][data-monat="0"]').dispatchEvent(new w.MouseEvent("click", { bubbles: true }));
+    const monatsText = w.document.querySelector("#inhalt .monatswert").textContent.replace(/\s+/g, " ");
+    wahr("Antippen eines Monats zeigt seine Werte", monatsText.startsWith("Januar 12 km " + w.heute().slice(0, 4)), monatsText);
+    w.document.querySelector('#inhalt [data-action="statistik-tabelle"]').click();
+    gleich("„Werte als Tabelle“: zwölf Monate und Summe", w.document.querySelectorAll("#inhalt .karte table.tabelle")[0].querySelectorAll("tbody tr").length, 13);
+    w.eval("statistikTabelleOffen = false; statistikMonat = null");
+
+    // -------------------------------------------------------------
+    // 20. Neue Version (Seite; der Service Worker selbst wird mit tests/offline-update-test.js geprüft)
+    // -------------------------------------------------------------
+    abschnitt("20. Offline und neue Versionen (Seite)");
+    gleich("Im Testmodus wird kein Service Worker angemeldet", w.eval("swVerfuegbar()"), false);
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    gleich("Ohne Meldung kein Hinweis", w.document.getElementById("inhalt").textContent.includes("Neue Version verfügbar"), false);
+    w.swNachricht({ typ: "aktuell" });
+    w.swNachricht({ typ: "neue-version" });
+    wahr("Meldung „neue-version“: Hinweis „Neue Version verfügbar“ mit „Neu laden“",
+      w.document.getElementById("inhalt").textContent.includes("Neue Version verfügbar") && w.document.querySelector('#inhalt [data-action="neu-laden"]'));
+    w.eval("aktiverTab = 'wartung'; zeichnen()");
+    wahr("Der Hinweis bleibt auch in anderen Reitern sichtbar", w.document.querySelector('#inhalt [data-action="neu-laden"]'));
+    w.eval("neueVersion = false; aktiverTab = 'uebersicht'; zeichnen()");
+    const swText = await (await fetch("../sw.js", { cache: "no-store" })).text();
+    let swGueltig = true;
+    try { new Function(swText); } catch (e) { swGueltig = false; }
+    gleich("sw.js ist vorhanden und gültiges JavaScript", swGueltig, true);
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

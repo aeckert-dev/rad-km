@@ -7,6 +7,9 @@ ist für das iPhone optimiert.
 - Kilometer pro Tag erfassen, mit Vorlagen in zwei Klicks
 - Aktueller Kilometerstand und Summen für heute, diese Woche, diesen Monat, dieses Jahr
 - Jahresprognose, Jahresziel und Kilometerstand-Prognose für ein beliebiges Datum
+- Statistik: km pro Monat im Vergleich zum Vorjahr, Radtage, Arbeitstage mit
+  dem Rad und längste Serie
+- Hinweis auf übliche Fahrtage ohne Eintrag, mit „Nachtragen“ und „Keine Fahrt“
 - Einträge übersichtlich zusammengefasst nach Woche, Monat und Jahr
 - Wartungsprotokoll mit Fälligkeit (Intervall in Monaten und/oder km, jährliches
   Zeitfenster oder einmalig) und geplanten Terminen
@@ -14,10 +17,12 @@ ist für das iPhone optimiert.
 - Löschen mit „Rückgängig“
 - Datensicherung als JSON-Datei, die vor dem Teilen geprüft wird; gespeicherte
   Sicherungen lassen sich prüfen, ohne etwas zu überschreiben
+- Startet auch ohne Netz; neue Versionen werden angekündigt
 - Hell- und Dunkelmodus nach Systemeinstellung
 
-Die ganze App steckt in **einer einzigen Datei: `index.html`**. Es gibt keine
-externen Bibliotheken und keinen Build-Schritt.
+Die ganze App steckt in **einer einzigen Datei: `index.html`**. Dazu kommt nur
+der Service Worker `sw.js`, der die App für den Start ohne Netz bereithält. Es
+gibt keine externen Bibliotheken und keinen Build-Schritt.
 
 ## Wo liegen meine Daten?
 
@@ -34,6 +39,9 @@ Das bedeutet:
   weg, wenn du keine Sicherung hast. **Sichere deshalb regelmäßig** („Jetzt
   sichern“ auf der Startseite). Die App erinnert dich, wenn die letzte
   Sicherung mehr als 30 Tage zurückliegt.
+- Der Service Worker speichert nur die App selbst (`index.html`), damit sie
+  auch ohne Netz startet. Auf die Daten im `localStorage` hat er keinen
+  Zugriff.
 
 ## Installation auf dem iPhone (über GitHub Pages)
 
@@ -57,8 +65,18 @@ Auf dem iPhone:
    **„Zum Home-Bildschirm“** wählen.
 3. Ab jetzt die App immer über das Symbol auf dem Home-Bildschirm starten.
 
-Updates: Sobald eine neue Version auf `main` liegt, lädt die App sie beim
-nächsten Start. Deine Daten bleiben erhalten.
+### Ohne Netz und neue Versionen
+
+- Nach dem ersten Start ist die App auf dem iPhone gespeichert und startet
+  auch **ohne Netz** (Flugmodus, Funkloch) sofort.
+- Liegt eine neue Version auf `main`, startet die App zunächst weiter in der
+  bisherigen Version und zeigt oben **„Neue Version verfügbar“**. Ein Tipper
+  auf **Neu laden** übernimmt sie. Bis dahin bleibt alles wie gewohnt; der
+  Hinweis erscheint bei jedem Start wieder.
+- Die App fragt beim Start und beim Zurückkehren in die App nach (höchstens
+  alle 10 Minuten).
+- Deine Daten im `localStorage` bleiben bei Updates unverändert. Alles ist
+  schon gespeichert, bevor neu geladen wird.
 
 ## Bedienung
 
@@ -82,6 +100,11 @@ nächsten Start. Deine Daten bleiben erhalten.
 - Für ein **anderes Datum** im Formular einfach das Datum ändern.
 - Pro Datum gibt es genau einen Eintrag. Ist ein Datum schon erfasst, zeigt
   die App den vorhandenen Eintrag an; mit **Ändern** kannst du ihn bearbeiten.
+- **Arbeitsweg:** Das Häkchen im Formular übernimmt die App aus der Vorlage
+  (siehe „Vorlagen“). Du kannst es für den einzelnen Eintrag ändern.
+- **Keine Fahrt:** Ein Eintrag mit 0 km bedeutet „an diesem Tag nicht
+  gefahren“. Er erscheint in der Liste dezent als „keine Fahrt“ und zählt in
+  der Statistik nicht als Radtag.
 - Kilometer mit Komma eingeben, z. B. `12,5`.
 - Gibt es in derselben Woche (Montag bis Sonntag) bereits einen
   **Wochen-Eintrag**, warnt die App vor dem Speichern, denn die km würden
@@ -90,6 +113,14 @@ nächsten Start. Deine Daten bleiben erhalten.
 ### Übersicht
 
 - **Kilometerstand** = Start-Kilometerstand + alle Einträge ab dem Startdatum.
+- **Fahrtage ohne Eintrag:** Fehlt für einen deiner üblichen Fahrtage (siehe
+  „Einstellungen“) der letzten 14 Tage (bis gestern, ab dem Startdatum) ein
+  Eintrag, erscheint z. B. „2 Fahrtage ohne Eintrag: Di 20.10., Fr 23.10.“.
+  Je Tag gibt es zwei Schaltflächen:
+  - **Nachtragen** öffnet die Erfassung für diesen Tag.
+  - **Keine Fahrt** legt mit einem Tipper einen Eintrag mit 0 km an (mit
+    „Rückgängig“).
+  - Eine Woche mit einer importierten Wochensumme gilt als erfasst.
 - **Nächste fällige Wartung:** ein geplanter Termin oder die berechnete
   Fälligkeit, je nachdem, was zuerst kommt. Liegt sie in der Zukunft, steht
   der erwartete Kilometerstand dabei, z. B. „(ca. 4.350 km)“.
@@ -107,6 +138,7 @@ nächsten Start. Deine Daten bleiben erhalten.
   Detailansicht.
 - **Markierungen in der Liste:**
   - Importierte Wochensummen tragen das Abzeichen **Woche**.
+  - Einträge mit 0 km erscheinen grau als **keine Fahrt**.
   - Einträge vor dem Startdatum werden angezeigt, zählen aber nicht zum
     Kilometerstand.
 
@@ -144,8 +176,8 @@ bleibt bei zwei Klicks (Vorlage antippen, Speichern).
 ### Rückgängig
 
 Nach dem Löschen eines Eintrags, eines Wartungsprotokoll-Eintrags, eines
-Mangels oder einer Vorlage erscheint unten etwa 6 Sekunden lang eine Meldung
-mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
+Mangels oder einer Vorlage und nach „Keine Fahrt“ erscheint unten etwa 6
+Sekunden lang eine Meldung mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
 Verknüpfungen (z. B. die Mängel eines gelöschten Protokoll-Eintrags). Jede
 weitere Änderung beendet das Angebot, damit sie nicht überschrieben wird.
 
@@ -154,6 +186,12 @@ weitere Änderung beendet das Angebot, damit sie nicht überschrieben wird.
 Vorlagen anlegen, bearbeiten, löschen, und mit ▲/▼ die Reihenfolge ändern.
 Jeder Eintrag speichert seine Kilometer und den Namen der Vorlage selbst. Das
 Ändern oder Löschen einer Vorlage verändert also keine bestehenden Einträge.
+
+**Arbeitsweg:** Vorlagen für den Weg zur Arbeit bekommen das Häkchen
+„Arbeitsweg“. Beim Erfassen übernimmt der Eintrag das Merkmal (wie die km).
+Setzt oder entfernst du das Häkchen an einer Vorlage, fragt die App, ob die
+bisherigen Einträge mit dieser Vorlage (gleicher Name) ebenfalls angepasst
+werden sollen. Ohne deine Zustimmung bleiben sie unverändert.
 
 ### Wartung
 
@@ -263,16 +301,38 @@ Jeder Eintrag speichert seine Kilometer und den Namen der Vorlage selbst. Das
   - die Jahresprognose im Vergleich zum Ziel, z. B. „ca. 130 km unter dem
     Ziel“.
 
+### Statistik
+
+Der Reiter **Statistik** zeigt:
+
+- **km pro Monat** als Säulendiagramm: das laufende Jahr (grün) neben dem
+  Vorjahr (grau). Antippen eines Monats zeigt seine Werte und den
+  Unterschied zum Vorjahr; „Werte als Tabelle“ zeigt alle Monate als Zahlen.
+  Importierte Wochensummen zählen hier mit.
+- **Kennzahlen** je Kalenderjahr und gesamt:
+  - **km:** alle Einträge des Jahres.
+  - **Radtage:** Tage mit mehr als 0 km.
+  - **Ø km:** Durchschnitt pro Radtag.
+  - **Arbeitstage:** Radtage mit dem Merkmal „Arbeitsweg“.
+  - **Serie:** längste Folge aufeinanderfolgender Fahrtage (siehe
+    „Einstellungen“), an denen gefahren wurde. Andere Wochentage unterbrechen
+    die Serie nicht und verlängern sie nicht; ein Fahrtag ohne Fahrt beendet
+    sie. Die Gesamt-Serie kann über den Jahreswechsel gehen.
+  - Radtage, Ø km, Arbeitstage und Serie zählen **ohne Wochensummen**, weil
+    bei ihnen die einzelnen Tage unbekannt sind. Die App nennt Anzahl und km
+    der Wochensummen je Jahr.
+
 ### Datensicherung
 
 - **Jetzt sichern** (Startseite und Einstellungen):
-  1. Die App erzeugt die Sicherungsdatei `rad-km-JJJJ-MM-TT.json`, liest sie
+  1. Die App erzeugt die Sicherungsdatei `rad-km-JJJJ-MM-TT-HHMM.json` (mit
+     Uhrzeit, damit mehrere Sicherungen am selben Tag eindeutig sind), liest sie
      sofort wieder ein, prüft sie mit denselben Regeln wie beim Import und
      vergleicht sie mit dem aktuellen Stand.
   2. Nur wenn das stimmt, öffnet sich auf dem iPhone das **Teilen-Menü**.
      Dort z. B. „In Dateien sichern“ wählen, um die Datei in iCloud Drive
-     abzulegen. Wo Teilen nicht möglich ist (z. B. am Computer), wird die
-     Datei heruntergeladen.
+     abzulegen. Übergeben wird nur die Datei, ohne Titel oder Text. Wo Teilen
+     nicht möglich ist (z. B. am Computer), wird die Datei heruntergeladen.
   3. Ist das Teilen abgeschlossen, erscheint „Sicherung übergeben – Inhalt
      geprüft: N Einträge, X km“ (X = Summe aller Einträge), und das Datum der
      letzten Sicherung wird gesetzt. Bei Abbruch bleibt es unverändert.
@@ -303,7 +363,10 @@ Jeder Eintrag speichert seine Kilometer und den Namen der Vorlage selbst. Das
 
 ### Einstellungen
 
-- Fahrrad, Jahresziele, Datensicherung.
+- Fahrrad, Fahrtage, Jahresziele, Datensicherung.
+- **Fahrtage:** deine üblichen Fahrtage zum Ankreuzen (Voreinstellung
+  Montag, Dienstag, Freitag). Sie gelten für den Hinweis auf fehlende
+  Einträge und die längste Serie. Änderungen werden sofort gespeichert.
 - **Über Rad-km:** App-Version und Datenversion.
 
 ## JSON-Format für Sicherung und Import
@@ -344,7 +407,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 | Feld | Typ | Bedeutung |
 |---|---|---|
 | `zeitpunkt` | Text | Zeitpunkt der Sicherung (ISO 8601, UTC), z. B. `"2026-10-25T14:03:00.000Z"` |
-| `appVersion` | Text | App-Version, mit der gesichert wurde, z. B. `"3a"` |
+| `appVersion` | Text | App-Version, mit der gesichert wurde, z. B. `"3b"` |
 | `eintraege` | Zahl | Anzahl der Einträge |
 | `kmSumme` | Zahl | Summe der km aller Einträge |
 | `kmStand` | Zahl oder `null` | Kilometerstand (Start-Kilometerstand + Einträge ab dem Startdatum) |
@@ -355,7 +418,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `fahrtage` | Liste von Zahlen | nein | Übliche Fahrtage, 1 = Montag … 7 = Sonntag; Standard `[1, 2, 5]` (Mo, Di, Fr). Wird in einer späteren Version ausgewertet |
+| `fahrtage` | Liste von Zahlen | nein | Übliche Fahrtage, 1 = Montag … 7 = Sonntag; Standard `[1, 2, 5]` (Mo, Di, Fr). Für den Hinweis auf Fahrtage ohne Eintrag und die längste Serie; `[]` = keine |
 | `jahresziele` | Liste | nein | Jahresziele, je Jahr höchstens eines: `{ "jahr": 2026, "km": 5000 }` (km > 0) |
 
 ### `fahrrad`
@@ -375,7 +438,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 | `id` | Text | nein | Eindeutige Kennung |
 | `name` | Text | ja | Name der Strecke |
 | `km` | Zahl | ja | Gesamt-km für den Tag |
-| `arbeitsweg` | `true`/`false` | nein | Strecke zur Arbeit (ab Version 3); wird beim Erfassen in den Eintrag übernommen. Wird in einer späteren Version ausgewertet |
+| `arbeitsweg` | `true`/`false` | nein | Strecke zur Arbeit (ab Version 3); wird beim Erfassen in den Eintrag übernommen |
 
 ### `eintraege[]`
 
@@ -383,11 +446,11 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 |---|---|---|---|
 | `id` | Text | nein | Eindeutige Kennung |
 | `datum` | Datum | ja | **Pro Datum nur ein Eintrag** |
-| `km` | Zahl | ja | Gefahrene Kilometer |
+| `km` | Zahl | ja | Gefahrene Kilometer; `0` = keine Fahrt |
 | `vorlage` | Text | nein | Name der verwendeten Vorlage (nur zur Anzeige) |
 | `notiz` | Text | nein | Notiz |
 | `typ` | `"tag"` oder `"woche"` | nein | Standard `"tag"`. `"woche"` = importierte Wochensumme, Datum = Montag der Woche bzw. erster Fahrtag |
-| `arbeitsweg` | `true`/`false` | nein | Fahrt zur Arbeit (ab Version 3); beim Erfassen aus der Vorlage übernommen |
+| `arbeitsweg` | `true`/`false` | nein | Fahrt zur Arbeit (ab Version 3); beim Erfassen aus der Vorlage übernommen. Zählt für die Arbeitstage in der Statistik |
 
 ### `wartungsarten[]`
 
@@ -441,7 +504,7 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
 ```json
 {
   "version": 3,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "3a", "eintraege": 4,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "3b", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -519,8 +582,12 @@ damit nichts verloren geht.
 - Prognosen und Jahresziel mit festen Testdaten und Stichtagen,
 - Löschen mit „Rückgängig“,
 - die Prüfung der Sicherungsdatei vor dem Teilen (das Teilen-Menü wird dabei
-  durch einen Platzhalter ersetzt) und „Sicherung prüfen“ (identisch, älter,
-  abweichend, beschädigt).
+  durch einen Platzhalter ersetzt), den Dateinamen mit Uhrzeit und „Sicherung
+  prüfen“ (identisch, älter, abweichend, beschädigt),
+- Fahrtage ohne Eintrag, „Nachtragen“ und „Keine Fahrt“, das Merkmal
+  „Arbeitsweg“, die Kennzahlen (Radtage, Ø, Arbeitstage, längste Serie) und
+  das Diagramm,
+- den Hinweis „Neue Version verfügbar“.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -540,6 +607,19 @@ python3 -m http.server 8000
 
 Oben steht „Alle … Tests bestanden“ oder die Anzahl der Fehler.
 
+**Offline und Updates:** `tests/offline-update-test.js` spielt in einem echten
+Browser durch, was der Service Worker tut: erster Start, Start ohne Netz,
+Veröffentlichung einer neuen Version, Hinweis „Neue Version verfügbar“, „Neu
+laden“, geänderter Service Worker. Dabei prüft er jedes Mal, dass die Daten im
+`localStorage` unverändert bleiben, und lässt am Ende die Testseite unter dem
+aktiven Service Worker laufen. Er arbeitet mit einer Kopie der App und einem
+eigenen Webserver, der sich wie GitHub Pages verhält. Aufruf (benötigt
+Node.js und Playwright):
+
+```sh
+node tests/offline-update-test.js
+```
+
 ## Aufbau des Codes (für Neugierige)
 
 `index.html` besteht aus drei Teilen:
@@ -554,15 +634,15 @@ Oben steht „Alle … Tests bestanden“ oder die Anzahl der Fehler.
    3. Datenmodell: Laden, Prüfen, Umwandeln, Speichern
    4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit, Zusammenfassung
    5. Fenster, Rückfragen, Meldungen, Rückgängig
-   6. Die vier Bildschirme und ihre Formulare
+   6. Die fünf Bildschirme und ihre Formulare (das Diagramm ist ein SVG,
+      ohne Bibliothek)
    7. Datensicherung: Export, Prüfung, Import
    8. Zuordnung der Klicks zu den Funktionen
-   9. Start
+   9. Offline und neue Versionen (Anmeldung des Service Workers)
+   10. Start
 
-## Geplant
-
-- Statistiken und Diagramme (km pro Monat, Vergleich mit dem Vorjahr),
-  Kennzahlen wie Radtage und längste Serie
-- Arbeitstage mit dem Rad (Merkmal „Arbeitsweg“ an Vorlagen)
-- Hinweis auf Fahrtage ohne Eintrag, mit „Nachtragen“ und „Keine Fahrt“
-- Offline-Fähigkeit mit Hinweis auf neue Versionen
+`sw.js` ist der Service Worker. Er speichert `index.html` für den Start ohne
+Netz, vergleicht sie nach dem Start mit der Fassung auf dem Server und
+übernimmt eine neue Version erst nach „Neu laden“. Eine neue Version erkennt er
+am Inhalt von `index.html`, eine Versionsnummer muss dafür nicht gepflegt
+werden.

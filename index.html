@@ -38,6 +38,9 @@
   --orange-hell: #fff3e0;
   --feld: #ffffff;
   --schatten: 0 1px 3px rgba(0,0,0,.08);
+  /* Diagramm: laufendes Jahr hervorgehoben, Vorjahr zurückgenommen (geprüft auf Farbsehschwächen) */
+  --diagramm-jahr: #16805c;
+  --diagramm-vorjahr: #8e8e93;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -55,6 +58,8 @@
     --orange-hell: #3a2a0f;
     --feld: #2c2c2e;
     --schatten: none;
+    --diagramm-jahr: #34c38f;
+    --diagramm-vorjahr: #6e6e73;
   }
 }
 
@@ -171,6 +176,39 @@ button:disabled { opacity: .4; }
 .balken-ist { height: 100%; border-radius: 99px; background: var(--akzent); }
 .balken-soll { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: var(--text); }
 
+/* Einträge mit 0 km ("keine Fahrt") dezent */
+.zeile.keine-fahrt .inhalt { color: var(--text2); }
+.zeile.keine-fahrt .zahl { font-weight: 400; }
+
+/* Fahrtage ohne Eintrag (Startseite) */
+.luecke { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.luecke span { flex: 1; font-weight: 600; }
+.hinweis .luecke button { margin-top: 0; min-height: 44px; padding: 8px 12px; }
+
+/* Auswahl der Fahrtage (Einstellungen) */
+.fahrtage { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text); font-size: 15px; }
+.fahrtag input { width: 26px; height: 26px; min-height: 26px; margin: 0; -webkit-appearance: checkbox; appearance: auto; }
+
+/* Statistik: Diagramm, Legende, Tabellen */
+.legende { display: flex; gap: 16px; font-size: 15px; color: var(--text2); margin-bottom: 6px; }
+.legende span { display: inline-flex; align-items: center; gap: 6px; }
+.farbe { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.farbe.jahr, .diagramm .jahr { background: var(--diagramm-jahr); fill: var(--diagramm-jahr); }
+.farbe.vorjahr, .diagramm .vorjahr { background: var(--diagramm-vorjahr); fill: var(--diagramm-vorjahr); }
+.diagramm { display: block; width: 100%; height: auto; }
+.diagramm .gitter { stroke: var(--linie); stroke-width: 1; }
+.diagramm text { fill: var(--text2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.diagramm .gewaehlt { fill: var(--akzent-hell); }
+.diagramm .treffer { fill: transparent; cursor: pointer; }
+.monatswert { min-height: 44px; margin-top: 6px; }
+.tabelle { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+.tabelle th { font-weight: 600; color: var(--text2); font-size: 13px; text-align: right; padding: 4px 3px; vertical-align: bottom; }
+.tabelle td { text-align: right; padding: 7px 3px; border-top: 1px solid var(--linie); }
+.tabelle th:first-child, .tabelle td:first-child { text-align: left; }
+.tabelle tr.summe-zeile td { font-weight: 700; }
+.aufklappen { background: none; border-radius: 0; width: 100%; padding: 10px 0 0; display: flex; gap: 8px; align-items: center; font-weight: 600; }
+
 /* Detailansicht (nur lesen) */
 .details { margin: 0; }
 .details dt { font-size: 15px; color: var(--text2); margin-top: 12px; }
@@ -267,6 +305,7 @@ nav button.aktiv { color: var(--akzent); font-weight: 700; }
 <nav>
   <button type="button" data-action="tab" data-tab="uebersicht"><span class="ico">🚲</span>Übersicht</button>
   <button type="button" data-action="tab" data-tab="wartung"><span class="ico">🔧</span>Wartung</button>
+  <button type="button" data-action="tab" data-tab="statistik"><span class="ico">📊</span>Statistik</button>
   <button type="button" data-action="tab" data-tab="vorlagen"><span class="ico">📋</span>Vorlagen</button>
   <button type="button" data-action="tab" data-tab="einstellungen"><span class="ico">⚙️</span>Einstellungen</button>
 </nav>
@@ -292,7 +331,7 @@ const SPEICHER_SCHLUESSEL = TESTMODUS ? "radkm-test-daten" : "radkm-daten";
 // Datum des letzten Exports (separat, damit ein Import es nicht verändert).
 const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzter-export";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "3a";
+const APP_VERSION = "3b";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
 const DATEN_VERSION = 3;
@@ -333,6 +372,8 @@ function datumText(iso) {
 }
 const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 function wochentag(iso) { return WOCHENTAGE[dateAusIso(iso).getDay()]; }
+// Wochentag nach ISO 8601: 1 = Montag … 7 = Sonntag (wie in den Einstellungen "fahrtage")
+function isoWochentag(iso) { return (dateAusIso(iso).getDay() + 6) % 7 + 1; }
 
 function plusTage(iso, tage) {
   const d = dateAusIso(iso);
@@ -791,6 +832,77 @@ function jahreszielStand(h = heute()) {
   return { jahr, ziel: ziel.km, ist, soll, vorsprung: ist - soll, anteil: ist / ziel.km };
 }
 
+// ---------- Fahrtage und Statistik ----------
+// Radtag = Tages-Eintrag mit mehr als 0 km. Wochensummen zählen nicht, weil
+// unbekannt ist, an welchen Tagen gefahren wurde.
+function istRadtag(e) { return e.typ === "tag" && e.km > 0; }
+
+// Eingestellte Fahrtage der letzten 14 Tage (bis gestern) ohne Eintrag, ab dem
+// Startdatum. Ein Eintrag mit 0 km ("keine Fahrt") und eine Wochensumme in
+// derselben Woche gelten als erfasst.
+function fehlendeFahrtage(h = heute()) {
+  const f = daten.fahrrad;
+  if (!f) return [];
+  const fahrtage = new Set(daten.einstellungen.fahrtage);
+  const wochen = new Set(daten.eintraege.filter(e => e.typ === "woche").map(e => montagDerWoche(e.datum)));
+  const tage = [];
+  for (let d = plusTage(h, -14); d < h; d = plusTage(d, 1)) {
+    if (d >= f.startdatum && fahrtage.has(isoWochentag(d)) && !eintragAm(d) && !wochen.has(montagDerWoche(d))) tage.push(d);
+  }
+  return tage;
+}
+
+// Längste Serie aufeinanderfolgender Fahrtage mit Fahrt (Radtag) von "von" bis
+// "bis". Nur die eingestellten Fahrtage zählen; andere Wochentage unterbrechen
+// die Serie nicht und verlängern sie nicht.
+function laengsteSerie(von, bis) {
+  const fahrtage = new Set(daten.einstellungen.fahrtage);
+  const gefahren = new Set(daten.eintraege.filter(istRadtag).map(e => e.datum));
+  let laengste = 0, lauf = 0;
+  if (!fahrtage.size) return 0;
+  for (let d = von; d <= bis; d = plusTage(d, 1)) {
+    if (!fahrtage.has(isoWochentag(d))) continue;
+    lauf = gefahren.has(d) ? lauf + 1 : 0;
+    if (lauf > laengste) laengste = lauf;
+  }
+  return laengste;
+}
+
+// km je Monat eines Jahres (alle Einträge einschließlich Wochensummen); Index 0 = Januar
+function monatsSummen(jahr) {
+  const s = Array(12).fill(0);
+  daten.eintraege.forEach(e => { if (e.datum.slice(0, 4) === String(jahr)) s[Number(e.datum.slice(5, 7)) - 1] += e.km; });
+  return s.map(runden);
+}
+
+// Kennzahlen eines Zeitraums bis zum Stichtag: km (alle Einträge), Radtage,
+// Durchschnitt pro Radtag, Arbeitstage (Radtage mit Merkmal Arbeitsweg),
+// längste Serie und die nicht als Radtage gezählten Wochensummen
+function kennzahlen(liste, von, bis) {
+  const radtage = liste.filter(istRadtag);
+  const wochen = liste.filter(e => e.typ === "woche");
+  return {
+    km: runden(liste.reduce((s, e) => s + e.km, 0)),
+    radtage: radtage.length,
+    schnitt: radtage.length ? radtage.reduce((s, e) => s + e.km, 0) / radtage.length : null,
+    arbeitstage: radtage.filter(e => e.arbeitsweg).length,
+    serie: laengsteSerie(von, bis),
+    wochensummen: wochen.length,
+    wochenKm: runden(wochen.reduce((s, e) => s + e.km, 0))
+  };
+}
+// Je Kalenderjahr (neueste zuerst) und gesamt; Einträge nach dem Stichtag zählen nicht
+function jahresKennzahlen(h = heute()) {
+  const bisher = daten.eintraege.filter(e => e.datum <= h);
+  const jahre = [...new Set(bisher.map(e => e.datum.slice(0, 4)))].sort().reverse();
+  const erstes = bisher.reduce((m, e) => e.datum < m ? e.datum : m, h);
+  return {
+    jahre: jahre.map(j => Object.assign({ jahr: Number(j) },
+      kennzahlen(bisher.filter(e => e.datum.slice(0, 4) === j), j + "-01-01", j + "-12-31" < h ? j + "-12-31" : h))),
+    gesamt: kennzahlen(bisher, erstes, h)
+  };
+}
+
 // Nicht von Hand überschriebene Kilometerstände im Protokoll neu berechnen
 function aktualisiereProtokollKm() {
   daten.wartungsprotokoll.forEach(p => {
@@ -1136,9 +1248,10 @@ function rueckgaengigVerwerfen() {
   if (!document.getElementById("toast-knopf").hidden) meldungAus();
 }
 
-// Löschen mit "Rückgängig". Gemerkt wird der ganze Datenstand vorher, damit
-// auch Verknüpfungen (z. B. die Mängel eines Protokoll-Eintrags) zurückkommen.
-function loeschenMitRueckgaengig(aenderung, text) {
+// Änderung mit "Rückgängig" (Löschen, "Keine Fahrt"). Gemerkt wird der ganze
+// Datenstand vorher, damit auch Verknüpfungen (z. B. die Mängel eines
+// Protokoll-Eintrags) zurückkommen.
+function mitRueckgaengig(aenderung, text) {
   const vorher = JSON.stringify(daten);
   aenderung();
   if (!speichern()) return;
@@ -1177,13 +1290,17 @@ let aktiverTab = "uebersicht";
 const offeneGruppen = new Set();
 let erledigteMaengelOffen = false;
 
-const TITEL = { uebersicht: "Übersicht", wartung: "Wartung", vorlagen: "Vorlagen", einstellungen: "Einstellungen" };
+const TITEL = { uebersicht: "Übersicht", wartung: "Wartung", statistik: "Statistik", vorlagen: "Vorlagen", einstellungen: "Einstellungen" };
 
 function zeichnen() {
   document.getElementById("seitentitel").textContent = TITEL[aktiverTab];
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("aktiv", b.dataset.tab === aktiverTab));
-  const bildschirme = { uebersicht: bildUebersicht, wartung: bildWartung, vorlagen: bildVorlagen, einstellungen: bildEinstellungen };
+  const bildschirme = { uebersicht: bildUebersicht, wartung: bildWartung, statistik: bildStatistik, vorlagen: bildVorlagen, einstellungen: bildEinstellungen };
   let html = ladeFehler ? '<div class="hinweis fehler">' + esc(ladeFehler) + '</div>' : "";
+  if (neueVersion) {
+    html += '<div class="hinweis info"><strong>Neue Version verfügbar</strong><br>Deine Daten bleiben dabei unverändert.' +
+      '<br><button type="button" class="primaer" data-action="neu-laden">Neu laden</button></div>';
+  }
   html += bildschirme[aktiverTab]();
   document.getElementById("inhalt").innerHTML = html;
 }
@@ -1232,11 +1349,13 @@ function bildUebersicht() {
   }
   html += '</div>';
 
+  html += lueckenHinweis(h);
+
   // Schnellerfassung
   const eHeute = eintragAm(h);
   html += '<h2>Heute erfassen</h2>';
   if (eHeute) {
-    html += '<div class="hinweis info">✓ Heute erfasst: <strong>' + kmText(eHeute.km) + ' km</strong>' +
+    html += '<div class="hinweis info">✓ Heute erfasst: <strong>' + (eHeute.km === 0 ? "keine Fahrt" : kmText(eHeute.km) + ' km') + '</strong>' +
       (eHeute.vorlage ? " (" + esc(eHeute.vorlage) + ")" : "") +
       '<br><button type="button" data-action="eintrag-ansehen" data-id="' + eHeute.id + '">Anzeigen</button></div>';
   }
@@ -1269,6 +1388,25 @@ function bildUebersicht() {
   html += zeilenHtml(gruppieren(daten.eintraege, h), 0);
   html += '</div>';
   return html;
+}
+
+// Eingestellte Fahrtage der letzten 14 Tage ohne Eintrag, je mit "Nachtragen" und "Keine Fahrt"
+function lueckenHinweis(h) {
+  const tage = fehlendeFahrtage(h);
+  if (!tage.length) return "";
+  const kurz = d => wochentag(d) + " " + kurzDatum(d);
+  return '<div class="hinweis info"><strong>' + (tage.length === 1 ? "1 Fahrtag" : tage.length + " Fahrtage") + ' ohne Eintrag:</strong> ' +
+    tage.map(kurz).join(", ") +
+    tage.map(d => '<div class="luecke"><span>' + kurz(d) + '</span>' +
+      '<button type="button" data-action="nachtragen" data-datum="' + d + '">Nachtragen</button>' +
+      '<button type="button" data-action="keine-fahrt" data-datum="' + d + '">Keine Fahrt</button></div>').join("") +
+    '</div>';
+}
+// "Keine Fahrt": Eintrag mit 0 km mit einem Tipper (mit "Rückgängig")
+function keineFahrt(datum) {
+  if (!istGueltigesDatum(datum) || eintragAm(datum)) return;
+  mitRueckgaengig(() => daten.eintraege.push({ id: neueId(), datum, km: 0, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }),
+    "Keine Fahrt am " + wochentag(datum) + " " + kurzDatum(datum));
 }
 
 function kachel(titel, km) {
@@ -1384,13 +1522,14 @@ function zeilenHtml(zeilen, tiefe) {
 function eintragsZeile(e, einzug) {
   const vorStart = daten.fahrrad && e.datum < daten.fahrrad.startdatum;
   const unten = [e.vorlage, e.notiz].filter(Boolean).map(esc).join(" · ");
-  return '<div class="zeile">' +
+  const keine = e.km === 0;
+  return '<div class="zeile' + (keine ? " keine-fahrt" : "") + '">' +
     '<button type="button" class="inhalt" data-action="eintrag-ansehen" data-id="' + e.id + '"' + einzug + '>' +
     '<div class="text"><div>' + wochentag(e.datum) + ', ' + datumText(e.datum) +
     (e.typ === "woche" ? '<span class="abzeichen">Woche</span>' : "") + '</div>' +
     (unten ? '<div class="klein">' + unten + '</div>' : "") +
     (vorStart ? '<div class="klein">vor dem Startdatum – zählt nicht zum Kilometerstand</div>' : "") +
-    '</div><span class="zahl" style="padding-right:16px">' + kmText(e.km) + ' km</span></button>' +
+    '</div><span class="zahl" style="padding-right:16px">' + (keine ? "keine Fahrt" : kmText(e.km) + ' km') + '</span></button>' +
     '</div>';
 }
 
@@ -1412,9 +1551,10 @@ function eintragAnsicht(id, hinweis) {
     (hinweis ? '<div class="hinweis info">' + esc(hinweis) + '</div>' : "") +
     detailListe([
       ["Datum", wochentag(e.datum) + ", " + datumText(e.datum)],
-      ["Kilometer", kmText(e.km) + " km"],
+      ["Kilometer", kmText(e.km) + " km" + (e.km === 0 ? " (keine Fahrt)" : "")],
       ["Art", e.typ === "woche" ? "Importierte Wochensumme (Datum = Montag bzw. erster Fahrtag der Woche)" : "Tages-Eintrag"],
       ["Vorlage", esc(e.vorlage || "")],
+      ["Arbeitsweg", e.arbeitsweg ? "ja" : ""],
       ["Notiz", esc(e.notiz)],
       ["Kilometerstand am Ende des Tages", vorStart ? "vor dem Startdatum – zählt nicht zum Kilometerstand" : stand === null ? "" : kmText(stand) + " km"]
     ]) +
@@ -1433,7 +1573,7 @@ function eintragNeu(vorgabe) {
   if (vorhanden) {
     eintragAnsicht(vorhanden.id, "Für den " + datumText(datum) + " gibt es bereits einen Eintrag. Mit „Ändern“ kannst du ihn bearbeiten.");
   } else {
-    eintragsFormular({ id: null, datum, km: vorgabe.km ?? null, vorlage: vorgabe.vorlage || null, notiz: "", typ: "tag" }, "");
+    eintragsFormular({ id: null, datum, km: vorgabe.km ?? null, vorlage: vorgabe.vorlage || null, notiz: "", typ: "tag", arbeitsweg: !!vorgabe.arbeitsweg }, "");
   }
 }
 
@@ -1462,6 +1602,8 @@ function eintragsFormular(e, hinweis) {
     '<div class="feldhinweis warn" id="f-datum-hinweis"></div>' +
     '<label for="f-vorlage">Vorlage (optional)</label>' +
     '<select id="f-vorlage" data-change="eintrag-vorlage">' + optionen + '</select>' +
+    (e.typ === "tag" ? '<label class="haken"><input type="checkbox" id="f-arbeitsweg"' + (e.arbeitsweg ? " checked" : "") + '>' +
+      '<span>Arbeitsweg <span class="klein">(Fahrt zur Arbeit)</span></span></label>' : "") +
     '<label for="f-km">Kilometer</label>' +
     '<input type="text" id="f-km" inputmode="decimal" autocomplete="off" placeholder="z. B. 12,5" value="' + kmFeld(e.km) + '">' +
     '<label for="f-notiz">Notiz (optional)</label>' +
@@ -1497,7 +1639,11 @@ function eintragDatumGeaendert() {
 
 function eintragVorlageGeaendert() {
   const v = daten.vorlagen.find(v => v.id === wert("f-vorlage"));
-  if (v) document.getElementById("f-km").value = kmFeld(v.km);
+  if (v) {
+    document.getElementById("f-km").value = kmFeld(v.km);
+    const aw = document.getElementById("f-arbeitsweg");
+    if (aw) aw.checked = v.arbeitsweg;
+  }
 }
 
 async function eintragSpeichern() {
@@ -1526,12 +1672,14 @@ async function eintragSpeichern() {
   }
 
   const notiz = wert("f-notiz").trim();
+  // Das Merkmal "Arbeitsweg" kommt wie km aus der Vorlage und lässt sich ändern
+  const aw = document.getElementById("f-arbeitsweg");
   if (formEintrag.id) {
     const e = daten.eintraege.find(e => e.id === formEintrag.id);
     Object.assign(e, { datum, km, vorlage, notiz });
+    if (aw) e.arbeitsweg = aw.checked;
   } else {
-    // Das Merkmal "Arbeitsweg" wird wie Name und km aus der Vorlage übernommen
-    daten.eintraege.push({ id: neueId(), datum, km, vorlage, notiz, typ: "tag", arbeitsweg: !!(gewaehlt && gewaehlt.arbeitsweg) });
+    daten.eintraege.push({ id: neueId(), datum, km, vorlage, notiz, typ: "tag", arbeitsweg: !!(aw && aw.checked) });
   }
   if (speichern()) {
     fensterSchliessen();
@@ -1545,7 +1693,7 @@ async function eintragLoeschen(id) {
   if (!e) return;
   const ok = await frage("Eintrag vom " + datumText(e.datum) + " (" + kmText(e.km) + " km) wirklich löschen?", "Löschen", "Abbrechen", true);
   if (!ok) return;
-  loeschenMitRueckgaengig(() => { daten.eintraege = daten.eintraege.filter(x => x.id !== id); }, "Eintrag gelöscht");
+  mitRueckgaengig(() => { daten.eintraege = daten.eintraege.filter(x => x.id !== id); }, "Eintrag gelöscht");
 }
 
 /* ---------- Wartung ---------- */
@@ -1818,7 +1966,7 @@ async function protokollLoeschen(id) {
       " wieder auf <strong>offen</strong> gesetzt:<br>" + verknuepft.map(m => "• " + esc(m.beschreibung)).join("<br>")
     : "";
   if (!await frage("Wartung „" + esc(artName(p.wartungsartId)) + "“ vom " + datumText(p.datum) + " wirklich löschen?" + zusatz, "Löschen", "Abbrechen", true)) return;
-  loeschenMitRueckgaengig(() => {
+  mitRueckgaengig(() => {
     verknuepft.forEach(mangelWiederOeffnen);
     daten.wartungsprotokoll = daten.wartungsprotokoll.filter(x => x.id !== id);
   }, "Wartung gelöscht");
@@ -1892,7 +2040,7 @@ async function mangelLoeschen(id) {
   const m = daten.maengel.find(m => m.id === id);
   if (!m) return;
   if (!await frage("Mangel „" + esc(m.beschreibung) + "“ wirklich löschen?", "Löschen", "Abbrechen", true)) return;
-  loeschenMitRueckgaengig(() => { daten.maengel = daten.maengel.filter(x => x.id !== id); }, "Mangel gelöscht");
+  mitRueckgaengig(() => { daten.maengel = daten.maengel.filter(x => x.id !== id); }, "Mangel gelöscht");
 }
 
 // Wartungsarten
@@ -1966,15 +2114,115 @@ async function artLoeschen(id) {
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 
+/* ---------- Statistik ---------- */
+// Angetippter Monat im Diagramm (0 = Januar; null = laufender Monat) und Tabellenansicht
+let statistikMonat = null;
+let statistikTabelleOffen = false;
+const MONATE_KURZ = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+
+function bildStatistik() {
+  const h = heute();
+  const jahr = Number(h.slice(0, 4));
+  let html = '<h2 style="margin-top:8px">km pro Monat</h2><div class="karte">' +
+    monatsDiagramm(jahr, h, statistikMonat ?? Number(h.slice(5, 7)) - 1) + '</div>';
+
+  const k = jahresKennzahlen(h);
+  html += '<h2>Kennzahlen</h2>';
+  if (!k.jahre.length) return html + '<div class="liste"><div class="leer">Noch keine Einträge.</div></div>';
+  const fahrtage = daten.einstellungen.fahrtage;
+  const zeile = (titel, z, klasse) => '<tr' + (klasse ? ' class="' + klasse + '"' : "") + '><td>' + titel + '</td>' +
+    '<td>' + kmText(Math.round(z.km)) + '</td><td>' + z.radtage + '</td>' +
+    '<td>' + (z.schnitt === null ? "–" : kmText(Math.round(z.schnitt * 10) / 10)) + '</td>' +
+    '<td>' + z.arbeitstage + '</td><td>' + (fahrtage.length ? z.serie : "–") + '</td></tr>';
+  html += '<div class="karte"><table class="tabelle"><thead><tr><th>Jahr</th><th>km</th><th>Rad&shy;tage</th><th>Ø km</th>' +
+    '<th>Arbeits&shy;tage</th><th>Serie</th></tr></thead><tbody>' +
+    k.jahre.map(z => zeile(String(z.jahr), z)).join("") +
+    (k.jahre.length > 1 ? zeile("Gesamt", k.gesamt, "summe-zeile") : "") + '</tbody></table>' +
+    '<p class="klein"><strong>Radtage:</strong> Tage mit mehr als 0 km. <strong>Ø km:</strong> Durchschnitt pro Radtag. ' +
+    '<strong>Arbeitstage:</strong> Radtage mit dem Merkmal „Arbeitsweg“. <strong>Serie:</strong> längste Folge aufeinanderfolgender Fahrtage (' +
+    (fahrtage.length ? fahrtage.map(t => WOCHENTAGE[t % 7]).join(", ") : "keine eingestellt") +
+    ') mit Fahrt; andere Wochentage unterbrechen sie nicht.<br>Radtage, Ø km, Arbeitstage und Serie ohne Wochensummen.</p>' +
+    k.jahre.filter(z => z.wochensummen).map(z => '<p class="klein">' + z.jahr + ': ' +
+      (z.wochensummen === 1 ? "1 Wochensumme" : z.wochensummen + " Wochensummen") + ' (' + kmText(z.wochenKm) +
+      ' km) in „km“ enthalten, aber nicht als Radtage gezählt.</p>').join("") +
+    '</div>';
+  return html;
+}
+
+// Säulendiagramm (SVG): km pro Monat im Jahr "jahr" neben dem Vorjahr. Im
+// laufenden Jahr bleiben die kommenden Monate leer. Antippen eines Monats
+// zeigt seine Werte; die Tabelle darunter enthält alle Werte.
+function monatsDiagramm(jahr, h, gewaehlt) {
+  const akt = monatsSummen(jahr), vor = monatsSummen(jahr - 1);
+  const bis = h.slice(0, 4) === String(jahr) ? Number(h.slice(5, 7)) : 12;
+  const werte = [...vor, ...akt.slice(0, bis)];
+  const legende = '<div class="legende"><span><span class="farbe jahr"></span>' + jahr + '</span>' +
+    '<span><span class="farbe vorjahr"></span>' + (jahr - 1) + '</span></div>';
+  if (!werte.some(v => v > 0)) return legende + '<div class="leer">Für ' + (jahr - 1) + ' und ' + jahr + ' gibt es noch keine Einträge.</div>';
+
+  // Achse in runden Schritten (1, 2, 5 × 10ⁿ), etwa drei Gitterlinien
+  const max = Math.max(...werte);
+  const roh = max / 3, p = Math.pow(10, Math.floor(Math.log10(roh)));
+  const schritt = [1, 2, 5, 10].map(f => f * p).find(s => s >= roh);
+  const oben = Math.ceil(max / schritt) * schritt;
+  // Maße im Koordinatensystem des SVG (wird auf die Kartenbreite skaliert)
+  const B = 340, H = 190, L = 34, R = 2, O = 8, U = 22;
+  const spalte = (B - L - R) / 12, balken = 9, luecke = 2;
+  const r1 = n => Math.round(n * 10) / 10;
+  const y = km => r1(O + (H - O - U) * (1 - km / oben));
+  // Säule mit 4px-Rundung oben, gerade an der Grundlinie
+  const saeule = (x, km, klasse) => {
+    if (!(km > 0)) return "";
+    const y0 = y(0), y1 = y(km), r = Math.min(4, y0 - y1);
+    return '<path class="' + klasse + '" d="M' + r1(x) + ',' + y0 + 'V' + r1(y1 + r) + 'Q' + r1(x) + ',' + y1 + ' ' + r1(x + r) + ',' + y1 +
+      'H' + r1(x + balken - r) + 'Q' + r1(x + balken) + ',' + y1 + ' ' + r1(x + balken) + ',' + r1(y1 + r) + 'V' + y0 + 'Z"/>';
+  };
+
+  let svg = '<svg class="diagramm" viewBox="0 0 ' + B + ' ' + H + '" role="img" aria-label="km pro Monat ' + jahr + ' und ' + (jahr - 1) + '">';
+  svg += '<rect class="gewaehlt" x="' + r1(L + gewaehlt * spalte) + '" y="0" width="' + r1(spalte) + '" height="' + (H - U + 4) + '" rx="4"/>';
+  for (let v = 0; v <= oben; v += schritt) {
+    svg += '<line class="gitter" x1="' + L + '" x2="' + (B - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>' +
+      '<text x="' + (L - 5) + '" y="' + r1(y(v) + 4) + '" text-anchor="end">' + kmText(v) + '</text>';
+  }
+  for (let i = 0; i < 12; i++) {
+    const mitte = L + (i + 0.5) * spalte;
+    svg += saeule(mitte - luecke / 2 - balken, vor[i], "vorjahr") + (i < bis ? saeule(mitte + luecke / 2, akt[i], "jahr") : "") +
+      '<text x="' + r1(mitte) + '" y="' + (H - 6) + '" text-anchor="middle"' + (i === gewaehlt ? ' style="fill:var(--text);font-weight:700"' : "") + '>' +
+      MONATE_KURZ[i] + '</text>' +
+      '<rect class="treffer" x="' + r1(L + i * spalte) + '" y="0" width="' + r1(spalte) + '" height="' + H + '" data-action="statistik-monat" data-monat="' + i + '"' +
+      ' role="button" aria-label="' + MONATE[i] + '"/>';
+  }
+  svg += '</svg>';
+
+  // Werte des angetippten Monats: Wert vorn, Jahr dahinter
+  const wert = (km, j, klasse) => '<span class="farbe ' + klasse + '"></span> <strong>' + (km === null ? "–" : kmText(km) + " km") + '</strong> ' + j;
+  const jetzt = gewaehlt < bis ? akt[gewaehlt] : null;
+  const diff = jetzt === null ? "" : runden(jetzt - vor[gewaehlt]);
+  const monatswert = '<div class="monatswert"><strong>' + MONATE[gewaehlt] + '</strong><br>' +
+    wert(jetzt, jahr, "jahr") + ' · ' + wert(vor[gewaehlt], jahr - 1, "vorjahr") +
+    (diff === "" ? "" : ' <span class="klein">(' + (diff > 0 ? "+" : diff < 0 ? "−" : "±") + kmText(Math.abs(diff)) + ' km)</span>') + '</div>';
+
+  // Dieselben Werte als Tabelle (aufklappbar)
+  const summe = liste => runden(liste.reduce((s, v) => s + v, 0));
+  const tabelle = '<button type="button" class="aufklappen" data-action="statistik-tabelle" aria-expanded="' + statistikTabelleOffen + '">' +
+    CHEVRON + 'Werte als Tabelle</button>' +
+    (statistikTabelleOffen ? '<table class="tabelle"><thead><tr><th>Monat</th><th>' + jahr + '</th><th>' + (jahr - 1) + '</th></tr></thead><tbody>' +
+      MONATE.map((m, i) => '<tr><td>' + m + '</td><td>' + (i < bis ? kmText(akt[i]) : "–") + '</td><td>' + kmText(vor[i]) + '</td></tr>').join("") +
+      '<tr class="summe-zeile"><td>Summe</td><td>' + kmText(summe(akt)) + '</td><td>' + kmText(summe(vor)) + '</td></tr></tbody></table>' : "");
+  return legende + svg + monatswert + tabelle;
+}
+
 /* ---------- Vorlagen ---------- */
 function bildVorlagen() {
   let html = '<p class="klein">Vorlagen sind deine Standard-Strecken. Die Kilometer gelten für den ganzen Tag. ' +
-    'Änderungen an Vorlagen verändern bereits erfasste Einträge nicht.</p><div class="liste">';
+    'Änderungen an Vorlagen verändern bereits erfasste Einträge nicht; nur beim Merkmal „Arbeitsweg“ fragt die App, ob sie bisherige Einträge anpassen soll.</p>' +
+    '<div class="liste">';
   if (!daten.vorlagen.length) html += '<div class="leer">Noch keine Vorlagen.</div>';
   daten.vorlagen.forEach((v, i) => {
     html += '<div class="zeile">' +
       '<button type="button" class="inhalt" data-action="vorlage-bearbeiten" data-id="' + v.id + '">' +
-      '<div class="text"><div>' + esc(v.name) + '</div></div><span class="zahl">' + kmText(v.km) + ' km</span></button>' +
+      '<div class="text"><div>' + esc(v.name) + '</div>' + (v.arbeitsweg ? '<div class="klein">Arbeitsweg</div>' : "") + '</div>' +
+      '<span class="zahl">' + kmText(v.km) + ' km</span></button>' +
       '<div class="pfeile">' +
       '<button type="button" class="symbol" data-action="vorlage-hoch" data-id="' + v.id + '" aria-label="Nach oben"' + (i === 0 ? " disabled" : "") + '>▲</button>' +
       '<button type="button" class="symbol" data-action="vorlage-runter" data-id="' + v.id + '" aria-label="Nach unten"' + (i === daten.vorlagen.length - 1 ? " disabled" : "") + '>▼</button>' +
@@ -1984,30 +2232,50 @@ function bildVorlagen() {
   return html;
 }
 function vorlageFormular(id) {
-  const v = id ? daten.vorlagen.find(v => v.id === id) : { name: "", km: null };
+  const v = id ? daten.vorlagen.find(v => v.id === id) : { name: "", km: null, arbeitsweg: false };
   fensterOeffnen(
     '<h2>' + (id ? "Vorlage bearbeiten" : "Neue Vorlage") + '</h2>' +
     '<label for="v-name">Name</label><input type="text" id="v-name" placeholder="z. B. Arbeit hin und zurück" value="' + esc(v.name) + '">' +
     '<label for="v-km">Kilometer (Gesamt für den Tag)</label>' +
     '<input type="text" id="v-km" inputmode="decimal" placeholder="z. B. 12,5" value="' + kmFeld(v.km) + '">' +
+    '<label class="haken"><input type="checkbox" id="v-arbeitsweg"' + (v.arbeitsweg ? " checked" : "") + '>' +
+    '<span>Arbeitsweg<br><span class="klein">Fahrten mit dieser Vorlage zählen in der Statistik als Arbeitstage mit dem Rad.</span></span></label>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="vorlage-speichern" data-id="' + (id || "") + '">Speichern</button></div>' +
     (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="vorlage-loeschen" data-id="' + id + '">Vorlage löschen</button></div>' : "")
   );
 }
-function vorlageSpeichern(id) {
+async function vorlageSpeichern(id) {
   const name = wert("v-name").trim();
   const km = kmLesen(wert("v-km"));
+  const arbeitsweg = document.getElementById("v-arbeitsweg").checked;
   if (!name) { alert("Bitte einen Namen eingeben."); return; }
   if (km === null) { alert("Bitte die Kilometer als Zahl eingeben, z. B. 12,5."); return; }
-  if (id) Object.assign(daten.vorlagen.find(v => v.id === id), { name, km });
-  else daten.vorlagen.push({ id: neueId(), name, km, arbeitsweg: false });
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
+  // Merkmal "Arbeitsweg" geändert: Auch bisherige Einträge mit dieser Vorlage
+  // (gleicher Name wie bisher) anpassen? Ohne Zustimmung bleiben sie unverändert.
+  const alt = id ? daten.vorlagen.find(v => v.id === id) : null;
+  const bisherName = alt ? alt.name : name;
+  const betroffen = (alt ? alt.arbeitsweg !== arbeitsweg : arbeitsweg)
+    ? daten.eintraege.filter(e => e.vorlage === bisherName && e.arbeitsweg !== arbeitsweg) : [];
+  let auchBisherige = false;
+  if (betroffen.length) {
+    const n = betroffen.length;
+    auchBisherige = await frage((n === 1 ? "Den bisherigen Eintrag" : "Die " + n + " bisherigen Einträge") + " mit der Vorlage „" + esc(bisherName) + "“ " +
+      (arbeitsweg ? "ebenfalls als Arbeitsweg zählen?" : "ebenfalls nicht mehr als Arbeitsweg zählen?"),
+      n === 1 ? "Ja" : "Ja, alle " + n, "Nein, nur neue Einträge");
+  }
+  if (alt) Object.assign(alt, { name, km, arbeitsweg });
+  else daten.vorlagen.push({ id: neueId(), name, km, arbeitsweg });
+  if (auchBisherige) betroffen.forEach(e => { e.arbeitsweg = arbeitsweg; });
+  if (speichern()) {
+    fensterSchliessen(); zeichnen();
+    meldung(auchBisherige ? "Vorlage gespeichert, " + (betroffen.length === 1 ? "1 Eintrag" : betroffen.length + " Einträge") + " angepasst" : "Vorlage gespeichert");
+  }
 }
 async function vorlageLoeschen(id) {
   const v = daten.vorlagen.find(v => v.id === id);
   if (!await frage("Vorlage „" + esc(v.name) + "“ wirklich löschen? Bereits erfasste Einträge bleiben unverändert.", "Löschen", "Abbrechen", true)) return;
-  loeschenMitRueckgaengig(() => { daten.vorlagen = daten.vorlagen.filter(x => x.id !== id); }, "Vorlage gelöscht");
+  mitRueckgaengig(() => { daten.vorlagen = daten.vorlagen.filter(x => x.id !== id); }, "Vorlage gelöscht");
 }
 function vorlageVerschieben(id, richtung) {
   const i = daten.vorlagen.findIndex(v => v.id === id);
@@ -2038,6 +2306,14 @@ function bildEinstellungen() {
   }
   html += '</div>';
 
+  // Übliche Fahrtage (1 = Montag … 7 = Sonntag)
+  const fahrtage = daten.einstellungen.fahrtage;
+  html += '<h2>Fahrtage</h2><div class="karte"><div class="fahrtage">' +
+    [1, 2, 3, 4, 5, 6, 7].map(t => '<label class="fahrtag"><input type="checkbox" value="' + t + '" data-change="fahrtag"' +
+      (fahrtage.includes(t) ? " checked" : "") + '><span>' + WOCHENTAGE[t % 7] + '</span></label>').join("") +
+    '</div><div class="feldhinweis">Deine üblichen Fahrtage. Die Übersicht weist auf Fahrtage der letzten 14 Tage ohne Eintrag hin, ' +
+    'die Statistik zählt damit die längste Serie.</div></div>';
+
   // Jahresziele
   const ziele = [...daten.einstellungen.jahresziele].sort((a, b) => b.jahr - a.jahr);
   html += '<h2>Jahresziele</h2><div class="liste">';
@@ -2063,6 +2339,12 @@ function bildEinstellungen() {
     '<h2>Über Rad-km</h2><div class="karte">' +
     detailListe([["App-Version", APP_VERSION], ["Datenversion", String(DATEN_VERSION)]]) + '</div>';
   return html;
+}
+
+// Fahrtage geändert: sofort speichern (aufsteigend sortiert)
+function fahrtageGeaendert() {
+  daten.einstellungen.fahrtage = [...document.querySelectorAll('input[data-change="fahrtag"]:checked')].map(el => Number(el.value)).sort((a, b) => a - b);
+  if (speichern()) meldung("Fahrtage gespeichert");
 }
 
 // Jahresziel anlegen oder ändern ("jahr" = vorhandenes Ziel bzw. Vorschlag für ein neues)
@@ -2283,11 +2565,16 @@ let sicherungsErgebnis = null;
 // Bereits geprüfte Sicherung, falls das Teilen-Menü einen zweiten Tipper braucht
 let geprueftZumTeilen = null;
 
+// "rad-km-2026-10-25-1403.json" – mit Uhrzeit, damit mehrere Sicherungen am selben Tag eindeutig sind
+function sicherungsDateiname(jetzt) {
+  return "rad-km-" + isoAusDate(jetzt) + "-" + zweistellig(jetzt.getHours()) + zweistellig(jetzt.getMinutes()) + ".json";
+}
+
 // Erzeugt die Exportdatei und prüft sie, bevor sie geteilt wird: Die Datei
 // wird wieder eingelesen, mit den Import-Regeln geprüft und mit dem aktuellen
 // Stand verglichen. Wirft einen Fehler, wenn etwas nicht stimmt.
 async function sicherungVorbereiten() {
-  const dateiname = "rad-km-" + heute() + ".json";
+  const dateiname = sicherungsDateiname(new Date());
   const inhalt = exportInhalt();
   let datei;
   try { datei = new File([inhalt], dateiname, { type: "application/json" }); }
@@ -2330,7 +2617,8 @@ async function jetztSichern() {
 async function sicherungTeilen(s) {
   if (navigator.canShare && navigator.canShare({ files: [s.datei] })) {
     try {
-      await navigator.share({ files: [s.datei], title: s.dateiname });
+      // Nur die Datei: Mit Titel oder Text legt "In Dateien sichern" zusätzlich eine Textdatei an
+      await navigator.share({ files: [s.datei] });
     } catch (err) {
       if (err && err.name === "AbortError") { meldung("Sicherung abgebrochen"); return; }
       // Das iPhone öffnet das Teilen-Menü nur direkt nach einem Tipper
@@ -2464,9 +2752,11 @@ const AKTIONEN = {
 
   "vorlage-erfassen": el => {
     const v = daten.vorlagen.find(v => v.id === el.dataset.id);
-    eintragNeu({ datum: heute(), km: v.km, vorlage: v.name });
+    eintragNeu({ datum: heute(), km: v.km, vorlage: v.name, arbeitsweg: v.arbeitsweg });
   },
   "eintrag-neu": () => eintragNeu({ datum: heute() }),
+  "nachtragen": el => eintragNeu({ datum: el.dataset.datum }),
+  "keine-fahrt": el => keineFahrt(el.dataset.datum),
   "eintrag-ansehen": el => eintragAnsicht(el.dataset.id),
   "eintrag-aendern": el => eintragsFormular(daten.eintraege.find(e => e.id === el.dataset.id), ""),
   "eintrag-speichern": () => eintragSpeichern(),
@@ -2506,8 +2796,11 @@ const AKTIONEN = {
   "jahresziel-speichern": el => jahreszielSpeichern(el.dataset.jahr ? Number(el.dataset.jahr) : null),
   "jahresziel-loeschen": el => jahreszielLoeschen(Number(el.dataset.jahr)),
   "prognose": () => prognoseFenster(),
+  "statistik-monat": el => { statistikMonat = Number(el.dataset.monat); zeichnen(); },
+  "statistik-tabelle": () => { statistikTabelleOffen = !statistikTabelleOffen; zeichnen(); },
 
   "rueckgaengig": () => rueckgaengig(),
+  "neu-laden": () => neuLaden(),
   "sichern": () => jetztSichern(),
   "sicherung-teilen": () => {
     const s = geprueftZumTeilen;
@@ -2524,6 +2817,7 @@ const AENDERUNGEN = {
   "protokoll-datum": () => protokollDatumGeaendert(),
   "mangel-status": () => mangelStatusGeaendert(),
   "art-fenster": () => artFensterGeaendert(),
+  "fahrtag": () => fahrtageGeaendert(),
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
@@ -2550,13 +2844,57 @@ document.getElementById("pruefdatei").addEventListener("change", ev => pruefDate
 fenster.addEventListener("click", ev => { if (ev.target === fenster) fensterSchliessen(); });
 
 // Beim Zurückkehren in die App (z. B. am nächsten Tag) "heute" neu berechnen
-document.addEventListener("visibilitychange", () => { if (!document.hidden && !fenster.open) zeichnen(); });
+// und nach einer neuen Version fragen
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  if (!fenster.open) zeichnen();
+  updatePruefen();
+});
 
 /* =====================================================================
-   9. START
+   9. OFFLINE UND NEUE VERSIONEN
+   Der Service Worker (sw.js) hält die App für den Start ohne Netz bereit und
+   meldet neue Versionen. Er speichert nur die App, nie die Daten.
+   ===================================================================== */
+
+let neueVersion = false;
+let letzteUpdatePruefung = 0;
+const UPDATE_PRUEFEN_MS = 10 * 60 * 1000;
+const swVerfuegbar = () => !TESTMODUS && "serviceWorker" in navigator;
+
+function serviceWorkerStarten() {
+  if (!swVerfuegbar()) return;
+  navigator.serviceWorker.addEventListener("message", ev => swNachricht(ev.data));
+  navigator.serviceWorker.register("sw.js").then(() => updatePruefen(), () => {});
+}
+// Fragt den Service Worker nach einer neuen Version (beim Start und beim
+// Zurückkehren in die App, höchstens alle 10 Minuten)
+function updatePruefen() {
+  if (!swVerfuegbar() || Date.now() - letzteUpdatePruefung < UPDATE_PRUEFEN_MS) return;
+  letzteUpdatePruefung = Date.now();
+  navigator.serviceWorker.ready.then(reg => { if (reg.active) reg.active.postMessage({ typ: "update-pruefen" }); });
+}
+function swNachricht(nachricht) {
+  const typ = nachricht && nachricht.typ;
+  if (typ === "neue-version" && !neueVersion) { neueVersion = true; zeichnen(); }
+  if (typ === "aktiviert") location.reload();
+}
+// "Neu laden": neue Version übernehmen, dann neu laden. Alle Daten sind
+// schon gespeichert, der localStorage bleibt unverändert.
+function neuLaden() {
+  if (!swVerfuegbar()) { location.reload(); return; }
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.active) reg.active.postMessage({ typ: "aktivieren" });
+    setTimeout(() => location.reload(), 3000); // falls keine Antwort kommt
+  });
+}
+
+/* =====================================================================
+   10. START
    ===================================================================== */
 laden();
 zeichnen();
+serviceWorkerStarten();
 </script>
 </body>
 </html>
