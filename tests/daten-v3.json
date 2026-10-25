@@ -1,0 +1,45 @@
+{
+  "version": 3,
+  "kurzinfo": { "zeitpunkt": "2026-10-24T18:00:00.000Z", "appVersion": "3b", "eintraege": 6,
+                "kmSumme": 90.9, "kmStand": 1286.4, "wartungen": 2, "maengel": 2 },
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5,
+               "rahmennummer": "TST 0001", "beschreibung": "Grün, 28 Zoll\nNabenschaltung" },
+  "einstellungen": { "fahrtage": [1, 3, 5], "jahresziele": [{ "jahr": 2026, "km": 4000 }, { "jahr": 2027, "km": 4500.5 }] },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2, "arbeitsweg": true },
+    { "id": "v-einkauf", "name": "Einkauf", "km": 3.5, "arbeitsweg": false }
+  ],
+  "eintraege": [
+    { "id": "e-vorstart", "datum": "2025-02-20", "km": 5, "vorlage": null, "notiz": "vor dem Startdatum", "typ": "tag", "arbeitsweg": false },
+    { "id": "e-woche1", "datum": "2025-03-03", "km": 40, "vorlage": null, "notiz": "aus Excel", "typ": "woche", "arbeitsweg": false },
+    { "id": "e-tag1", "datum": "2026-10-19", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true },
+    { "id": "e-tag2", "datum": "2026-10-21", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true },
+    { "id": "e-null", "datum": "2026-10-22", "km": 0, "vorlage": null, "notiz": "Regen", "typ": "tag", "arbeitsweg": false },
+    { "id": "e-tag3", "datum": "2026-10-23", "km": 17.5, "vorlage": "Arbeit hin und zurück", "notiz": "Umweg über den Markt 🚲 <b>&</b> „Zitat“", "typ": "tag", "arbeitsweg": true }
+  ],
+  "wartungsarten": [
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027, "einmalig": false },
+    { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "erst", "name": "Erstinspektion", "intervallMonate": 3, "intervallKm": 300,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": true }
+  ],
+  "wartungsprotokoll": [
+    { "id": "p-1", "datum": "2025-10-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1300, "kmManuell": true, "notiz": "Bremsen eingestellt" },
+    { "id": "p-2", "datum": "2026-10-20", "wartungsartId": "reparatur", "werkstatt": "",
+      "kmStand": null, "kmManuell": false, "notiz": "Schlauch geflickt" }
+  ],
+  "termine": [
+    { "wartungsartId": "kleine-inspektion", "datum": "2027-03-15", "werkstatt": "Beispiel-Werkstatt" }
+  ],
+  "maengel": [
+    { "id": "m-1", "datum": "2025-10-01", "beschreibung": "Bremse quietscht", "status": "erledigt",
+      "erledigtAm": "2025-10-15", "protokollId": "p-1" },
+    { "id": "m-2", "datum": "2026-10-22", "beschreibung": "Licht hinten wackelt", "status": "offen",
+      "erledigtAm": null, "protokollId": null }
+  ]
+}

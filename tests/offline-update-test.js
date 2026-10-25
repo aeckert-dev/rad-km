@@ -2,8 +2,9 @@
 //
 // Spielt in einem echten Browser (Chromium über Playwright) durch, was auf dem
 // iPhone passiert: erster Start, Start ohne Netz, Veröffentlichung einer neuen
-// Version, Hinweis "Neue Version verfügbar", "Neu laden" – und prüft dabei
-// jedes Mal, dass die Daten im localStorage unverändert bleiben.
+// Version, Hinweis "Neue Version verfügbar", "Neu laden", Wetter mit und ohne
+// Netz – und prüft dabei jedes Mal, dass die Daten im localStorage unverändert
+// bleiben. Die Wetterdienste antworten mit den Aufzeichnungen aus tests/.
 //
 // Aufruf (benötigt Node.js und Playwright):  node tests/offline-update-test.js
 //
@@ -52,6 +53,9 @@ function pruefe(text, ok, detail) {
 }
 const warten = ms => new Promise(r => setTimeout(r, ms));
 
+// App-Version aus index.html (für den Test einer neuen Version wird sie verändert)
+const VERSION = /const APP_VERSION = "([^"]+)";/.exec(fs.readFileSync(path.join(REPO, "index.html"), "utf8"))[1];
+
 const BEISPIEL = JSON.stringify({
   version: 3,
   fahrrad: { name: "Test-Rad", startdatum: "2026-01-01", startKm: 100, rahmennummer: "", beschreibung: "" },
@@ -96,33 +100,33 @@ const BEISPIEL = JSON.stringify({
     await page.reload();
     await nachAntwort();
     pruefe("Ohne Netz: App startet aus dem Zwischenspeicher, Daten unverändert",
-      (await version()) === "3b" && (await kmStand()) === "114,2 km" && (await daten()) === d0 && !(await hinweis()));
+      (await version()) === VERSION && (await kmStand()) === "114,2 km" && (await daten()) === d0 && !(await hinweis()));
     await serverStarten(port);
 
     // 3. Neue Version veröffentlichen
     const appDatei = path.join(ORDNER, "index.html");
-    fs.writeFileSync(appDatei, fs.readFileSync(appDatei, "utf8").replace('const APP_VERSION = "3b";', 'const APP_VERSION = "3b-neu";'));
+    fs.writeFileSync(appDatei, fs.readFileSync(appDatei, "utf8").replace('const APP_VERSION = "' + VERSION + '";', 'const APP_VERSION = "' + VERSION + '-neu";'));
     await page.reload();
     await page.waitForSelector('[data-action="neu-laden"]', { timeout: 5000 }).catch(() => {});
     pruefe("Neue Version auf dem Server: die App läuft weiter in der bisherigen Version und zeigt „Neue Version verfügbar“",
-      (await version()) === "3b" && (await hinweis()) && (await page.textContent("#inhalt")).includes("Neue Version verfügbar"));
+      (await version()) === VERSION && (await hinweis()) && (await page.textContent("#inhalt")).includes("Neue Version verfügbar"));
     pruefe("… die Daten sind unverändert", (await daten()) === d0);
     await page.reload();
     await nachAntwort();
-    pruefe("Erneutes Öffnen ohne „Neu laden“: weiter die bisherige Version, Hinweis wieder da", (await version()) === "3b" && (await hinweis()));
+    pruefe("Erneutes Öffnen ohne „Neu laden“: weiter die bisherige Version, Hinweis wieder da", (await version()) === VERSION && (await hinweis()));
 
     // 4. "Neu laden"
     await Promise.all([page.waitForNavigation(), page.click('[data-action="neu-laden"]')]);
     await nachAntwort();
-    pruefe("„Neu laden“: neue Version läuft, kein Hinweis mehr", (await version()) === "3b-neu" && !(await hinweis()));
+    pruefe("„Neu laden“: neue Version läuft, kein Hinweis mehr", (await version()) === VERSION + "-neu" && !(await hinweis()));
     pruefe("… Daten unverändert und angezeigt", (await daten()) === d0 && (await kmStand()) === "114,2 km");
     await page.reload();
     await nachAntwort();
-    pruefe("Nächster Start: neue Version, kein Hinweis", (await version()) === "3b-neu" && !(await hinweis()));
+    pruefe("Nächster Start: neue Version, kein Hinweis", (await version()) === VERSION + "-neu" && !(await hinweis()));
     await serverStoppen();
     await page.reload();
     await nachAntwort();
-    pruefe("Ohne Netz: die neue Version startet aus dem Zwischenspeicher", (await version()) === "3b-neu" && (await daten()) === d0);
+    pruefe("Ohne Netz: die neue Version startet aus dem Zwischenspeicher", (await version()) === VERSION + "-neu" && (await daten()) === d0);
     await serverStarten(port);
 
     // 5. Geänderter Service Worker: übernimmt, ohne App oder Daten anzutasten
@@ -137,7 +141,7 @@ const BEISPIEL = JSON.stringify({
     });
     await page.reload();
     await nachAntwort();
-    pruefe("Geänderter Service Worker wird aktiv; App-Version und Daten bleiben", neuerSw && (await version()) === "3b-neu" && (await daten()) === d0 && !(await hinweis()));
+    pruefe("Geänderter Service Worker wird aktiv; App-Version und Daten bleiben", neuerSw && (await version()) === VERSION + "-neu" && (await daten()) === d0 && !(await hinweis()));
 
     // 6. Die Testseite läuft unter dem aktiven Service Worker (index.html?test geht ans Netz)
     await page.goto(url + "tests/test.html");
@@ -145,6 +149,60 @@ const BEISPIEL = JSON.stringify({
     const titel = await page.title();
     pruefe("Testseite unter aktivem Service Worker: " + titel, titel.startsWith("OK"), await page.textContent("#ergebnis"));
     pruefe("… die Daten der App sind danach unverändert", (await daten()) === d0);
+
+    // 7. Wetter: Abruf beim Start (die Wetterdienste antworten mit den aufgezeichneten
+    //    Antworten aus tests/), danach ohne Netz: letzter Stand mit Zeitstempel, als
+    //    nicht aktuell gekennzeichnet. Die Daten der App bleiben dabei unverändert.
+    const aufnahme = n => JSON.parse(fs.readFileSync(path.join(REPO, "tests", n), "utf8"));
+    const om = aufnahme("wetter-open-meteo.json");
+    // Zeiten der Aufnahme um ganze Tage verschieben, sodass sie wie beim Abruf mit dem Vortag beginnen
+    const heute0 = new Date();
+    heute0.setHours(0, 0, 0, 0);
+    const tage = Math.round((heute0.getTime() / 1000 - om[0].minutely_15.time[0]) / 86400) - 1;
+    om.forEach(o => ["minutely_15", "hourly"].forEach(k => { o[k].time = o[k].time.map(t => t + tage * 86400); }));
+    let wetterNetz = true;
+    const wetterAbrufe = [];
+    await context.route(/^https:\/\/(api\.open-meteo\.com|maps\.dwd\.de|api\.brightsky\.dev)\//, route => {
+      const u = route.request().url();
+      wetterAbrufe.push(u);
+      if (!wetterNetz) return route.abort("internetdisconnected");
+      const antwort = u.includes("open-meteo") ? om : u.includes("Warngebiete") ? aufnahme("wetter-dwd-gebiet.json") : aufnahme("wetter-dwd-leer.json");
+      return route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(antwort) });
+    });
+    const MIT_ORTEN = JSON.stringify(Object.assign(JSON.parse(BEISPIEL), { version: 4, einstellungen: { fahrtage: [1, 2, 3, 4, 5, 6, 7], jahresziele: [],
+      wetter: { wohnort: { name: "Musterdorf", lat: 51, lon: 10 }, arbeitsort: { name: "Beispielstadt", lat: 51.1, lon: 10.2 } } } }));
+    await page.goto(url);
+    await page.evaluate(d => { localStorage.setItem("radkm-daten", d); localStorage.removeItem("radkm-wetter"); }, MIT_ORTEN);
+    await page.reload();
+    await page.waitForFunction(() => !!localStorage.getItem("radkm-wetter"), null, { timeout: 10000 }).catch(() => {});
+    await nachAntwort();
+    const d1 = await daten();
+    const kachel = () => page.evaluate(() => { const k = document.querySelector(".wetter-kachel"); return k ? k.textContent : ""; });
+    const gespeichert = await page.evaluate(() => JSON.parse(localStorage.getItem("radkm-wetter") || "null"));
+    pruefe("Wetter beim Start geladen (Open-Meteo und DWD), Kachel auf der Übersicht mit Ampel",
+      !!gespeichert && !!gespeichert.vorhersage && !!gespeichert.warnungen && gespeichert.warnungen.quelle === "dwd" && /grün|gelb|rot/.test(await kachel()),
+      "Abrufe: " + wetterAbrufe.length + ", Kachel: " + (await kachel()));
+    pruefe("… die Daten der App bleiben unverändert", d1 === MIT_ORTEN);
+    // Letzter Abruf vor drei Stunden, jetzt ohne Netz
+    await page.evaluate(() => {
+      const c = JSON.parse(localStorage.getItem("radkm-wetter"));
+      c.vorhersage.stand = c.warnungen.stand = Date.now() - 3 * 3600 * 1000;
+      localStorage.setItem("radkm-wetter", JSON.stringify(c));
+    });
+    wetterNetz = false;
+    await serverStoppen();
+    await page.reload();
+    await nachAntwort();
+    await page.click('nav [data-tab="wetter"]');
+    await nachAntwort();
+    const wetterText = await page.textContent("#inhalt");
+    const standUhr = await page.evaluate(() => uhrzeit(JSON.parse(localStorage.getItem("radkm-wetter")).vorhersage.stand) + " Uhr");
+    pruefe("Ohne Netz: der Reiter Wetter zeigt den letzten Stand (" + standUhr + "), deutlich als nicht aktuell gekennzeichnet",
+      wetterText.includes("Vorhersage nicht erreichbar") && wetterText.includes("Angezeigt wird der letzte Stand von") && wetterText.includes(standUhr) &&
+      wetterText.includes("nicht aktuell") && wetterText.includes("Amtliche Warnungen nicht erreichbar"), wetterText.slice(0, 500));
+    pruefe("… die Kachel auf der Übersicht ebenso", await page.evaluate(() => { aktiverTab = "uebersicht"; zeichnen(); return document.querySelector(".wetter-kachel").textContent.includes("Nicht aktuell"); }));
+    pruefe("… die Daten der App bleiben unverändert", (await daten()) === d1);
+    await serverStarten(port);
     pruefe("Keine Fehler in der Seite", seitenFehler.length === 0, seitenFehler.join("; "));
   } catch (e) {
     pruefe("Unerwarteter Fehler: " + e.message, false, e.stack);
