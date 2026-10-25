@@ -157,8 +157,19 @@ button:disabled { opacity: .4; }
 .zeile .pfeile { display: flex; }
 .leer { padding: 16px; color: var(--text2); text-align: center; }
 
-.zeile.gruppe .inhalt .pfeil { width: 14px; color: var(--text2); font-size: 13px; flex: none; }
 .zeile.gruppe .inhalt .titel { font-weight: 600; }
+/* Aufklapp-Pfeil: › zu, ⌄ (gedreht) offen; in der Textfarbe für guten Kontrast */
+.chevron {
+  width: 22px; height: 22px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2.75; stroke-linecap: round; stroke-linejoin: round;
+  color: var(--text); transition: transform .15s ease;
+}
+[aria-expanded="true"] > .chevron { transform: rotate(90deg); }
+
+/* Fortschritt zum Jahresziel; der Strich markiert das zeitanteilige Soll */
+.balken { position: relative; height: 12px; border-radius: 99px; background: var(--linie); margin: 8px 0; overflow: hidden; }
+.balken-ist { height: 100%; border-radius: 99px; background: var(--akzent); }
+.balken-soll { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: var(--text); }
 
 /* Detailansicht (nur lesen) */
 .details { margin: 0; }
@@ -233,16 +244,19 @@ nav button {
 nav button .ico { font-size: 22px; line-height: 1; }
 nav button.aktiv { color: var(--akzent); font-weight: 700; }
 
-/* Kurze Bestätigung unten ("Gespeichert") */
+/* Kurze Bestätigung unten ("Gespeichert"), nach dem Löschen mit "Rückgängig" */
 #toast {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom) + 76px);
+  width: max-content; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 12px;
   background: var(--text); color: var(--bg);
-  padding: 10px 18px; border-radius: 99px; font-weight: 600;
+  padding: 10px 18px; border-radius: 24px; font-weight: 600;
   opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20;
-  white-space: nowrap;
 }
 #toast.sichtbar { opacity: .95; }
+#toast.sichtbar.mit-knopf { opacity: 1; pointer-events: auto; padding-right: 8px; }
+#toast button { min-height: 40px; padding: 6px 14px; flex: none; background: var(--bg); color: var(--text); }
 </style>
 </head>
 <body>
@@ -259,8 +273,9 @@ nav button.aktiv { color: var(--akzent); font-weight: 700; }
 
 <dialog id="fenster"><div class="fensterinhalt" id="fensterinhalt"></div></dialog>
 <dialog id="frage"><div class="fensterinhalt" id="frageinhalt"></div></dialog>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"><span id="toast-text"></span><button type="button" id="toast-knopf" data-action="rueckgaengig" hidden>Rückgängig</button></div>
 <input type="file" id="importdatei" accept="application/json,.json" hidden>
+<input type="file" id="pruefdatei" accept="application/json,.json" hidden>
 
 <script>
 "use strict";
@@ -276,10 +291,18 @@ const TESTMODUS = new URLSearchParams(location.search).has("test");
 const SPEICHER_SCHLUESSEL = TESTMODUS ? "radkm-test-daten" : "radkm-daten";
 // Datum des letzten Exports (separat, damit ein Import es nicht verändert).
 const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzter-export";
+// Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
+const APP_VERSION = "3a";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 2;
+const DATEN_VERSION = 3;
 const EXPORT_ERINNERUNG_TAGE = 30;
+// Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
+const PROGNOSE_MIN_TAGE = 7;
+// So lange (ms) wird nach dem Löschen "Rückgängig" angeboten
+const RUECKGAENGIG_MS = 6000;
+// Übliche Fahrtage bei einer Neuinstallation: 1 = Montag … 7 = Sonntag
+const STANDARD_FAHRTAGE = [1, 2, 5];
 
 /* =====================================================================
    2. HILFSFUNKTIONEN: Datum, Zahlen, Text
@@ -353,6 +376,11 @@ function tageText(n) { return n === 1 ? "1 Tag" : n + " Tagen"; }
 
 // Kilometer runden (2 Nachkommastellen), um Rechenungenauigkeiten zu vermeiden
 function runden(n) { return Math.round(n * 100) / 100; }
+// Prognosen: auf 10 km gerundet und immer mit "ca."
+function rund10(n) { return Math.round(n / 10) * 10; }
+function caKm(n) { return "ca. " + kmText(rund10(n)) + " km"; }
+// "2027-05-14" → "Mai 2027"
+function monatJahrText(iso) { return MONATE[Number(iso.slice(5, 7)) - 1] + " " + iso.slice(0, 4); }
 
 const zahlFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 // 1234.5 → "1.234,5"
@@ -386,7 +414,7 @@ function neueId() {
 function standardWartungsarten(mitFenster = true) {
   const art = (id, name, intervallMonate, von, bis) => ({
     id, name, intervallMonate, intervallKm: null,
-    fensterVon: mitFenster ? von : null, fensterBis: mitFenster ? bis : null, gueltigAbJahr: null
+    fensterVon: mitFenster ? von : null, fensterBis: mitFenster ? bis : null, gueltigAbJahr: null, einmalig: false
   });
   return [
     art("grosse-inspektion", "Große Inspektion", 12, 10, 11),
@@ -394,10 +422,14 @@ function standardWartungsarten(mitFenster = true) {
     art("reparatur", "Reparatur", null, null, null)
   ];
 }
+function standardEinstellungen() {
+  return { fahrtage: [...STANDARD_FAHRTAGE], jahresziele: [] };
+}
 function leereDaten() {
   return {
     version: DATEN_VERSION,
     fahrrad: null,
+    einstellungen: standardEinstellungen(),
     vorlagen: [],
     eintraege: [],
     wartungsarten: standardWartungsarten(),
@@ -424,6 +456,19 @@ const MIGRATIONEN = {
       : arten;
     if (d.maengel === undefined) d.maengel = [];
     return d;
+  },
+  // Version 2 → 3: Einstellungen (Fahrtage, Jahresziele), Merkmal "Arbeitsweg"
+  // bei Vorlagen und Einträgen, "einmalig" bei Wartungsarten – alle aus.
+  2: alt => {
+    const d = Object.assign({}, alt, { version: 3 });
+    if (d.einstellungen === undefined) d.einstellungen = standardEinstellungen();
+    const ergaenzen = (liste, felder) => Array.isArray(liste)
+      ? liste.map(x => x && typeof x === "object" && !Array.isArray(x) ? Object.assign({}, felder, x) : x)
+      : liste;
+    d.vorlagen = ergaenzen(d.vorlagen, { arbeitsweg: false });
+    d.eintraege = ergaenzen(d.eintraege, { arbeitsweg: false });
+    d.wartungsarten = ergaenzen(d.wartungsarten, { einmalig: false });
+    return d;
   }
 };
 
@@ -449,6 +494,12 @@ function pruefen(d) {
   const optText = (v, wo) => {
     if (v === undefined || v === null) return "";
     if (!istText(v)) fehler(wo + ": muss ein Text sein.");
+    return v;
+  };
+  // Ja/Nein-Merkmal; fehlt es, gilt "nein"
+  const jaNein = (v, wo) => {
+    if (v === undefined || v === null) return false;
+    if (typeof v !== "boolean") fehler(wo + ": muss true oder false sein.");
     return v;
   };
   const liste = (v, name) => {
@@ -481,12 +532,34 @@ function pruefen(d) {
     };
   }
 
+  // Einstellungen (fehlen sie, gelten die Standardwerte). Die Reihenfolge der
+  // Listen bleibt unverändert; die App speichert sie aufsteigend sortiert.
+  const es = d.einstellungen ?? {};
+  if (typeof es !== "object" || Array.isArray(es)) fehler("„einstellungen“ muss ein Objekt sein.");
+  let fahrtage = [...STANDARD_FAHRTAGE];
+  if (es.fahrtage !== undefined) {
+    if (!Array.isArray(es.fahrtage)) fehler("Einstellungen: „fahrtage“ muss eine Liste sein.");
+    es.fahrtage.forEach(t => { if (!(Number.isInteger(t) && t >= 1 && t <= 7)) fehler("Einstellungen: Fahrtage müssen Zahlen von 1 (Montag) bis 7 (Sonntag) sein."); });
+    if (new Set(es.fahrtage).size !== es.fahrtage.length) fehler("Einstellungen: ein Fahrtag kommt doppelt vor.");
+    fahrtage = [...es.fahrtage];
+  }
+  const zielJahre = new Set();
+  const jahresziele = objekte(es.jahresziele, "jahresziele").map((z, i) => {
+    const wo = "Jahresziel Nr. " + (i + 1);
+    if (!(Number.isInteger(z.jahr) && z.jahr >= 1900 && z.jahr <= 9999)) fehler(wo + ": jahr muss eine Jahreszahl sein.");
+    if (zielJahre.has(z.jahr)) fehler(wo + ": Für " + z.jahr + " gibt es mehr als ein Jahresziel.");
+    zielJahre.add(z.jahr);
+    if (!(istZahl(z.km) && z.km > 0)) fehler(wo + " (" + z.jahr + "): km muss eine Zahl > 0 sein.");
+    return { jahr: z.jahr, km: runden(z.km) };
+  });
+  erg.einstellungen = { fahrtage, jahresziele };
+
   // Vorlagen
   erg.vorlagen = objekte(d.vorlagen, "vorlagen").map((v, i) => {
     const wo = "Vorlage Nr. " + (i + 1);
     if (!istText(v.name) || !v.name.trim()) fehler(wo + ": Name fehlt.");
     if (!istZahl(v.km)) fehler(wo + " („" + v.name + "“): km muss eine Zahl ≥ 0 sein.");
-    return { id: istText(v.id) && v.id ? v.id : neueId(), name: v.name.trim(), km: runden(v.km) };
+    return { id: istText(v.id) && v.id ? v.id : neueId(), name: v.name.trim(), km: runden(v.km), arbeitsweg: jaNein(v.arbeitsweg, wo + " (arbeitsweg)") };
   });
 
   // Einträge
@@ -506,7 +579,8 @@ function pruefen(d) {
       km: runden(e.km),
       vorlage: vorlage || null,
       notiz: optText(e.notiz, "Eintrag vom " + datumText(e.datum) + " (notiz)"),
-      typ: typ
+      typ: typ,
+      arbeitsweg: jaNein(e.arbeitsweg, "Eintrag vom " + datumText(e.datum) + " (arbeitsweg)")
     };
   });
 
@@ -531,9 +605,11 @@ function pruefen(d) {
     const ab = a.gueltigAbJahr ?? null;
     if (ab !== null && !(Number.isInteger(ab) && ab >= 1900 && ab <= 9999)) fehler(wn + ": gueltigAbJahr muss eine Jahreszahl oder null sein.");
     if (ab !== null && von === null) fehler(wn + ": gueltigAbJahr ist nur mit Zeitfenster erlaubt.");
+    const einmalig = jaNein(a.einmalig, wn + " (einmalig)");
+    if (einmalig && von !== null) fehler(wn + ": Eine einmalige Wartung kann kein jährliches Zeitfenster haben.");
     return {
       id: a.id, name: a.name.trim(), intervallMonate: im, intervallKm: ik === null ? null : runden(ik),
-      fensterVon: von, fensterBis: bis, gueltigAbJahr: ab
+      fensterVon: von, fensterBis: bis, gueltigAbJahr: ab, einmalig
     };
   });
   if (d.wartungsarten === undefined) erg.wartungsarten.forEach(a => artIds.add(a.id));
@@ -631,6 +707,8 @@ function laden() {
 }
 
 function speichern() {
+  // Jede Änderung beendet ein offenes "Rückgängig" (es würde sie sonst überschreiben)
+  rueckgaengigVerwerfen();
   aktualisiereProtokollKm();
   try {
     localStorage.setItem(SPEICHER_SCHLUESSEL, JSON.stringify(daten));
@@ -668,6 +746,49 @@ function aktuellerKmStand() {
   const f = daten.fahrrad;
   if (!f) return null;
   return runden(f.startKm + summe(e => e.datum >= f.startdatum));
+}
+
+// ---------- Prognosen ----------
+// Grundlage aller Prognosen: durchschnittliche km pro Kalendertag der letzten
+// 365 Tage bis gestern; liegt das Startdatum später, ab dem Startdatum.
+// Einträge vor dem Startdatum zählen nicht. null = zu wenige Tage.
+function prognoseGrundlage(h = heute()) {
+  const f = daten.fahrrad;
+  if (!f) return null;
+  const bis = plusTage(h, -1);
+  const von = f.startdatum > plusTage(bis, -364) ? f.startdatum : plusTage(bis, -364);
+  const tage = tageZwischen(von, bis) + 1;
+  if (tage < PROGNOSE_MIN_TAGE) return null;
+  const km = summe(e => e.datum >= von && e.datum <= bis);
+  return { von, bis, tage, km, rate: km / tage };
+}
+
+// Erwarteter Kilometerstand am Ende des Tages "datum" (nach "h"):
+// Kilometerstand heute + Rate × Tage bis dahin. null ohne Grundlage.
+function kmPrognose(datum, h = heute()) {
+  const g = prognoseGrundlage(h);
+  const stand = kmStandAm(h);
+  if (!g || stand === null || datum <= h) return null;
+  return stand + g.rate * tageZwischen(h, datum);
+}
+
+// Jahresprognose: km des laufenden Jahres bis heute + Rate × restliche Tage
+function jahresPrognose(h = heute()) {
+  const g = prognoseGrundlage(h);
+  if (!g) return null;
+  const jahr = h.slice(0, 4);
+  return summe(e => e.datum.slice(0, 4) === jahr && e.datum <= h) + g.rate * tageZwischen(h, jahr + "-12-31");
+}
+
+// Jahresziel des laufenden Jahres: Fortschritt und zeitanteiliges Soll bis heute
+function jahreszielStand(h = heute()) {
+  const jahr = Number(h.slice(0, 4));
+  const ziel = daten.einstellungen.jahresziele.find(z => z.jahr === jahr);
+  const ist = summe(e => e.datum.slice(0, 4) === String(jahr) && e.datum <= h);
+  if (!ziel) return { jahr, ziel: null, ist };
+  const tageImJahr = tageZwischen(jahr + "-01-01", (jahr + 1) + "-01-01");
+  const soll = ziel.km * (tageZwischen(jahr + "-01-01", h) + 1) / tageImJahr;
+  return { jahr, ziel: ziel.km, ist, soll, vorsprung: ist - soll, anteil: ist / ziel.km };
 }
 
 // Nicht von Hand überschriebene Kilometerstände im Protokoll neu berechnen
@@ -743,38 +864,115 @@ function saisonStatus(art, durchfuehrungen, startdatum, h) {
   return { text: "fällig ab " + datumText(naechster), klasse: "status-gruen", datum: naechster };
 }
 
-// Fälligkeit einer Wartungsart mit Intervall in Monaten (ohne Zeitfenster)
+// Gefahrene km seit der Durchführung "letzte" bis einschließlich "h"; ohne
+// Durchführung seit dem Startdatum. null, wenn es sich nicht berechnen lässt.
+function kmSeit(letzte, h) {
+  const stand = kmStandAm(h);
+  if (letzte) {
+    if (letzte.kmStand !== null && stand !== null) return runden(stand - letzte.kmStand);
+    return summe(e => e.datum > letzte.datum && e.datum <= h);
+  }
+  const f = daten.fahrrad;
+  return f && stand !== null ? runden(stand - f.startKm) : null;
+}
+
+// Tag, an dem seit der Durchführung (bzw. dem Startdatum) "intervallKm" erreicht
+// wurden. "seit" = km bis heute; der Unterschied zur Summe der Einträge stammt
+// aus einem von Hand eingetragenen Kilometerstand und wird vorab angerechnet.
+function kmGrenzeErreichtAm(letzte, intervallKm, seit, h) {
+  const basis = letzte ? letzte.datum : daten.fahrrad.startdatum;
+  const liste = daten.eintraege
+    .filter(e => (letzte ? e.datum > basis : e.datum >= basis) && e.datum <= h)
+    .sort((a, b) => a.datum.localeCompare(b.datum));
+  let kum = seit - liste.reduce((s, e) => s + e.km, 0);
+  if (runden(kum) >= intervallKm) return basis;
+  for (const e of liste) {
+    kum += e.km;
+    if (runden(kum) >= intervallKm) return e.datum;
+  }
+  return h;
+}
+
+// Fälligkeit nach Intervall in Monaten und/oder km (ohne Zeitfenster). Fällig
+// ist, was zuerst erreicht wird. Grundlage ist die letzte Durchführung, ohne
+// Durchführung das Startdatum mit dem Start-Kilometerstand. Den Tag, an dem
+// die km-Grenze erreicht wird, schätzt die Prognose (kmGeschaetzt).
 function intervallStatus(art, letzte, h) {
-  if (!art.intervallMonate) return { text: "ohne Intervall", klasse: "", datum: null, nochNie: false };
-  if (!letzte) return { text: "noch nicht durchgeführt", klasse: "status-orange", datum: null, nochNie: true };
-  const faellig = plusMonate(letzte.datum, art.intervallMonate);
-  const t = tageZwischen(h, faellig);
-  if (t > 0) return { text: "fällig in " + tageText(t) + " (" + datumText(faellig) + ")", klasse: t <= 30 ? "status-orange" : "status-gruen", datum: faellig };
-  if (t === 0) return { text: "heute fällig", klasse: "status-rot", datum: faellig };
-  return { text: "überfällig seit " + tageText(-t) + " (" + datumText(faellig) + ")", klasse: "status-rot", datum: faellig };
+  const st = { text: "", klasse: "", datum: null, nochNie: false, restKm: null, grenzeKm: null, abStart: false, kmGeschaetzt: false };
+  if (!art.intervallMonate && !art.intervallKm) return Object.assign(st, { text: "ohne Intervall" });
+  const f = daten.fahrrad;
+  if (!letzte && !f) return Object.assign(st, { text: "noch nicht durchgeführt", klasse: "status-orange", nochNie: true });
+  const basis = letzte ? letzte.datum : f.startdatum;
+  st.abStart = !letzte;
+
+  const nachMonaten = art.intervallMonate ? plusMonate(basis, art.intervallMonate) : null;
+  let nachKm = null, geschaetzt = false;
+  if (art.intervallKm) {
+    const seit = kmSeit(letzte, h);
+    if (seit !== null) {
+      st.restKm = runden(art.intervallKm - seit);
+      const stand = kmStandAm(h);
+      st.grenzeKm = stand === null ? null : runden(stand + st.restKm);
+      if (st.restKm <= 0) {
+        nachKm = kmGrenzeErreichtAm(letzte, art.intervallKm, seit, h);
+      } else {
+        const g = prognoseGrundlage(h);
+        if (g && g.rate > 0) { nachKm = plusTage(h, Math.ceil(st.restKm / g.rate)); geschaetzt = true; }
+      }
+    }
+  }
+
+  if (nachKm !== null && (nachMonaten === null || nachKm < nachMonaten)) {
+    st.datum = nachKm;
+    st.kmGeschaetzt = geschaetzt;
+    if (geschaetzt) {
+      st.text = "fällig ca. im " + monatJahrText(nachKm) + (st.grenzeKm !== null ? " bei " + caKm(st.grenzeKm) : "");
+      st.klasse = tageZwischen(h, nachKm) <= 30 ? "status-orange" : "status-gruen";
+    } else {
+      const grenze = st.grenzeKm !== null ? " (" + kmText(st.grenzeKm) + " km)" : "";
+      st.text = nachKm === h ? "heute fällig (km-Grenze" + grenze + " erreicht)"
+        : st.restKm < 0 ? "überfällig: km-Grenze" + grenze + " um " + kmText(-st.restKm) + " km überschritten"
+        : "überfällig: km-Grenze" + grenze + " erreicht";
+      st.klasse = "status-rot";
+    }
+    return st;
+  }
+  if (nachMonaten === null) {
+    // Nur km-Intervall, aber keine Schätzung möglich (zu wenige Daten oder keine Fahrten)
+    st.text = st.grenzeKm !== null ? "fällig bei " + caKm(st.grenzeKm) : "fällig nach " + kmText(art.intervallKm) + " km";
+    st.klasse = "status-gruen";
+    return st;
+  }
+  const t = tageZwischen(h, nachMonaten);
+  st.datum = nachMonaten;
+  if (t > 0) Object.assign(st, { text: "fällig in " + tageText(t) + " (" + datumText(nachMonaten) + ")", klasse: t <= 30 ? "status-orange" : "status-gruen" });
+  else if (t === 0) Object.assign(st, { text: "heute fällig", klasse: "status-rot" });
+  else Object.assign(st, { text: "überfällig seit " + tageText(-t) + " (" + datumText(nachMonaten) + ")", klasse: "status-rot" });
+  return st;
 }
 
 // Status einer Wartungsart: letzte Durchführung, Termin, Fälligkeit, Anzeigetext.
 // "regel" ist die Fälligkeit ohne Berücksichtigung eines geplanten Termins.
+// "erwartet" = erwarteter Kilometerstand zum Termin bzw. zur Fälligkeit.
 function wartungsStatus(art, h = heute()) {
   const durchfuehrungen = daten.wartungsprotokoll
     .filter(p => p.wartungsartId === art.id)
     .sort((a, b) => b.datum.localeCompare(a.datum));
   const letzte = durchfuehrungen[0] || null;
-  const termin = daten.termine.find(t => t.wartungsartId === art.id) || null;
 
-  let seitKm = null;
-  if (letzte) {
-    const aktuell = aktuellerKmStand();
-    seitKm = (letzte.kmStand !== null && aktuell !== null)
-      ? runden(aktuell - letzte.kmStand)
-      : summe(e => e.datum > letzte.datum);
+  // Einmalige Wartung nach der ersten Durchführung: nur noch "erledigt am"
+  if (art.einmalig && letzte) {
+    const erste = durchfuehrungen[durchfuehrungen.length - 1];
+    return { art, letzte, erste, erledigt: true, termin: null, seitKm: null, regel: null, datum: null,
+      text: "erledigt am " + datumText(erste.datum), klasse: "status-gruen", nochNie: false, erwartet: null };
   }
 
+  const termin = daten.termine.find(t => t.wartungsartId === art.id) || null;
+  const seitKm = letzte ? kmSeit(letzte, h) : null;
   const regel = hatZeitfenster(art)
     ? Object.assign({ nochNie: false }, saisonStatus(art, durchfuehrungen.map(p => p.datum), daten.fahrrad ? daten.fahrrad.startdatum : null, h))
     : intervallStatus(art, letzte, h);
-  const st = { art, letzte, termin, seitKm, regel, datum: regel.datum, text: regel.text, klasse: regel.klasse, nochNie: regel.nochNie };
+  const st = { art, letzte, erledigt: false, termin, seitKm, regel, datum: regel.datum, text: regel.text, klasse: regel.klasse, nochNie: regel.nochNie };
 
   // Ein geplanter Termin hat Vorrang in der Anzeige
   if (termin) {
@@ -785,12 +983,21 @@ function wartungsStatus(art, h = heute()) {
     st.klasse = t < 0 ? "status-orange" : "status-gruen";
     st.nochNie = false;
   }
+  // Steht der km-Wert schon im Text ("fällig ca. im Mai 2027 bei ca. 7.500 km"), entfällt er hier
+  const ziel = termin ? termin.datum : regel.kmGeschaetzt ? null : st.datum;
+  const km = ziel && ziel > h ? kmPrognose(ziel, h) : null;
+  st.erwartet = km === null ? null : { datum: ziel, km };
   return st;
 }
 
+// Alle Wartungsarten in Anzeigereihenfolge: erledigte einmalige am Ende
+function wartungsKarten(h = heute()) {
+  return daten.wartungsarten.map(a => wartungsStatus(a, h)).sort((a, b) => Number(a.erledigt) - Number(b.erledigt));
+}
+
 // Nächste fällige Wartung für die Startseite
-function naechsteWartung() {
-  const alle = daten.wartungsarten.map(a => wartungsStatus(a));
+function naechsteWartung(h = heute()) {
+  const alle = wartungsKarten(h).filter(s => !s.erledigt);
   const mitDatum = alle.filter(s => s.datum).sort((a, b) => a.datum.localeCompare(b.datum));
   if (mitDatum.length) return mitDatum[0];
   return alle.find(s => s.nochNie) || null;
@@ -902,12 +1109,59 @@ function frage(text, jaText = "OK", neinText = "Abbrechen", gefaehrlich = false)
 }
 
 let toastTimer;
-function meldung(text) {
+// Datenstand (JSON) vor dem letzten Löschen, solange "Rückgängig" angeboten wird
+let rueckgaengigStand = null;
+
+// Kurze Meldung unten. { rueckgaengig: true } zeigt daneben "Rückgängig";
+// jede andere Meldung beendet ein noch offenes Rückgängig-Angebot.
+function meldung(text, optionen = {}) {
   const t = document.getElementById("toast");
-  t.textContent = text;
+  const mitKnopf = !!optionen.rueckgaengig;
+  if (!mitKnopf) rueckgaengigStand = null;
+  document.getElementById("toast-text").textContent = text;
+  document.getElementById("toast-knopf").hidden = !mitKnopf;
+  t.classList.toggle("mit-knopf", mitKnopf);
   t.classList.add("sichtbar");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("sichtbar"), 1800);
+  toastTimer = setTimeout(meldungAus, optionen.dauer || (mitKnopf ? RUECKGAENGIG_MS : 1800));
+}
+function meldungAus() {
+  clearTimeout(toastTimer);
+  document.getElementById("toast").classList.remove("sichtbar", "mit-knopf");
+  document.getElementById("toast-knopf").hidden = true;
+  rueckgaengigStand = null;
+}
+function rueckgaengigVerwerfen() {
+  rueckgaengigStand = null;
+  if (!document.getElementById("toast-knopf").hidden) meldungAus();
+}
+
+// Löschen mit "Rückgängig". Gemerkt wird der ganze Datenstand vorher, damit
+// auch Verknüpfungen (z. B. die Mängel eines Protokoll-Eintrags) zurückkommen.
+function loeschenMitRueckgaengig(aenderung, text) {
+  const vorher = JSON.stringify(daten);
+  aenderung();
+  if (!speichern()) return;
+  fensterSchliessen();
+  zeichnen();
+  rueckgaengigStand = vorher;
+  meldung(text, { rueckgaengig: true });
+}
+function rueckgaengig() {
+  if (!rueckgaengigStand) return;
+  daten = JSON.parse(rueckgaengigStand);
+  if (speichern()) { zeichnen(); meldung("Wiederhergestellt"); }
+}
+
+// Datei als Text lesen (ältere Browser ohne File.text() über FileReader)
+function dateiLesen(datei) {
+  if (typeof datei.text === "function") return datei.text();
+  return new Promise((fertig, fehler) => {
+    const r = new FileReader();
+    r.onload = () => fertig(r.result);
+    r.onerror = () => fehler(r.error);
+    r.readAsText(datei);
+  });
 }
 
 function wert(id) { return document.getElementById(id).value; }
@@ -934,6 +1188,9 @@ function zeichnen() {
   document.getElementById("inhalt").innerHTML = html;
 }
 
+// Aufklapp-Pfeil; dreht sich über aria-expanded der Schaltfläche (siehe CSS)
+const CHEVRON = '<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+
 // Detailansicht (nur lesen): Liste aus [Bezeichnung, HTML-Wert]; leere Werte entfallen
 function detailListe(felder) {
   return '<dl class="details">' + felder.filter(f => f[1] !== "" && f[1] !== null && f[1] !== undefined)
@@ -955,16 +1212,17 @@ function bildUebersicht() {
   const exportAlter = le ? tageZwischen(le, h) : null;
   if (daten.fahrrad && (le === null || exportAlter > EXPORT_ERINNERUNG_TAGE)) {
     html += '<div class="hinweis warn"><strong>⚠️ Datensicherung fällig</strong><br>' +
-      (le === null ? "Du hast noch nie exportiert." : "Letzter Export vor " + tageText(exportAlter) + " (" + datumText(le) + ").") +
-      ' Die Daten liegen nur auf diesem Gerät.<br><button type="button" class="primaer" data-action="export">Jetzt exportieren</button></div>';
+      (le === null ? "Du hast noch nie gesichert." : "Letzte Sicherung vor " + tageText(exportAlter) + " (" + datumText(le) + ").") +
+      ' Die Daten liegen nur auf diesem Gerät.<br><button type="button" class="primaer" data-action="sichern">Jetzt sichern</button></div>';
   }
 
   // Kilometerstand, nächste Wartung und offene Mängel
   html += '<div class="karte"><div class="klein">' + esc(daten.fahrrad ? daten.fahrrad.name : "Kilometerstand") + '</div>' +
     '<div class="stand-zahl">' + kmText(aktuellerKmStand()) + ' km</div>';
-  const nw = naechsteWartung();
+  const nw = naechsteWartung(h);
   if (nw) {
-    html += '<div style="margin-top:8px">🔧 ' + esc(nw.art.name) + ': <span class="' + nw.klasse + '">' + esc(nw.text) + '</span></div>';
+    html += '<div style="margin-top:8px">🔧 ' + esc(nw.art.name) + ': <span class="' + nw.klasse + '">' + esc(nw.text) + '</span>' +
+      (nw.erwartet ? ' <span class="klein">(' + caKm(nw.erwartet.km) + ')</span>' : "") + '</div>';
   } else {
     html += '<div class="klein" style="margin-top:8px">🔧 Keine Wartung fällig</div>';
   }
@@ -1002,6 +1260,9 @@ function bildUebersicht() {
     kachel("Jahr", summe(e => e.datum.slice(0, 4) === h.slice(0, 4))) +
     '</div>';
 
+  if (daten.fahrrad) html += jahresKarte(h);
+  html += '<h2>Datensicherung</h2>' + sicherungsKarte(h);
+
   // Liste der Einträge, abgeschlossene Zeiträume zusammengefasst
   html += '<h2>Einträge <span class="klein">(' + daten.eintraege.length + ')</span></h2><div class="liste">';
   if (!daten.eintraege.length) html += '<div class="leer">Noch keine Einträge.</div>';
@@ -1014,6 +1275,95 @@ function kachel(titel, km) {
   return '<div class="summe"><div class="wert">' + kmText(km) + '</div><div class="titel">' + titel + ' (km)</div></div>';
 }
 
+// Grundlage der Prognosen in einem Satz
+function grundlageText(g) {
+  return '<div class="klein">Grundlage: Ø ' + kmText(g.rate) + ' km pro Tag (' + datumText(g.von) + '–' + datumText(g.bis) + ')</div>';
+}
+function zuWenigeTageText() {
+  return "Für eine Prognose sind noch zu wenige Tage erfasst (möglich ab dem " + datumText(plusTage(daten.fahrrad.startdatum, PROGNOSE_MIN_TAGE)) + ").";
+}
+
+// Laufendes Jahr: Jahresziel mit zeitanteiligem Soll, Jahresprognose
+function jahresKarte(h) {
+  const z = jahreszielStand(h);
+  const prognose = jahresPrognose(h);
+  let html = '<h2>Jahr ' + z.jahr + '</h2><div class="karte">';
+  if (z.ziel) {
+    const v = rund10(z.vorsprung);
+    html += '<div><strong>' + kmText(z.ist) + '</strong> von ' + kmText(z.ziel) + ' km · ' + Math.round(z.anteil * 100) + ' %</div>' +
+      '<div class="balken" role="progressbar" aria-label="Jahresziel" aria-valuemin="0" aria-valuemax="' + z.ziel + '" aria-valuenow="' + runden(z.ist) + '">' +
+      '<div class="balken-ist" style="width:' + Math.min(100, z.anteil * 100) + '%"></div>' +
+      '<div class="balken-soll" style="left:' + Math.min(100, z.soll / z.ziel * 100) + '%"></div></div>' +
+      '<div class="' + (v >= 0 ? "status-gruen" : "status-orange") + '">' +
+      (v > 0 ? "ca. " + kmText(v) + " km voraus" : v < 0 ? "ca. " + kmText(-v) + " km im Rückstand" : "genau im Soll") + '</div>' +
+      '<div class="klein">Zeitanteiliges Soll bis heute: ' + caKm(z.soll) + '</div>';
+  }
+  html += '<div style="margin-top:' + (z.ziel ? 10 : 0) + 'px">';
+  if (prognose === null) {
+    html += '<span class="klein">Jahresprognose: ' + zuWenigeTageText() + '</span>';
+  } else {
+    html += 'Jahresprognose: <strong>' + caKm(prognose) + '</strong>';
+    if (z.ziel) {
+      const d = rund10(prognose - z.ziel);
+      html += '<div class="klein">' + (d > 0 ? "ca. " + kmText(d) + " km über dem Ziel" : d < 0 ? "ca. " + kmText(-d) + " km unter dem Ziel" : "entspricht dem Ziel") + '</div>';
+    }
+    html += grundlageText(prognoseGrundlage(h));
+  }
+  html += '</div><div class="knopfreihe"><button type="button" data-action="prognose">Kilometerstand für ein Datum …</button>' +
+    (z.ziel ? "" : '<button type="button" data-action="jahresziel-neu" data-jahr="' + z.jahr + '">Jahresziel festlegen</button>') +
+    '</div></div>';
+  return html;
+}
+
+// Kilometerstand-Prognose für ein frei wählbares Datum
+function prognoseFenster() {
+  fensterOeffnen('<h2>Kilometerstand für ein Datum</h2>' +
+    '<label for="pg-datum">Datum</label>' +
+    '<input type="date" id="pg-datum" value="' + heute().slice(0, 4) + '-12-31" data-change="prognose-datum" data-input="prognose-datum">' +
+    '<div id="pg-ergebnis" style="margin-top:14px"></div>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button></div>');
+  prognoseAnzeigen();
+}
+function prognoseAnzeigen() {
+  document.getElementById("pg-ergebnis").innerHTML = prognoseErgebnis(wert("pg-datum"), heute());
+}
+function prognoseErgebnis(d, h) {
+  const f = daten.fahrrad;
+  if (!f) return "Bitte zuerst das Fahrrad anlegen.";
+  if (!istGueltigesDatum(d)) return "Bitte ein Datum wählen.";
+  if (d < f.startdatum) return "Das Datum liegt vor dem Startdatum (" + datumText(f.startdatum) + ").";
+  if (d <= h) {
+    return '<div class="stand-zahl">' + kmText(kmStandAm(d)) + ' km</div>' +
+      '<div class="klein">Tatsächlicher Kilometerstand am Ende des ' + datumText(d) + '</div>';
+  }
+  const g = prognoseGrundlage(h);
+  if (!g) return zuWenigeTageText();
+  return '<div class="stand-zahl">' + caKm(kmPrognose(d, h)) + '</div>' +
+    '<div class="klein">Erwarteter Kilometerstand am Ende des ' + datumText(d) + '</div>' + grundlageText(g);
+}
+
+// "heute", "gestern" bzw. "vor 5 Tagen"
+function vorText(iso, h) {
+  const t = tageZwischen(iso, h);
+  return t <= 0 ? "heute" : t === 1 ? "gestern" : "vor " + tageText(t);
+}
+
+// Datensicherung (Startseite und Einstellungen)
+function sicherungsKarte(h) {
+  const le = letzterExport();
+  return '<div class="karte"><div>Letzte Sicherung: ' + (le ? datumText(le) + " (" + vorText(le, h) + ")" : "noch nie") + '</div>' +
+    sicherungsErgebnisHtml() +
+    '<div class="knopfreihe"><button type="button" class="primaer" data-action="sichern">Jetzt sichern</button></div></div>';
+}
+// Nach einer erfolgreichen Sicherung: Ergebnis und Prüfung der gespeicherten Datei
+function sicherungsErgebnisHtml() {
+  if (!sicherungsErgebnis) return "";
+  return '<div class="hinweis info" style="margin:10px 0 0">✓ <strong>Sicherung ' + sicherungsErgebnis.wie + '</strong> – Inhalt geprüft: ' +
+    inhaltText(sicherungsErgebnis.kurzinfo) +
+    '<br><span class="klein">Wähle die gespeicherte Datei aus, um sie zu prüfen. Dabei wird nichts überschrieben.</span>' +
+    '<br><button type="button" data-action="sicherung-pruefen">Gespeicherte Sicherung jetzt prüfen</button></div>';
+}
+
 // Zeilen der Eintragsliste; aufgeklappte Gruppen zeigen ihre Kinder eingerückt darunter
 function zeilenHtml(zeilen, tiefe) {
   const einzug = ' style="padding-left:' + (16 + tiefe * 16) + 'px"';
@@ -1024,7 +1374,7 @@ function zeilenHtml(zeilen, tiefe) {
     const unten = [zeitraum, z.anzahl === 1 ? "1 Eintrag" : z.anzahl + " Einträge"].filter(Boolean).join(" · ");
     return '<div class="zeile gruppe">' +
       '<button type="button" class="inhalt" data-action="gruppe" data-key="' + esc(z.schluessel) + '" aria-expanded="' + offen + '"' + einzug + '>' +
-      '<span class="pfeil">' + (offen ? "▾" : "▸") + '</span>' +
+      CHEVRON +
       '<div class="text"><div class="titel">' + esc(z.titel) + '</div><div class="klein">' + unten + '</div></div>' +
       '<span class="zahl" style="padding-right:16px">' + kmText(z.km) + ' km</span></button></div>' +
       (offen ? zeilenHtml(z.kinder, tiefe + 1) : "");
@@ -1159,7 +1509,8 @@ async function eintragSpeichern() {
   if (anderer && anderer.id !== formEintrag.id) { alert("Für den " + datumText(datum) + " gibt es bereits einen Eintrag."); return; }
 
   const vw = wert("f-vorlage");
-  const vorlage = vw === "__alt__" ? formEintrag.alteVorlage : (daten.vorlagen.find(v => v.id === vw)?.name || null);
+  const gewaehlt = daten.vorlagen.find(v => v.id === vw) || null;
+  const vorlage = vw === "__alt__" ? formEintrag.alteVorlage : (gewaehlt ? gewaehlt.name : null);
 
   // Warnung: Tages-Eintrag in einer Woche, für die es schon eine Wochensumme gibt
   const neuOderVerschoben = !formEintrag.id || formEintrag.ursprungsDatum !== datum;
@@ -1179,7 +1530,8 @@ async function eintragSpeichern() {
     const e = daten.eintraege.find(e => e.id === formEintrag.id);
     Object.assign(e, { datum, km, vorlage, notiz });
   } else {
-    daten.eintraege.push({ id: neueId(), datum, km, vorlage, notiz, typ: "tag" });
+    // Das Merkmal "Arbeitsweg" wird wie Name und km aus der Vorlage übernommen
+    daten.eintraege.push({ id: neueId(), datum, km, vorlage, notiz, typ: "tag", arbeitsweg: !!(gewaehlt && gewaehlt.arbeitsweg) });
   }
   if (speichern()) {
     fensterSchliessen();
@@ -1193,20 +1545,27 @@ async function eintragLoeschen(id) {
   if (!e) return;
   const ok = await frage("Eintrag vom " + datumText(e.datum) + " (" + kmText(e.km) + " km) wirklich löschen?", "Löschen", "Abbrechen", true);
   if (!ok) return;
-  daten.eintraege = daten.eintraege.filter(x => x.id !== id);
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Eintrag gelöscht"); }
+  loeschenMitRueckgaengig(() => { daten.eintraege = daten.eintraege.filter(x => x.id !== id); }, "Eintrag gelöscht");
 }
 
 /* ---------- Wartung ---------- */
 function bildWartung() {
   let html = "";
-  daten.wartungsarten.forEach(art => {
-    const st = wartungsStatus(art);
+  wartungsKarten().forEach(st => {
+    const art = st.art;
     html += '<div class="karte"><h3>' + esc(art.name) + '</h3>' +
       '<div class="' + st.klasse + '">' + esc(st.text) + '</div>';
+    // Einmalige Wartung nach der Durchführung: nur noch "erledigt am"
+    if (st.erledigt) { html += '</div>'; return; }
+    if (st.erwartet) {
+      html += '<div class="klein">Erwarteter Kilometerstand am ' + datumText(st.erwartet.datum) + ': ' + caKm(st.erwartet.km) + '</div>';
+    }
     if (st.termin && st.regel.datum) {
       // Bei geplantem Termin zusätzlich die Fälligkeit nach Regel klein zeigen
       html += '<div class="klein">Ohne Termin: ' + esc(st.regel.text) + '</div>';
+    }
+    if (st.regel.restKm > 0) {
+      html += '<div class="klein">' + (rund10(st.regel.restKm) > 0 ? "Noch " + caKm(st.regel.restKm) : "Weniger als 10 km") + ' bis zur km-Grenze</div>';
     }
     if (hatZeitfenster(art)) {
       html += '<div class="klein">Zeitfenster: ' + fensterText(art) + (art.gueltigAbJahr ? ", gültig ab " + art.gueltigAbJahr : "") + '</div>';
@@ -1216,6 +1575,9 @@ function bildWartung() {
         (st.letzte.werkstatt ? " bei " + esc(st.letzte.werkstatt) : "") +
         (st.letzte.kmStand !== null ? " · " + kmText(st.letzte.kmStand) + " km" : "") + '</div>' +
         '<div class="klein">Seit letzter Wartung gefahren: ' + kmText(st.seitKm) + ' km</div>';
+    } else if (st.regel.abStart) {
+      html += '<div class="klein">Noch nicht durchgeführt – gerechnet ab dem Startdatum (' + datumText(daten.fahrrad.startdatum) +
+        ', ' + kmText(daten.fahrrad.startKm) + ' km)</div>';
     } else if (!st.nochNie) {
       html += '<div class="klein">Noch nicht durchgeführt</div>';
     }
@@ -1236,7 +1598,7 @@ function bildWartung() {
   if (erledigt.length) {
     html += '<div class="liste" style="margin-top:12px"><div class="zeile gruppe">' +
       '<button type="button" class="inhalt" data-action="maengel-erledigt-umschalten" aria-expanded="' + erledigteMaengelOffen + '">' +
-      '<span class="pfeil">' + (erledigteMaengelOffen ? "▾" : "▸") + '</span>' +
+      CHEVRON +
       '<div class="text"><div class="titel">Erledigte Mängel (' + erledigt.length + ')</div></div></button></div>' +
       (erledigteMaengelOffen ? erledigt.map(mangelZeile).join("") : "") + '</div>';
   }
@@ -1263,9 +1625,10 @@ function bildWartung() {
     if (hatZeitfenster(a)) {
       regel = "Zeitfenster: " + fensterText(a) + (a.gueltigAbJahr ? ", ab " + a.gueltigAbJahr : "");
     } else {
-      const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" / ");
+      const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" oder ");
       regel = iv ? "Intervall: " + iv : "ohne Intervall";
     }
+    if (a.einmalig) regel = "einmalig · " + regel;
     html += '<div class="zeile"><button type="button" class="inhalt" data-action="art-bearbeiten" data-id="' + esc(a.id) + '">' +
       '<div class="text"><div>' + esc(a.name) + '</div><div class="klein">' + regel + '</div></div>' +
       '<span class="klein" style="padding-right:16px">›</span></button></div>';
@@ -1436,7 +1799,9 @@ function protokollSpeichern() {
     if (abgehakt.has(m.id)) Object.assign(m, { status: "erledigt", erledigtAm: datum, protokollId: id });
     else if (m.protokollId === id) mangelWiederOeffnen(m);
   });
-  if (formProtokoll.terminUebernommen) {
+  // Übernommener Termin entfällt; bei einer einmaligen Wartung auch jeder andere
+  const art = daten.wartungsarten.find(a => a.id === artId);
+  if (formProtokoll.terminUebernommen || (art && art.einmalig)) {
     daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
   }
   if (speichern()) {
@@ -1453,9 +1818,10 @@ async function protokollLoeschen(id) {
       " wieder auf <strong>offen</strong> gesetzt:<br>" + verknuepft.map(m => "• " + esc(m.beschreibung)).join("<br>")
     : "";
   if (!await frage("Wartung „" + esc(artName(p.wartungsartId)) + "“ vom " + datumText(p.datum) + " wirklich löschen?" + zusatz, "Löschen", "Abbrechen", true)) return;
-  verknuepft.forEach(mangelWiederOeffnen);
-  daten.wartungsprotokoll = daten.wartungsprotokoll.filter(x => x.id !== id);
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
+  loeschenMitRueckgaengig(() => {
+    verknuepft.forEach(mangelWiederOeffnen);
+    daten.wartungsprotokoll = daten.wartungsprotokoll.filter(x => x.id !== id);
+  }, "Wartung gelöscht");
 }
 
 /* ---------- Mängel ---------- */
@@ -1526,19 +1892,20 @@ async function mangelLoeschen(id) {
   const m = daten.maengel.find(m => m.id === id);
   if (!m) return;
   if (!await frage("Mangel „" + esc(m.beschreibung) + "“ wirklich löschen?", "Löschen", "Abbrechen", true)) return;
-  daten.maengel = daten.maengel.filter(x => x.id !== id);
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
+  loeschenMitRueckgaengig(() => { daten.maengel = daten.maengel.filter(x => x.id !== id); }, "Mangel gelöscht");
 }
 
 // Wartungsarten
 function artFormular(id) {
   const a = id ? daten.wartungsarten.find(a => a.id === id)
-    : { name: "", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null };
+    : { name: "", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false };
   const monatsAuswahl = (feld, wert) => '<select id="' + feld + '" data-change="art-fenster"><option value="">– kein Zeitfenster –</option>' +
     MONATE.map((n, i) => '<option value="' + (i + 1) + '"' + (wert === i + 1 ? " selected" : "") + '>' + n + '</option>').join("") + '</select>';
   fensterOeffnen(
     '<h2>' + (id ? "Wartungsart bearbeiten" : "Neue Wartungsart") + '</h2>' +
     '<label for="a-name">Name</label><input type="text" id="a-name" value="' + esc(a.name) + '">' +
+    '<label class="haken"><input type="checkbox" id="a-einmalig"' + (a.einmalig ? " checked" : "") + '>' +
+    '<span>Einmalig (z. B. Erstinspektion)<br><span class="klein">Nach der ersten Durchführung erledigt. Nicht mit Zeitfenster möglich.</span></span></label>' +
     '<label for="a-von">Jährliches Zeitfenster: Monat von (optional)</label>' + monatsAuswahl("a-von", a.fensterVon) +
     '<label for="a-bis">Monat bis</label>' + monatsAuswahl("a-bis", a.fensterBis) +
     '<div id="a-fenster-feld"' + (a.fensterVon ? "" : " hidden") + '>' +
@@ -1547,9 +1914,10 @@ function artFormular(id) {
     '<div class="feldhinweis">Vor diesem Jahr wird keine Fälligkeit angezeigt. Leer = sofort gültig.</div></div>' +
     '<label for="a-monate">Intervall in Monaten (optional)</label>' +
     '<input type="text" id="a-monate" inputmode="numeric" value="' + (a.intervallMonate ?? "") + '">' +
-    '<div class="feldhinweis">Wird nur ausgewertet, wenn kein Zeitfenster gesetzt ist.</div>' +
-    '<label for="a-km">Intervall in km (optional, wird erst später ausgewertet)</label>' +
+    '<label for="a-km">Intervall in km (optional, z. B. für Kette oder Bremsbeläge)</label>' +
     '<input type="text" id="a-km" inputmode="decimal" value="' + kmFeld(a.intervallKm) + '">' +
+    '<div class="feldhinweis">Fällig ist, was zuerst erreicht wird: Monate oder km. Ohne bisherige Durchführung zählt ab Startdatum und ' +
+    'Start-Kilometerstand. Die Intervalle werden nur ausgewertet, wenn kein Zeitfenster gesetzt ist.</div>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="art-speichern" data-id="' + esc(id || "") + '">Speichern</button></div>' +
     (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="art-loeschen" data-id="' + esc(id) + '">Wartungsart löschen</button></div>' : "")
@@ -1563,7 +1931,9 @@ function artSpeichern(id) {
   if (!name) { alert("Bitte einen Namen eingeben."); return; }
   const von = wert("a-von") ? Number(wert("a-von")) : null;
   const bis = wert("a-bis") ? Number(wert("a-bis")) : null;
+  const einmalig = document.getElementById("a-einmalig").checked;
   if ((von === null) !== (bis === null)) { alert("Für das Zeitfenster bitte beide Monate wählen (oder beide leer lassen)."); return; }
+  if (einmalig && von !== null) { alert("Eine einmalige Wartung kann kein jährliches Zeitfenster haben. Bitte das Zeitfenster leeren oder „Einmalig“ abwählen."); return; }
   if (von !== null && von > bis) { alert("Das Zeitfenster darf nicht über den Jahreswechsel gehen: „Monat von“ muss vor oder gleich „Monat bis“ sein."); return; }
   let ab = null;
   if (von !== null) {
@@ -1577,7 +1947,7 @@ function artSpeichern(id) {
   const kText = wert("a-km").trim();
   const km = kText === "" ? null : kmLesen(kText);
   if (kText !== "" && !(km > 0)) { alert("Das Intervall in km muss eine Zahl größer 0 sein (oder leer)."); return; }
-  const satz = { name, intervallMonate: monate, intervallKm: km, fensterVon: von, fensterBis: bis, gueltigAbJahr: ab };
+  const satz = { name, intervallMonate: monate, intervallKm: km, fensterVon: von, fensterBis: bis, gueltigAbJahr: ab, einmalig };
   if (id) {
     Object.assign(daten.wartungsarten.find(a => a.id === id), satz);
   } else {
@@ -1631,14 +2001,13 @@ function vorlageSpeichern(id) {
   if (!name) { alert("Bitte einen Namen eingeben."); return; }
   if (km === null) { alert("Bitte die Kilometer als Zahl eingeben, z. B. 12,5."); return; }
   if (id) Object.assign(daten.vorlagen.find(v => v.id === id), { name, km });
-  else daten.vorlagen.push({ id: neueId(), name, km });
+  else daten.vorlagen.push({ id: neueId(), name, km, arbeitsweg: false });
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 async function vorlageLoeschen(id) {
   const v = daten.vorlagen.find(v => v.id === id);
   if (!await frage("Vorlage „" + esc(v.name) + "“ wirklich löschen? Bereits erfasste Einträge bleiben unverändert.", "Löschen", "Abbrechen", true)) return;
-  daten.vorlagen = daten.vorlagen.filter(x => x.id !== id);
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
+  loeschenMitRueckgaengig(() => { daten.vorlagen = daten.vorlagen.filter(x => x.id !== id); }, "Vorlage gelöscht");
 }
 function vorlageVerschieben(id, richtung) {
   const i = daten.vorlagen.findIndex(v => v.id === id);
@@ -1667,17 +2036,65 @@ function bildEinstellungen() {
     html += '<p style="margin-top:0">Noch kein Fahrrad angelegt.</p>' +
       '<button type="button" class="primaer voll" data-action="fahrrad-aendern">Fahrrad anlegen</button>';
   }
-  html += '</div>' +
+  html += '</div>';
 
-    '<h2>Datensicherung</h2><div class="karte">' +
-    '<p style="margin-top:0">Deine Daten liegen nur auf diesem Gerät im Speicher des Browsers. Sichere sie regelmäßig als Datei, z. B. in „Dateien“ oder iCloud.</p>' +
-    '<p class="klein">Letzter Export: ' + (le ? datumText(le) : "noch nie") + '</p>' +
-    '<button type="button" class="primaer voll" data-action="export">Daten exportieren</button>' +
+  // Jahresziele
+  const ziele = [...daten.einstellungen.jahresziele].sort((a, b) => b.jahr - a.jahr);
+  html += '<h2>Jahresziele</h2><div class="liste">';
+  if (!ziele.length) html += '<div class="leer">Noch kein Jahresziel.</div>';
+  ziele.forEach(z => {
+    html += '<div class="zeile"><button type="button" class="inhalt" data-action="jahresziel-bearbeiten" data-jahr="' + z.jahr + '">' +
+      '<div class="text"><div>' + z.jahr + '</div></div><span class="zahl" style="padding-right:16px">' + kmText(z.km) + ' km</span></button></div>';
+  });
+  html += '</div><div class="knopfreihe"><button type="button" data-action="jahresziel-neu">+ Jahresziel</button></div>';
+
+  html += '<h2>Datensicherung</h2><div class="karte">' +
+    '<p style="margin-top:0">Deine Daten liegen nur auf diesem Gerät im Speicher des Browsers. Sichere sie regelmäßig als Datei, z. B. in „Dateien“ oder iCloud. ' +
+    'Vor dem Teilen prüft die App die Datei.</p>' +
+    '<p class="klein">Letzte Sicherung: ' + (le ? datumText(le) : "noch nie") + '</p>' +
+    '<button type="button" class="primaer voll" data-action="sichern">Jetzt sichern</button>' +
+    sicherungsErgebnisHtml() +
     '<div style="height:10px"></div>' +
+    '<button type="button" class="voll" data-action="sicherung-pruefen">Sicherung prüfen …</button>' +
+    '<p class="klein">Liest eine gespeicherte Sicherung und vergleicht sie mit dem aktuellen Stand. Dabei wird nichts verändert.</p>' +
     '<button type="button" class="voll" data-action="import">Daten importieren …</button>' +
     '<p class="klein">Beim Import werden alle vorhandenen Daten ersetzt. Vorher wird nachgefragt.</p></div>' +
-    '<p class="klein zentriert">Rad-km · Datenmodell Version ' + DATEN_VERSION + '</p>';
+
+    '<h2>Über Rad-km</h2><div class="karte">' +
+    detailListe([["App-Version", APP_VERSION], ["Datenversion", String(DATEN_VERSION)]]) + '</div>';
   return html;
+}
+
+// Jahresziel anlegen oder ändern ("jahr" = vorhandenes Ziel bzw. Vorschlag für ein neues)
+function jahreszielFormular(jahr, vorhanden) {
+  const z = vorhanden ? daten.einstellungen.jahresziele.find(z => z.jahr === jahr) : null;
+  let vorschlag = jahr || Number(heute().slice(0, 4));
+  if (!z && !jahr) while (daten.einstellungen.jahresziele.some(x => x.jahr === vorschlag)) vorschlag++;
+  fensterOeffnen(
+    '<h2>' + (z ? "Jahresziel bearbeiten" : "Jahresziel festlegen") + '</h2>' +
+    '<label for="z-jahr">Jahr</label><input type="text" id="z-jahr" inputmode="numeric" value="' + vorschlag + '">' +
+    '<label for="z-km">Ziel in km</label><input type="text" id="z-km" inputmode="decimal" placeholder="z. B. 5000" value="' + (z ? kmFeld(z.km) : "") + '">' +
+    '<div class="feldhinweis">Die Startseite zeigt den Fortschritt und vergleicht ihn mit dem zeitanteiligen Soll und der Jahresprognose.</div>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="jahresziel-speichern" data-jahr="' + (z ? z.jahr : "") + '">Speichern</button></div>' +
+    (z ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="jahresziel-loeschen" data-jahr="' + z.jahr + '">Jahresziel entfernen</button></div>' : "")
+  );
+}
+function jahreszielSpeichern(altesJahr) {
+  const jahr = Number(wert("z-jahr").trim());
+  const km = kmLesen(wert("z-km"));
+  if (!(Number.isInteger(jahr) && jahr >= 1900 && jahr <= 9999)) { alert("Bitte eine Jahreszahl eingeben, z. B. 2027."); return; }
+  if (!(km > 0)) { alert("Bitte das Ziel als Zahl größer 0 eingeben, z. B. 5000."); return; }
+  const ziele = daten.einstellungen.jahresziele.filter(z => z.jahr !== altesJahr);
+  if (ziele.some(z => z.jahr === jahr)) { alert("Für " + jahr + " gibt es schon ein Jahresziel. Bitte dieses ändern."); return; }
+  ziele.push({ jahr, km });
+  daten.einstellungen.jahresziele = ziele.sort((a, b) => a.jahr - b.jahr);
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Jahresziel gespeichert"); }
+}
+async function jahreszielLoeschen(jahr) {
+  if (!await frage("Jahresziel für " + jahr + " wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
+  daten.einstellungen.jahresziele = daten.einstellungen.jahresziele.filter(z => z.jahr !== jahr);
+  if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 function fahrradFormular() {
   const f = daten.fahrrad || { name: "", startdatum: heute(), startKm: null, rahmennummer: "", beschreibung: "" };
@@ -1707,36 +2124,239 @@ function fahrradSpeichern() {
 }
 
 /* =====================================================================
-   7. EXPORT UND IMPORT
+   7. DATENSICHERUNG: Export, Prüfung, Import
+   Nichts in diesem Abschnitt verändert die Daten der App – außer dem
+   Import nach ausdrücklicher Bestätigung. Eine erfolgreiche Sicherung
+   setzt nur das Datum der letzten Sicherung (eigener Speicherplatz).
    ===================================================================== */
 
 function exportVermerken() {
   try { localStorage.setItem(EXPORT_SCHLUESSEL, heute()); } catch (e) {}
-  zeichnen();
 }
 
-// Export: zuerst über das Teilen-Menü (iPhone), sonst als Download.
-// Wichtig: navigator.share muss direkt nach dem Antippen aufgerufen werden,
-// deshalb hier kein "await" vor dem Teilen.
-function exportInhalt() {
-  return JSON.stringify(Object.assign({ exportiertAm: new Date().toISOString() }, daten), null, 2);
+// Kurzinfo am Anfang der Exportdatei
+function kurzinfoFuer(d, zeitpunkt) {
+  const f = d.fahrrad;
+  return {
+    zeitpunkt,
+    appVersion: APP_VERSION,
+    eintraege: d.eintraege.length,
+    kmSumme: runden(d.eintraege.reduce((s, e) => s + e.km, 0)),
+    kmStand: f ? runden(f.startKm + d.eintraege.filter(e => e.datum >= f.startdatum).reduce((s, e) => s + e.km, 0)) : null,
+    wartungen: d.wartungsprotokoll.length,
+    maengel: d.maengel.length
+  };
 }
-function exportieren() {
-  const inhalt = exportInhalt();
-  const dateiname = "rad-km-" + heute() + ".json";
-  let datei = null;
-  try { datei = new File([inhalt], dateiname, { type: "application/json" }); } catch (e) {}
+// "412 Einträge, 7.380,4 km"
+function inhaltText(ki) {
+  return (ki.eintraege === 1 ? "1 Eintrag" : ki.eintraege + " Einträge") + ", " + kmText(ki.kmSumme) + " km";
+}
 
-  if (datei && navigator.canShare && navigator.canShare({ files: [datei] })) {
-    navigator.share({ files: [datei], title: dateiname })
-      .then(() => { exportVermerken(); meldung("Export erstellt"); })
-      .catch(err => {
-        if (err && err.name === "AbortError") return; // vom Nutzer abgebrochen
-        herunterladen(inhalt, dateiname);
-      });
-  } else {
-    herunterladen(inhalt, dateiname);
+function exportInhalt(zeitpunkt = new Date().toISOString()) {
+  const { version, ...rest } = daten;
+  return JSON.stringify(Object.assign({ version: DATEN_VERSION, kurzinfo: kurzinfoFuer(daten, zeitpunkt) }, rest), null, 2);
+}
+
+// ---------- Vergleich einer Sicherung mit dem aktuellen Stand ----------
+
+// Gleicher Inhalt, unabhängig von der Reihenfolge der Felder
+function kanonisch(x) {
+  if (Array.isArray(x)) return x.map(kanonisch);
+  if (x && typeof x === "object") return Object.keys(x).sort().reduce((o, k) => { o[k] = kanonisch(x[k]); return o; }, {});
+  return x;
+}
+function gleicherInhalt(a, b) { return JSON.stringify(kanonisch(a)) === JSON.stringify(kanonisch(b)); }
+
+// Je Liste: fehlen = nur im aktuellen Stand (neuer als die Sicherung),
+// nurSicherung = nur in der Sicherung, geaendert = in beiden, aber verschieden.
+// Einträge werden über das Datum zugeordnet, alles andere über die Kennung.
+// Berechnete Kilometerstände im Protokoll zählen nicht als Unterschied.
+function datenVergleichen(sicherung, aktuell) {
+  const liste = (alt, neu, schluessel, inhalt = x => x) => {
+    const a = new Map(alt.map(x => [schluessel(x), x])), n = new Map(neu.map(x => [schluessel(x), x]));
+    return {
+      fehlen: [...n.keys()].filter(k => !a.has(k)),
+      nurSicherung: [...a.keys()].filter(k => !n.has(k)),
+      geaendert: [...n.keys()].filter(k => a.has(k) && !gleicherInhalt(inhalt(a.get(k)), inhalt(n.get(k))))
+    };
+  };
+  const nachId = x => x.id;
+  const ohneId = ({ id, ...rest }) => rest;
+  const ohneBerechnetenKm = p => Object.assign({}, p, { kmStand: p.kmManuell ? p.kmStand : null });
+  const gemeinsameReihenfolge = (x, y) => x.map(nachId).filter(id => y.some(v => v.id === id));
+  const vorlagen = liste(sicherung.vorlagen, aktuell.vorlagen, nachId);
+  vorlagen.reihenfolge = !gleicherInhalt(gemeinsameReihenfolge(sicherung.vorlagen, aktuell.vorlagen), gemeinsameReihenfolge(aktuell.vorlagen, sicherung.vorlagen));
+  return {
+    eintraege: liste(sicherung.eintraege, aktuell.eintraege, e => e.datum, ohneId),
+    vorlagen,
+    wartungsarten: liste(sicherung.wartungsarten, aktuell.wartungsarten, nachId),
+    wartungsprotokoll: liste(sicherung.wartungsprotokoll, aktuell.wartungsprotokoll, nachId, ohneBerechnetenKm),
+    termine: liste(sicherung.termine, aktuell.termine, t => t.wartungsartId),
+    maengel: liste(sicherung.maengel, aktuell.maengel, nachId),
+    fahrrad: !gleicherInhalt(sicherung.fahrrad, aktuell.fahrrad),
+    einstellungen: !gleicherInhalt(sicherung.einstellungen, aktuell.einstellungen)
+  };
+}
+
+// Datumswerte als kurze Bereiche: "25.–27.10., 30.10.–02.11."; das Jahr nur,
+// wenn es nicht das laufende ist. Mehr als "max" Bereiche werden mit "…" gekürzt.
+function datumsBereiche(liste, h, max = 4) {
+  const bereiche = [];
+  [...liste].sort().forEach(d => {
+    const b = bereiche[bereiche.length - 1];
+    if (b && plusTage(b[1], 1) === d) b[1] = d; else bereiche.push([d, d]);
+  });
+  const jahr = h.slice(0, 4);
+  const text = ([von, bis]) => {
+    const mitJahr = von.slice(0, 4) !== jahr || bis.slice(0, 4) !== jahr;
+    const t = iso => mitJahr ? datumText(iso) : kurzDatum(iso);
+    if (von === bis) return t(von);
+    if (von.slice(0, 7) === bis.slice(0, 7)) return von.slice(8) + ".–" + t(bis);
+    if (von.slice(0, 4) === bis.slice(0, 4)) return kurzDatum(von) + "–" + t(bis);
+    return t(von) + "–" + t(bis);
+  };
+  const teile = bereiche.slice(0, max).map(text);
+  if (bereiche.length > max) teile.push("…");
+  return teile.join(", ");
+}
+
+const VERGLEICH_BEZEICHNUNG = {
+  eintraege: ["Eintrag", "Einträge"],
+  wartungsprotokoll: ["Wartung", "Wartungen"],
+  maengel: ["Mangel", "Mängel"],
+  vorlagen: ["Vorlage", "Vorlagen"],
+  wartungsarten: ["Wartungsart", "Wartungsarten"],
+  termine: ["geplanter Termin", "geplante Termine"]
+};
+// Unterschiede als Text: "fehlen" (nur Neues seit der Sicherung) und "sonst"
+function unterschiedTexte(v, h) {
+  const fehlen = [], sonst = [];
+  Object.keys(VERGLEICH_BEZEICHNUNG).forEach(k => {
+    const [einzahl, mehrzahl] = VERGLEICH_BEZEICHNUNG[k];
+    const anzahl = n => n + " " + (n === 1 ? einzahl : mehrzahl);
+    const tage = liste => k === "eintraege" ? " (" + datumsBereiche(liste, h) + ")" : "";
+    const x = v[k];
+    if (x.fehlen.length) fehlen.push(anzahl(x.fehlen.length) + (x.fehlen.length === 1 ? " fehlt" : " fehlen") + tage(x.fehlen));
+    if (x.nurSicherung.length) sonst.push(anzahl(x.nurSicherung.length) + " nur in der Sicherung" + tage(x.nurSicherung));
+    if (x.geaendert.length) sonst.push(anzahl(x.geaendert.length) + " geändert" + tage(x.geaendert));
+  });
+  if (v.vorlagen.reihenfolge) sonst.push("Reihenfolge der Vorlagen geändert");
+  if (v.fahrrad) sonst.push("Angaben zum Fahrrad geändert");
+  if (v.einstellungen) sonst.push("Einstellungen geändert");
+  return { fehlen, sonst };
+}
+
+// Wertet den Text einer Sicherung aus: Prüfung mit denselben Regeln wie beim
+// Import, Vergleich mit "aktuell" und Abgleich der Kurzinfo. Verändert nichts.
+//   status: "identisch" | "aelter" | "abweichend" | "defekt"
+//   kurzinfoPasst: true / false, null = Datei ohne Kurzinfo (ältere Sicherung)
+//   identischStreng: Inhalt einschließlich aller Kennungen gleich
+function sicherungAuswerten(text, aktuell, h = heute()) {
+  let gelesen, roh;
+  try {
+    gelesen = datenEinlesen(text);
+    roh = JSON.parse(text);
+  } catch (e) {
+    return { status: "defekt", titel: "Datei beschädigt bzw. keine Rad-km-Sicherung", details: [e.message], kurzinfo: null, kurzinfoPasst: null, identischStreng: false };
   }
+  const ki = roh.kurzinfo && typeof roh.kurzinfo === "object" && !Array.isArray(roh.kurzinfo) ? roh.kurzinfo : null;
+  const soll = kurzinfoFuer(gelesen, null);
+  const kurzinfoPasst = roh.kurzinfo === undefined ? null
+    : !!ki && ["eintraege", "kmSumme", "kmStand", "wartungen", "maengel"].every(k => ki[k] === soll[k]);
+  const erg = { gelesen, kurzinfo: ki, kurzinfoPasst, inhalt: soll, details: [], identischStreng: gleicherInhalt(gelesen, aktuell) };
+  const u = unterschiedTexte(datenVergleichen(gelesen, aktuell), h);
+  if (!u.fehlen.length && !u.sonst.length) {
+    erg.status = "identisch"; erg.titel = "Identisch mit dem aktuellen Stand";
+  } else if (!u.sonst.length) {
+    erg.status = "aelter"; erg.titel = "Sicherung ist älter: " + u.fehlen.join(", ");
+  } else {
+    erg.status = "abweichend"; erg.titel = "Sicherung weicht vom aktuellen Stand ab"; erg.details = [...u.fehlen, ...u.sonst];
+  }
+  return erg;
+}
+
+// ---------- Sichern ----------
+
+let sicherungLaeuft = false;
+// Ergebnis der letzten erfolgreichen Sicherung (nur solange die App geöffnet ist)
+let sicherungsErgebnis = null;
+// Bereits geprüfte Sicherung, falls das Teilen-Menü einen zweiten Tipper braucht
+let geprueftZumTeilen = null;
+
+// Erzeugt die Exportdatei und prüft sie, bevor sie geteilt wird: Die Datei
+// wird wieder eingelesen, mit den Import-Regeln geprüft und mit dem aktuellen
+// Stand verglichen. Wirft einen Fehler, wenn etwas nicht stimmt.
+async function sicherungVorbereiten() {
+  const dateiname = "rad-km-" + heute() + ".json";
+  const inhalt = exportInhalt();
+  let datei;
+  try { datei = new File([inhalt], dateiname, { type: "application/json" }); }
+  catch (e) { datei = new Blob([inhalt], { type: "application/json" }); }
+  let text;
+  try { text = await dateiLesen(datei); }
+  catch (e) { throw new Error("Die Exportdatei konnte nicht wieder gelesen werden."); }
+  const erg = sicherungAuswerten(text, daten);
+  if (erg.status === "defekt") throw new Error("Die Exportdatei ist fehlerhaft: " + erg.details.join(" "));
+  if (!erg.identischStreng) {
+    const was = erg.status === "aelter" ? [erg.titel] : erg.details;
+    throw new Error("Die Exportdatei stimmt nicht mit dem aktuellen Stand überein" + (was.length ? ": " + was.join(", ") + "." : " (interne Kennungen)."));
+  }
+  if (erg.kurzinfoPasst !== true) throw new Error("Die Kurzinfo der Exportdatei passt nicht zum Inhalt.");
+  return { datei, dateiname, inhalt, kurzinfo: erg.kurzinfo };
+}
+
+// "Jetzt sichern": prüfen, dann teilen (iPhone) oder herunterladen
+async function jetztSichern() {
+  if (sicherungLaeuft) return;
+  sicherungLaeuft = true;
+  try {
+    let s;
+    try {
+      s = await sicherungVorbereiten();
+    } catch (e) {
+      alert("Die Sicherung wurde nicht erstellt, weil die Prüfung der Exportdatei fehlgeschlagen ist:\n" + e.message +
+        "\n\nDeine Daten in der App sind unverändert.");
+      return;
+    }
+    await sicherungTeilen(s);
+  } finally {
+    sicherungLaeuft = false;
+  }
+}
+
+// Teilen-Menü bzw. Download einer geprüften Sicherung. Erst nach dem Abschluss
+// wird das Datum der letzten Sicherung gesetzt; die Daten bleiben unberührt.
+// navigator.share wird ohne vorheriges "await" aufgerufen (iPhone).
+async function sicherungTeilen(s) {
+  if (navigator.canShare && navigator.canShare({ files: [s.datei] })) {
+    try {
+      await navigator.share({ files: [s.datei], title: s.dateiname });
+    } catch (err) {
+      if (err && err.name === "AbortError") { meldung("Sicherung abgebrochen"); return; }
+      // Das iPhone öffnet das Teilen-Menü nur direkt nach einem Tipper
+      if (err && err.name === "NotAllowedError" && !s.zweiterVersuch) { teilenNachfragen(s); return; }
+      herunterladen(s.inhalt, s.dateiname);
+      sicherungFertig(s, "heruntergeladen");
+      return;
+    }
+    sicherungFertig(s, "übergeben");
+  } else {
+    herunterladen(s.inhalt, s.dateiname);
+    sicherungFertig(s, "heruntergeladen");
+  }
+}
+function teilenNachfragen(s) {
+  geprueftZumTeilen = Object.assign({}, s, { zweiterVersuch: true });
+  fensterOeffnen('<h2>Sicherung geprüft</h2>' +
+    '<p>Die Exportdatei ist geprüft: ' + inhaltText(s.kurzinfo) + '. Tippe auf „Teilen …“, um sie z. B. in „Dateien“ zu speichern.</p>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="sicherung-teilen">Teilen …</button></div>');
+}
+function sicherungFertig(s, wie) {
+  exportVermerken();
+  sicherungsErgebnis = { wie, kurzinfo: s.kurzinfo };
+  zeichnen();
+  meldung("Sicherung " + wie + " – Inhalt geprüft: " + inhaltText(s.kurzinfo), { dauer: 4000 });
 }
 function herunterladen(inhalt, dateiname) {
   const url = URL.createObjectURL(new Blob([inhalt], { type: "application/json" }));
@@ -1747,9 +2367,54 @@ function herunterladen(inhalt, dateiname) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  exportVermerken();
-  meldung("Datei heruntergeladen");
 }
+
+// ---------- Sicherung prüfen (liest nur, überschreibt nichts) ----------
+
+function sicherungPruefenStarten() {
+  const eingabe = document.getElementById("pruefdatei");
+  eingabe.value = "";
+  eingabe.click();
+}
+async function pruefDateiGewaehlt(datei) {
+  if (!datei) return;
+  let erg;
+  try {
+    erg = sicherungAuswerten(await dateiLesen(datei), daten);
+  } catch (e) {
+    erg = { status: "defekt", titel: "Datei beschädigt bzw. keine Rad-km-Sicherung", details: ["Die Datei konnte nicht gelesen werden."] };
+  }
+  pruefErgebnisAnzeigen(datei.name, erg);
+}
+function zeitpunktText(iso) {
+  const d = typeof iso === "string" ? new Date(iso) : null;
+  if (!d || isNaN(d)) return null;
+  return datumText(isoAusDate(d)) + ", " + zweistellig(d.getHours()) + ":" + zweistellig(d.getMinutes()) + " Uhr";
+}
+function pruefErgebnisAnzeigen(name, erg) {
+  const klasse = { identisch: "status-gruen", aelter: "status-orange", abweichend: "status-orange", defekt: "status-rot" }[erg.status];
+  const zeichen = { identisch: "✓", aelter: "⚠️", abweichend: "⚠️", defekt: "✗" }[erg.status];
+  let html = '<h2>Sicherung prüfen</h2><p class="klein" style="overflow-wrap:anywhere">' + esc(name) + '</p>' +
+    '<p class="' + klasse + '">' + zeichen + " " + esc(erg.titel) + '</p>' +
+    (erg.details.length ? '<ul>' + erg.details.map(d => '<li>' + esc(d) + '</li>').join("") + '</ul>' : "");
+  if (erg.status !== "defekt") {
+    const i = erg.inhalt;
+    const wann = erg.kurzinfo && zeitpunktText(erg.kurzinfo.zeitpunkt);
+    html += detailListe([
+      ["Gesichert am", wann ? esc(wann) + (erg.kurzinfo.appVersion ? " (App-Version " + esc(erg.kurzinfo.appVersion) + ")" : "") : "unbekannt (Sicherung ohne Kurzinfo)"],
+      ["Inhalt der Sicherung", inhaltText(i) + ", " + (i.wartungen === 1 ? "1 Wartung" : i.wartungen + " Wartungen") + ", " +
+        (i.maengel === 1 ? "1 Mangel" : i.maengel + " Mängel") + (i.kmStand !== null ? "<br>Kilometerstand " + kmText(i.kmStand) + " km" : "")]
+    ]);
+    if (erg.kurzinfoPasst === false) {
+      html += '<p class="status-orange">⚠️ Die Kurzinfo passt nicht zum Inhalt – die Datei wurde nachträglich verändert oder ist unvollständig.</p>';
+    }
+  }
+  html += '<p class="klein">Die Datei wurde nur gelesen. In der App wurde nichts verändert.</p>' +
+    '<div class="knopfreihe"><button type="button" class="primaer" data-action="fenster-zu">Schließen</button></div>';
+  fensterOeffnen(html);
+}
+
+// ---------- Import ----------
 
 function importStarten() {
   const eingabe = document.getElementById("importdatei");
@@ -1758,24 +2423,31 @@ function importStarten() {
 }
 async function importDateiGewaehlt(datei) {
   if (!datei) return;
-  let neu;
+  let neu, roh;
   try {
-    neu = datenEinlesen(await datei.text());
+    const text = await dateiLesen(datei);
+    neu = datenEinlesen(text);
+    roh = JSON.parse(text);
   } catch (e) {
     alert("Import nicht möglich:\n" + e.message);
     return;
   }
+  const wann = roh.kurzinfo && zeitpunktText(roh.kurzinfo.zeitpunkt);
+  const ziele = neu.einstellungen.jahresziele.length;
   const zusammenfassung =
     "<strong>" + esc(datei.name) + "</strong><br>" +
+    (wann ? "Gesichert am " + esc(wann) + "<br>" : "") +
     "Fahrrad: " + (neu.fahrrad ? esc(neu.fahrrad.name) : "–") + "<br>" +
     neu.eintraege.length + " Einträge, " + neu.vorlagen.length + " Vorlagen, " +
     neu.wartungsarten.length + " Wartungsarten, " + neu.wartungsprotokoll.length + " Wartungen, " +
     neu.termine.length + " geplante Termine, " + neu.maengel.length + " Mängel" +
-    (neu.maengel.length ? " (davon " + neu.maengel.filter(m => m.status === "offen").length + " offen)" : "") + ".<br><br>" +
+    (neu.maengel.length ? " (davon " + neu.maengel.filter(m => m.status === "offen").length + " offen)" : "") +
+    (ziele ? ", " + (ziele === 1 ? "1 Jahresziel" : ziele + " Jahresziele") : "") + ".<br><br>" +
     "<strong>Alle vorhandenen Daten in der App werden ersetzt.</strong> Fortfahren?";
   if (!await frage(zusammenfassung, "Importieren und ersetzen", "Abbrechen", true)) return;
   daten = neu;
   ladeFehler = null;
+  sicherungsErgebnis = null;
   if (speichern()) { zeichnen(); meldung("Import erfolgreich"); }
 }
 
@@ -1829,7 +2501,21 @@ const AKTIONEN = {
 
   "fahrrad-aendern": () => fahrradFormular(),
   "fahrrad-speichern": () => fahrradSpeichern(),
-  "export": () => exportieren(),
+  "jahresziel-neu": el => jahreszielFormular(el.dataset.jahr ? Number(el.dataset.jahr) : null, false),
+  "jahresziel-bearbeiten": el => jahreszielFormular(Number(el.dataset.jahr), true),
+  "jahresziel-speichern": el => jahreszielSpeichern(el.dataset.jahr ? Number(el.dataset.jahr) : null),
+  "jahresziel-loeschen": el => jahreszielLoeschen(Number(el.dataset.jahr)),
+  "prognose": () => prognoseFenster(),
+
+  "rueckgaengig": () => rueckgaengig(),
+  "sichern": () => jetztSichern(),
+  "sicherung-teilen": () => {
+    const s = geprueftZumTeilen;
+    geprueftZumTeilen = null;
+    fensterSchliessen();
+    if (s) sicherungTeilen(s);
+  },
+  "sicherung-pruefen": () => sicherungPruefenStarten(),
   "import": () => importStarten()
 };
 const AENDERUNGEN = {
@@ -1837,10 +2523,12 @@ const AENDERUNGEN = {
   "eintrag-vorlage": () => eintragVorlageGeaendert(),
   "protokoll-datum": () => protokollDatumGeaendert(),
   "mangel-status": () => mangelStatusGeaendert(),
-  "art-fenster": () => artFensterGeaendert()
+  "art-fenster": () => artFensterGeaendert(),
+  "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
-  "protokoll-km": () => protokollKmEingabe()
+  "protokoll-km": () => protokollKmEingabe(),
+  "prognose-datum": () => prognoseAnzeigen()
 };
 
 document.addEventListener("click", ev => {
@@ -1856,6 +2544,7 @@ document.addEventListener("input", ev => {
   if (name) EINGABEN[name]();
 });
 document.getElementById("importdatei").addEventListener("change", ev => importDateiGewaehlt(ev.target.files[0]));
+document.getElementById("pruefdatei").addEventListener("change", ev => pruefDateiGewaehlt(ev.target.files[0]));
 
 // Tippen neben das Fenster schließt es
 fenster.addEventListener("click", ev => { if (ev.target === fenster) fensterSchliessen(); });

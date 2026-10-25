@@ -18,14 +18,16 @@
 </head>
 <body>
 <h1>Rad-km · Tests</h1>
-<p>Lädt <code>../index.html?test</code> unsichtbar und prüft Umwandlung, Zusammenfassung und saisonale Fälligkeit.
-Die Tests verwenden einen eigenen Speicherplatz; deine echten Daten werden nicht berührt.</p>
+<p>Lädt <code>../index.html?test</code> unsichtbar und prüft Umwandlung, Zusammenfassung, Fälligkeit, Prognosen,
+Rückgängig und Datensicherung. Die Tests verwenden einen eigenen Speicherplatz; deine echten Daten werden nicht berührt.
+Das Teilen-Menü wird durch einen Platzhalter ersetzt, es öffnet sich also nichts.</p>
 <p id="ergebnis">Tests laufen …</p>
 <div id="protokoll"></div>
 
 <script>
 "use strict";
 const TEST_SCHLUESSEL = "radkm-test-daten";
+const TEST_EXPORT_SCHLUESSEL = "radkm-test-letzter-export";
 const protokollEl = document.getElementById("protokoll");
 let bestanden = 0, fehlgeschlagen = 0;
 
@@ -46,10 +48,20 @@ function gleich(text, ist, soll) {
   const a = JSON.stringify(ist), b = JSON.stringify(soll);
   zeile(a === b, text, a === b ? "" : "erwartet: " + b + "\nerhalten: " + a);
 }
+// Wie gleich(), aber unabhängig von der Reihenfolge der Felder in Objekten
+function kanonisch(x) {
+  if (Array.isArray(x)) return x.map(kanonisch);
+  if (x && typeof x === "object") return Object.keys(x).sort().reduce((o, k) => { o[k] = kanonisch(x[k]); return o; }, {});
+  return x;
+}
+function gleichInhalt(text, ist, soll) { gleich(text, kanonisch(ist), kanonisch(soll)); }
+function wahr(text, bedingung, detail) { zeile(!!bedingung, text, bedingung ? "" : detail || ""); }
 function wirft(text, fn, teil) {
   try { fn(); zeile(false, text, "Es wurde kein Fehler gemeldet."); }
   catch (e) { const ok = !teil || e.message.includes(teil); zeile(ok, text, ok ? "" : "Meldung: " + e.message); }
 }
+const kopie = x => JSON.parse(JSON.stringify(x));
+const warten = ms => new Promise(r => setTimeout(r, ms));
 
 // index.html im unsichtbaren Rahmen laden und auf den Start warten
 function appLaden() {
@@ -64,46 +76,73 @@ function appLaden() {
 async function start() {
   const v1Text = await (await fetch("daten-v1.json", { cache: "no-store" })).text();
   const v1 = JSON.parse(v1Text);
+  const v2Text = await (await fetch("daten-v2.json", { cache: "no-store" })).text();
+  const v2 = JSON.parse(v2Text);
 
   // ---------------------------------------------------------------
-  // 1. Umwandlung Version 1 → 2 beim Laden aus dem Speicher
+  // 1. Umwandlung Version 1 → 3 beim Laden aus dem Speicher
   // ---------------------------------------------------------------
   localStorage.setItem(TEST_SCHLUESSEL, v1Text);
   const w = await appLaden();
   try {
     abschnitt("1. Umwandlung einer Version-1-Datei beim Laden (localStorage)");
     gleich("Kein Ladefehler", w.eval("ladeFehler"), null);
-    const d = JSON.parse(JSON.stringify(w.eval("daten")));
-    pruefeUmwandlung(d, v1);
+    const d = kopie(w.eval("daten"));
+    pruefeUmwandlungV1(d, v1);
 
     // Die Version-1-Daten im Speicher bleiben unverändert, bis gespeichert wird
     gleich("Gespeicherte Daten werden erst beim nächsten Speichern überschrieben", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, 1);
 
     // -------------------------------------------------------------
-    // 2. Umwandlung beim Import, Export → Import
+    // 2. Umwandlung Version 2 → 3
     // -------------------------------------------------------------
-    abschnitt("2. Umwandlung beim Import und Export → Import");
-    const imp = JSON.parse(JSON.stringify(w.datenEinlesen(v1Text)));
-    pruefeUmwandlung(imp, v1);
-    const exportText = w.exportInhalt();
-    const exp = JSON.parse(exportText);
-    gleich("Export enthält version 2 und die Mängelliste", [exp.version, Array.isArray(exp.maengel)], [2, true]);
-    gleich("Export enthält die neuen Felder (Fahrrad, Wartungsart)",
-      [("rahmennummer" in exp.fahrrad), ("beschreibung" in exp.fahrrad), ("fensterVon" in exp.wartungsarten[0]), ("gueltigAbJahr" in exp.wartungsarten[0])],
-      [true, true, true, true]);
-    gleich("Export → Import ergibt dieselben Daten", JSON.parse(JSON.stringify(w.datenEinlesen(exportText))), d);
+    abschnitt("2. Umwandlung einer Version-2-Datei (localStorage und Import)");
+    localStorage.setItem(TEST_SCHLUESSEL, v2Text);
+    const w2 = await appLaden();
+    gleich("Beim Laden: kein Ladefehler", w2.eval("ladeFehler"), null);
+    pruefeUmwandlungV2(kopie(w2.eval("daten")), v2, "Beim Laden");
+    gleich("Beim Laden: Version-2-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v2Text);
+    w2.frameElement.remove();
+    pruefeUmwandlungV2(kopie(w.datenEinlesen(v2Text)), v2, "Beim Import");
+    gleich("Version 2 ohne „wartungsarten“: Standardarten mit Zeitfenster, nicht einmalig",
+      w.datenEinlesen(JSON.stringify(Object.assign({}, v2, { wartungsarten: undefined, wartungsprotokoll: [], termine: [], maengel: [] }))).wartungsarten
+        .map(a => [a.id, a.fensterVon, a.fensterBis, a.einmalig]),
+      [["grosse-inspektion", 10, 11, false], ["kleine-inspektion", 3, 4, false], ["reparatur", null, null, false]]);
 
-    // Version-2-Daten mit allen neuen Feldern: Export → Import verlustfrei
-    const v2 = JSON.parse(JSON.stringify(d));
-    v2.fahrrad.rahmennummer = "WAW 12345";
-    v2.fahrrad.beschreibung = "Blau, 28 Zoll\nNabenschaltung";
-    v2.wartungsarten[1].fensterVon = 3; v2.wartungsarten[1].fensterBis = 4; v2.wartungsarten[1].gueltigAbJahr = 2027;
-    v2.maengel = [
+    // -------------------------------------------------------------
+    // 3. Import, Export → Import, fehlerhafte Daten
+    // -------------------------------------------------------------
+    abschnitt("3. Umwandlung beim Import und Export → Import");
+    const imp = kopie(w.datenEinlesen(v1Text));
+    pruefeUmwandlungV1(imp, v1);
+    const exportText = w.exportInhalt("2026-10-25T12:00:00.000Z");
+    const exp = JSON.parse(exportText);
+    gleich("Export: version 3, Kurzinfo am Anfang", Object.keys(exp).slice(0, 3), ["version", "kurzinfo", "fahrrad"]);
+    gleich("Export: Kurzinfo mit Zeitpunkt, App-Version, Anzahl Einträge, km-Summe, Kilometerstand, Wartungen, Mängel", exp.kurzinfo,
+      { zeitpunkt: "2026-10-25T12:00:00.000Z", appVersion: w.eval("APP_VERSION"), eintraege: 6, kmSumme: 110.7, kmStand: 1306.2, wartungen: 3, maengel: 0 });
+    gleich("Export enthält die neuen Felder (Einstellungen, Arbeitsweg, einmalig)",
+      [exp.einstellungen, "arbeitsweg" in exp.vorlagen[0], "arbeitsweg" in exp.eintraege[0], "einmalig" in exp.wartungsarten[0]],
+      [{ fahrtage: [1, 2, 5], jahresziele: [] }, true, true, true]);
+    gleich("Export → Import ergibt dieselben Daten (die Kurzinfo wird beim Import nicht übernommen)", kopie(w.datenEinlesen(exportText)), d);
+
+    // Version-3-Daten mit allen neuen Feldern: Export → Import verlustfrei
+    const v3 = kopie(d);
+    v3.fahrrad.rahmennummer = "WAW 12345";
+    v3.fahrrad.beschreibung = "Blau, 28 Zoll\nNabenschaltung";
+    v3.einstellungen = { fahrtage: [1, 3, 5, 6], jahresziele: [{ jahr: 2026, km: 5000 }, { jahr: 2027, km: 5500.5 }] };
+    v3.vorlagen[0].arbeitsweg = true;
+    v3.eintraege[3].arbeitsweg = true;
+    v3.wartungsarten[1].fensterVon = 3; v3.wartungsarten[1].fensterBis = 4; v3.wartungsarten[1].gueltigAbJahr = 2027;
+    v3.wartungsarten[3].einmalig = true;
+    v3.maengel = [
       { id: "m-1", datum: "2026-10-01", beschreibung: "Licht hinten wackelt", status: "offen", erledigtAm: null, protokollId: null },
       { id: "m-2", datum: "2025-03-10", beschreibung: "Bremse quietscht", status: "erledigt", erledigtAm: "2025-03-15", protokollId: "p-1" }
     ];
-    gleich("Version-2-Daten mit Mängeln, Zeitfenster und Rahmennummer: Import → Export → Import verlustfrei",
-      JSON.parse(JSON.stringify(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v2))))) ), v2);
+    gleich("Version-3-Daten mit Jahreszielen, Fahrtagen, Arbeitsweg, einmalig, Mängeln: Import → Export → Import verlustfrei",
+      kopie(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v3))))), v3);
+    const ohneEinst = kopie(v3); delete ohneEinst.einstellungen;
+    gleich("Version 3 ohne „einstellungen“: Standardwerte (Mo, Di, Fr; keine Jahresziele)",
+      w.datenEinlesen(JSON.stringify(ohneEinst)).einstellungen, { fahrtage: [1, 2, 5], jahresziele: [] });
 
     // Fehlt "wartungsarten" in einer Version-1-Datei: Standardarten ohne Zeitfenster
     const ohneArten = Object.assign({}, v1);
@@ -111,27 +150,37 @@ async function start() {
     delete ohneArten.wartungsprotokoll;
     delete ohneArten.termine;
     gleich("Version 1 ohne „wartungsarten“: Standardarten ohne Zeitfenster",
-      w.datenEinlesen(JSON.stringify(ohneArten)).wartungsarten.map(a => [a.id, a.intervallMonate, a.fensterVon, a.fensterBis]),
-      [["grosse-inspektion", 12, null, null], ["kleine-inspektion", null, null, null], ["reparatur", null, null, null]]);
-    gleich("Neuinstallation: Standardarten mit Beispiel-Zeitfenstern",
-      w.leereDaten().wartungsarten.map(a => [a.id, a.fensterVon, a.fensterBis, a.gueltigAbJahr]),
-      [["grosse-inspektion", 10, 11, null], ["kleine-inspektion", 3, 4, null], ["reparatur", null, null, null]]);
+      w.datenEinlesen(JSON.stringify(ohneArten)).wartungsarten.map(a => [a.id, a.intervallMonate, a.fensterVon, a.fensterBis, a.einmalig]),
+      [["grosse-inspektion", 12, null, null, false], ["kleine-inspektion", null, null, null, false], ["reparatur", null, null, null, false]]);
+    gleich("Neuinstallation: Standardarten mit Beispiel-Zeitfenstern, Standard-Fahrtage",
+      [w.leereDaten().wartungsarten.map(a => [a.id, a.fensterVon, a.fensterBis, a.gueltigAbJahr, a.einmalig]), w.leereDaten().einstellungen],
+      [[["grosse-inspektion", 10, 11, null, false], ["kleine-inspektion", 3, 4, null, false], ["reparatur", null, null, null, false]], { fahrtage: [1, 2, 5], jahresziele: [] }]);
 
     // Fehlerhafte Daten werden abgelehnt
-    const mit = aend => JSON.stringify(Object.assign(JSON.parse(JSON.stringify(v2)), aend));
-    const art = aend => [Object.assign({}, v2.wartungsarten[0], aend)];
-    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 3 })), "neueren App-Version");
-    wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(mit({ wartungsarten: art({ fensterVon: 11, fensterBis: 2 }), wartungsprotokoll: [], termine: [], maengel: [] })), "Jahreswechsel");
-    wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(mit({ wartungsarten: art({ fensterVon: 3, fensterBis: null }), wartungsprotokoll: [], termine: [], maengel: [] })), "beide");
-    wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(mit({ wartungsarten: art({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 }), wartungsprotokoll: [], termine: [], maengel: [] })), "gueltigAbJahr");
+    const mit = aend => JSON.stringify(Object.assign(kopie(v3), aend));
+    const art = aend => [Object.assign({}, v3.wartungsarten[0], aend)];
+    const nurArt = aend => mit({ wartungsarten: art(aend), wartungsprotokoll: [], termine: [], maengel: [] });
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 4 })), "neueren App-Version");
+    wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 11, fensterBis: 2 })), "Jahreswechsel");
+    wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 3, fensterBis: null })), "beide");
+    wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 })), "gueltigAbJahr");
+    wirft("Einmalige Wartung mit Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 10, fensterBis: 11, einmalig: true })), "einmalige Wartung");
+    wirft("„einmalig“ muss true oder false sein", () => w.datenEinlesen(nurArt({ einmalig: "ja" })), "einmalig");
+    wirft("„arbeitsweg“ bei Vorlagen muss true oder false sein", () => w.datenEinlesen(mit({ vorlagen: [{ name: "x", km: 1, arbeitsweg: 1 }] })), "arbeitsweg");
+    wirft("„arbeitsweg“ bei Einträgen muss true oder false sein", () => w.datenEinlesen(mit({ eintraege: [{ datum: "2026-10-01", km: 1, arbeitsweg: "nein" }] })), "arbeitsweg");
+    wirft("„einstellungen“ als Liste wird abgelehnt", () => w.datenEinlesen(mit({ einstellungen: [] })), "einstellungen");
+    wirft("Fahrtag außerhalb 1–7 wird abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { fahrtage: [1, 8] } })), "1 (Montag) bis 7 (Sonntag)");
+    wirft("Doppelter Fahrtag wird abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { fahrtage: [2, 2] } })), "doppelt");
+    wirft("Zwei Jahresziele für dasselbe Jahr werden abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { jahresziele: [{ jahr: 2026, km: 1 }, { jahr: 2026, km: 2 }] } })), "mehr als ein Jahresziel");
+    wirft("Jahresziel mit 0 km wird abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { jahresziele: [{ jahr: 2026, km: 0 }] } })), "km muss");
     wirft("Mangel mit unbekannter protokollId wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "erledigt", protokollId: "gibt-es-nicht" }] })), "protokollId");
     wirft("Mangel mit falschem Status wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "kaputt" }] })), "status");
     wirft("Mangel ohne Beschreibung wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: " " }] })), "Beschreibung");
 
     // -------------------------------------------------------------
-    // 3. Zusammenfassung der Einträge
+    // 4. Zusammenfassung der Einträge
     // -------------------------------------------------------------
-    abschnitt("3. Zusammenfassung der Einträge an den Grenzen");
+    abschnitt("4. Zusammenfassung der Einträge an den Grenzen");
     const E = (datum, km, typ = "tag") => ({ id: "t" + datum, datum, km, vorlage: null, notiz: "", typ });
     const testEintraege = [
       E("2025-06-10", 10),
@@ -199,9 +248,9 @@ async function start() {
       ["2025-12-29", "2026-01-04", "2026-10-26", "2026-12-28", "2027-01-03", "2027-01-04"].map(w.kalenderwoche), [1, 1, 44, 53, 53, 1]);
 
     // -------------------------------------------------------------
-    // 4. Saisonale Fälligkeit
+    // 5. Saisonale Fälligkeit
     // -------------------------------------------------------------
-    abschnitt("4. Saisonale Fälligkeit");
+    abschnitt("5. Saisonale Fälligkeit");
     const gross = { id: "g", name: "Große Inspektion", intervallMonate: 12, fensterVon: 10, fensterBis: 11, gueltigAbJahr: null };
     const klein = { id: "k", name: "Kleine Inspektion", intervallMonate: null, fensterVon: 3, fensterBis: 4, gueltigAbJahr: null };
     const klein2027 = Object.assign({}, klein, { gueltigAbJahr: 2027 });
@@ -254,10 +303,419 @@ async function start() {
     const stKlein = w.wartungsStatus(w.eval("daten.wartungsarten[1]"), "2026-10-24");
     gleich("Geplanter Termin hat Vorrang vor dem Zeitfenster",
       [stKlein.text, stKlein.datum, stKlein.regel.text], ["Termin am 05.11.2026 bei W (in 12 Tagen)", "2026-11-05", "fällig ab 01.03.2027"]);
+
+    // Hilfen für die folgenden Abschnitte
+    const alerts = [];
+    w.alert = m => alerts.push(String(m));
+    const F = (startdatum, startKm) => ({ name: "Test-Rad", startdatum, startKm });
+    const setze = d => w.eval("daten = datenEinlesen(" + JSON.stringify(JSON.stringify(Object.assign({ version: 3 }, d))) + ")");
+    const ohneTags = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const A = (id, aend) => Object.assign({ id, name: id, intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false }, aend);
+    const P = (id, datum, wartungsartId, kmStand) => ({ id, datum, wartungsartId, werkstatt: "", kmStand, kmManuell: kmStand !== null, notiz: "" });
+    // 01.01.–28.02.2026 jeden Tag 10 km: am 01.03.2026 sind es 590 km, Rate 10 km pro Tag
+    const zehnProTag = [];
+    for (let d = "2026-01-01"; d <= "2026-02-28"; d = w.plusTage(d, 1)) zehnProTag.push(E(d, 10));
+    const H = "2026-03-01";
+
+    // -------------------------------------------------------------
+    // 6. Prognosen
+    // -------------------------------------------------------------
+    abschnitt("6. Prognosen (Ø km pro Kalendertag der letzten 365 Tage bis gestern)");
+    setze({ fahrrad: F("2026-10-01", 100), eintraege: [E("2026-09-30", 1000), E("2026-10-01", 20), E("2026-10-05", 15), E("2026-10-10", 30), E("2026-10-11", 50), E("2026-10-12", 7)] });
+    let g = w.prognoseGrundlage("2026-10-11");
+    gleich("Weniger als 365 Tage seit dem Startdatum: Grundlage vom Startdatum bis gestern (heute, Zukunft und Einträge vor dem Startdatum zählen nicht)",
+      [g.von, g.bis, g.tage, g.km, g.rate], ["2026-10-01", "2026-10-10", 10, 65, 6.5]);
+    gleich("6 Tage seit dem Startdatum: noch keine Prognose", w.prognoseGrundlage("2026-10-07"), null);
+    gleich("7 Tage seit dem Startdatum: Prognose möglich", w.prognoseGrundlage("2026-10-08").rate, 5);
+    gleich("Jahresprognose (Stichtag 11.10.2026): 1.115 km bisher + 6,5 × 81 Tage = 1.641,5 → ca. 1.640 km",
+      w.caKm(w.jahresPrognose("2026-10-11")), "ca. 1.640 km");
+    gleich("Kilometerstand-Prognose 21.10.2026: 215 km + 6,5 × 10 Tage = 280 km", w.kmPrognose("2026-10-21", "2026-10-11"), 280);
+    gleich("Kilometerstand-Prognose nur für Tage nach heute", w.kmPrognose("2026-10-11", "2026-10-11"), null);
+    gleich("Anzeige mit „ca.“, auf 10 km gerundet", [w.caKm(1641.5), w.caKm(1645), w.caKm(12345.6)], ["ca. 1.640 km", "ca. 1.650 km", "ca. 12.350 km"]);
+    gleich("Prognose-Fenster: Datum in der Zukunft", ohneTags(w.prognoseErgebnis("2026-10-21", "2026-10-11")),
+      "ca. 280 km Erwarteter Kilometerstand am Ende des 21.10.2026 Grundlage: Ø 6,5 km pro Tag (01.10.2026–10.10.2026)");
+    gleich("Prognose-Fenster: vergangenes Datum zeigt den tatsächlichen Stand", ohneTags(w.prognoseErgebnis("2026-10-05", "2026-10-11")),
+      "135 km Tatsächlicher Kilometerstand am Ende des 05.10.2026");
+    gleich("Prognose-Fenster: Datum vor dem Startdatum", ohneTags(w.prognoseErgebnis("2026-09-30", "2026-10-11")), "Das Datum liegt vor dem Startdatum (01.10.2026).");
+    gleich("Prognose-Fenster: zu wenige Tage", ohneTags(w.prognoseErgebnis("2026-12-31", "2026-10-05")),
+      "Für eine Prognose sind noch zu wenige Tage erfasst (möglich ab dem 08.10.2026).");
+
+    setze({ fahrrad: F("2024-01-01", 0), eintraege: [E("2025-10-25", 1000), E("2025-10-26", 730), E("2026-10-25", 365), E("2026-10-26", 5000)] });
+    g = w.prognoseGrundlage("2026-10-26");
+    gleich("Mehr als 365 Tage seit dem Startdatum: genau die letzten 365 Tage bis gestern", [g.von, g.bis, g.tage, g.km, g.rate], ["2025-10-26", "2026-10-25", 365, 1095, 3]);
+    gleich("Jahresprognose (Stichtag 26.10.2026): 5.365 km + 3 × 66 Tage = 5.563 → ca. 5.560 km", w.caKm(w.jahresPrognose("2026-10-26")), "ca. 5.560 km");
+    gleich("Kilometerstand-Prognose über den Jahreswechsel (05.01.2027): 7.095 + 3 × 71 = 7.308 → ca. 7.310 km",
+      w.caKm(w.kmPrognose("2027-01-05", "2026-10-26")), "ca. 7.310 km");
+    setze({ fahrrad: F("2027-01-01", 0), eintraege: [] });
+    g = w.prognoseGrundlage("2028-03-01");
+    gleich("Schaltjahr: 365 Kalendertage einschließlich 29.02.2028; ohne Fahrten Rate 0", [g.von, g.bis, g.tage, g.rate], ["2027-03-02", "2028-02-29", 365, 0]);
+    w.eval("daten.fahrrad = null");
+    gleich("Ohne Fahrrad keine Prognose", [w.prognoseGrundlage("2026-10-26"), w.jahresPrognose("2026-10-26")], [null, null]);
+
+    // -------------------------------------------------------------
+    // 7. Jahresziel
+    // -------------------------------------------------------------
+    abschnitt("7. Jahresziel");
+    setze({ fahrrad: F("2025-01-01", 0), einstellungen: { jahresziele: [{ jahr: 2026, km: 3650 }, { jahr: 2028, km: 3660 }] },
+      eintraege: [E("2026-01-05", 150), E("2028-01-05", 60)] });
+    let z = w.jahreszielStand("2026-01-10");
+    gleich("Fortschritt und zeitanteiliges Soll (10 von 365 Tagen: 100 km)", [z.ziel, z.ist, z.soll, z.vorsprung], [3650, 150, 100, 50]);
+    z = w.jahreszielStand("2028-01-10");
+    gleich("Schaltjahr: Soll mit 366 Tagen", [z.ziel, z.ist, z.soll, z.vorsprung], [3660, 60, 100, -40]);
+    const karte2026 = ohneTags(w.jahresKarte("2026-01-10"));
+    wahr("Startseite: „150 von 3.650 km · 4 %“ und „ca. 50 km voraus“", karte2026.includes("150 von 3.650 km · 4 %") && karte2026.includes("ca. 50 km voraus"), karte2026);
+    wahr("Startseite: Jahresprognose mit Vergleich zum Ziel („ca. 300 km“, „ca. 3.350 km unter dem Ziel“)",
+      karte2026.includes("Jahresprognose: ca. 300 km") && karte2026.includes("ca. 3.350 km unter dem Ziel"), karte2026);
+    const karte2028 = ohneTags(w.jahresKarte("2028-01-10"));
+    wahr("Startseite: Rückstand („ca. 40 km im Rückstand“)", karte2028.includes("ca. 40 km im Rückstand"), karte2028);
+    const karte2027 = ohneTags(w.jahresKarte("2027-05-01"));
+    wahr("Ohne Jahresziel: nur Prognose und „Jahresziel festlegen“", karte2027.includes("Jahresziel festlegen") && !karte2027.includes(" von "), karte2027);
+    w.jahreszielFormular(null, false);
+    w.document.getElementById("z-jahr").value = "2027";
+    w.document.getElementById("z-km").value = "4.000,5";
+    w.jahreszielSpeichern(null);
+    gleich("Einstellungen: Jahresziel anlegen, aufsteigend nach Jahr gespeichert", w.eval("daten.einstellungen.jahresziele"),
+      [{ jahr: 2026, km: 3650 }, { jahr: 2027, km: 4000.5 }, { jahr: 2028, km: 3660 }]);
+    alerts.length = 0;
+    w.jahreszielFormular(2027, true);
+    w.document.getElementById("z-jahr").value = "2028";
+    w.jahreszielSpeichern(2027);
+    gleich("Einstellungen: zweites Ziel für dasselbe Jahr wird abgelehnt", [alerts, w.eval("daten.einstellungen.jahresziele.length")],
+      [["Für 2028 gibt es schon ein Jahresziel. Bitte dieses ändern."], 3]);
+    w.fensterSchliessen();
+
+    // -------------------------------------------------------------
+    // 8. Verschleißteile
+    // -------------------------------------------------------------
+    abschnitt("8. Verschleißteile: Intervall in km und/oder Monaten (Stichtag 01.03.2026)");
+    setze({ fahrrad: F("2026-01-01", 0), eintraege: zehnProTag, wartungsarten: [
+      A("km-zuerst", { intervallKm: 1000, intervallMonate: 12 }),
+      A("zeit-zuerst", { intervallKm: 5000, intervallMonate: 3 }),
+      A("bald", { intervallKm: 300 }),
+      A("km-ueberfaellig", { intervallKm: 500 }),
+      A("zeit-ueberfaellig", { intervallKm: 550, intervallMonate: 1 }),
+      A("hand", { intervallKm: 150 }),
+      A("monate-ab-start", { intervallMonate: 1 })
+    ], wartungsprotokoll: [P("p-bald", "2026-02-01", "bald", 310), P("p-hand", "2026-02-01", "hand", 400)] });
+    const ws = (id, h = H) => w.wartungsStatus(w.eval("daten.wartungsarten").find(a => a.id === id), h);
+    gleich("Grundlage: 590 km in 59 Tagen = 10 km pro Tag", w.prognoseGrundlage(H).rate, 10);
+    let s = ws("km-zuerst");
+    gleich("km zuerst (1.000 km / 12 Monate): ohne Durchführung ab Startdatum; 410 km Rest ÷ 10 km pro Tag = 41 Tage",
+      [s.text, s.klasse, s.datum, s.regel.restKm, s.regel.abStart, s.erwartet],
+      ["fällig ca. im April 2026 bei ca. 1.000 km", "status-gruen", "2026-04-11", 410, true, null]);
+    s = ws("zeit-zuerst");
+    gleich("Zeit zuerst (5.000 km / 3 Monate): fällig nach Monaten, mit erwartetem Kilometerstand und Rest-km",
+      [s.text, s.klasse, s.datum, s.regel.restKm, s.erwartet],
+      ["fällig in 31 Tagen (01.04.2026)", "status-gruen", "2026-04-01", 4410, { datum: "2026-04-01", km: 900 }]);
+    s = ws("bald");
+    gleich("Nach Durchführung (310 km am 01.02.): noch 20 km, in 2 Tagen fällig", [s.text, s.klasse, s.datum, s.regel.restKm, s.seitKm],
+      ["fällig ca. im März 2026 bei ca. 610 km", "status-orange", "2026-03-03", 20, 280]);
+    s = ws("km-ueberfaellig");
+    gleich("km-Grenze überschritten: Tag des Erreichens aus den Einträgen", [s.text, s.klasse, s.datum],
+      ["überfällig: km-Grenze (500 km) um 90 km überschritten", "status-rot", "2026-02-19"]);
+    s = ws("zeit-ueberfaellig");
+    gleich("Beides überschritten: es zählt, was zuerst erreicht wurde (Monate am 01.02. vor km am 24.02.)", [s.text, s.datum],
+      ["überfällig seit 28 Tagen (01.02.2026)", "2026-02-01"]);
+    s = ws("hand");
+    gleich("Von Hand eingetragener Kilometerstand bei der Durchführung wird berücksichtigt", [s.text, s.datum, s.regel.grenzeKm],
+      ["überfällig: km-Grenze (550 km) um 40 km überschritten", "2026-02-24", 550]);
+    s = ws("monate-ab-start");
+    gleich("Nur Monatsintervall ohne Durchführung: zählt ab Startdatum", [s.text, s.regel.abStart], ["überfällig seit 28 Tagen (01.02.2026)", true]);
+    s = ws("km-ueberfaellig", "2026-01-05");
+    gleich("Nur km-Intervall, zu wenige Tage für eine Schätzung: km-Grenze ohne Datum", [s.text, s.klasse, s.datum, s.regel.restKm],
+      ["fällig bei ca. 500 km", "status-gruen", null, 450]);
+    setze({ fahrrad: F("2026-01-01", 0), eintraege: [], wartungsarten: [A("kette", { intervallKm: 3000 })] });
+    s = ws("kette");
+    gleich("Keine Fahrten (Rate 0): km-Grenze ohne Datum", [s.text, s.datum, s.regel.restKm], ["fällig bei ca. 3.000 km", null, 3000]);
+
+    // -------------------------------------------------------------
+    // 9. Einmalige Wartungen
+    // -------------------------------------------------------------
+    abschnitt("9. Einmalige Wartungen");
+    setze({ fahrrad: F("2026-01-01", 0), eintraege: zehnProTag, wartungsarten: [
+      A("erst", { name: "Erstinspektion", einmalig: true, intervallKm: 300, intervallMonate: 3 }),
+      A("gross", { name: "Große Inspektion", intervallMonate: 12 }),
+      A("lenker", { name: "Lenker tauschen", einmalig: true })
+    ], termine: [{ wartungsartId: "erst", datum: "2026-01-28", werkstatt: "W" }] });
+    s = ws("erst", "2026-01-15");
+    gleich("Vor der Durchführung: normale Fälligkeit ab Startdatum, Termin hat Vorrang", [s.erledigt, s.text, s.regel.text],
+      [false, "Termin am 28.01.2026 bei W (in 13 Tagen)", "fällig ca. im Januar 2026 bei ca. 300 km"]);
+    w.eval(`daten.wartungsprotokoll.push(
+      { id: "p-e2", datum: "2026-02-10", wartungsartId: "erst", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" },
+      { id: "p-e1", datum: "2026-01-29", wartungsartId: "erst", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" })`);
+    s = ws("erst");
+    gleich("Nach der ersten Durchführung: nur „erledigt am“ mit dem Datum der ersten Durchführung, keine Fälligkeit",
+      [s.erledigt, s.text, s.klasse, s.datum, s.termin, s.erwartet], [true, "erledigt am 29.01.2026", "status-gruen", null, null, null]);
+    gleich("Erledigte einmalige Wartungen stehen am Ende der Liste", w.wartungsKarten(H).map(s => s.art.id), ["gross", "lenker", "erst"]);
+    gleich("Nächste Wartung auf der Startseite: erledigte einmalige zählt nicht", w.naechsteWartung(H).art.id, "gross");
+    w.eval("aktiverTab = 'wartung'; zeichnen()");
+    const karteErst = [...w.document.querySelectorAll("#inhalt > .karte")].find(k => k.querySelector("h3").textContent === "Erstinspektion");
+    gleich("Karte zeigt nur „erledigt am“, ohne „Termin planen“ und „Erledigt eintragen“",
+      [karteErst.textContent, karteErst.querySelectorAll("button").length], ["Erstinspektionerledigt am 29.01.2026", 0]);
+    gleich("Reihenfolge der Karten im Reiter Wartung", [...w.document.querySelectorAll("#inhalt > .karte h3")].map(h => h.textContent),
+      ["Große Inspektion", "Lenker tauschen", "Erstinspektion"]);
+    w.eval(`daten.wartungsprotokoll = []; daten.termine = [{ wartungsartId: "erst", datum: "2026-01-28", werkstatt: "W" }]`);
+    w.protokollFormular({ id: null, datum: "2026-02-01", wartungsartId: "erst", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" }, false);
+    w.protokollSpeichern();
+    gleich("Einmalige Wartung eingetragen, ohne den Termin zu übernehmen: der Termin entfällt",
+      [w.eval("daten.termine.length"), w.eval("daten.wartungsprotokoll.length")], [0, 1]);
+    alerts.length = 0;
+    w.artFormular(null);
+    w.document.getElementById("a-name").value = "X";
+    w.document.getElementById("a-einmalig").checked = true;
+    w.document.getElementById("a-von").value = "10";
+    w.document.getElementById("a-bis").value = "11";
+    w.artSpeichern(null);
+    wahr("Formular: einmalig mit Zeitfenster wird abgelehnt", alerts.length === 1 && alerts[0].includes("einmalige Wartung") && w.eval("daten.wartungsarten.length") === 3, alerts.join("\n"));
+    w.document.getElementById("a-von").value = "";
+    w.document.getElementById("a-bis").value = "";
+    w.artSpeichern(null);
+    gleich("Formular: einmalige Wartung ohne Zeitfenster wird gespeichert", w.eval("daten.wartungsarten[3]").einmalig, true);
+
+    // -------------------------------------------------------------
+    // 10. Erwarteter Kilometerstand
+    // -------------------------------------------------------------
+    abschnitt("10. Erwarteter Kilometerstand bei Terminen und Zeitfenstern");
+    setze({ fahrrad: F("2026-01-01", 0), eintraege: zehnProTag, wartungsarten: [
+      A("rep", { name: "Reparatur" }),
+      A("fenster", { name: "Frühjahrsinspektion", fensterVon: 5, fensterBis: 6 }),
+      A("alt", { name: "Alter Termin" })
+    ], termine: [{ wartungsartId: "rep", datum: "2026-03-11", werkstatt: "" }, { wartungsartId: "alt", datum: "2026-02-20", werkstatt: "" }] });
+    gleich("Geplanter Termin: erwarteter Kilometerstand am Termin (590 + 10 × 10)", ws("rep").erwartet, { datum: "2026-03-11", km: 690 });
+    s = ws("fenster");
+    gleich("Zeitfenster: erwarteter Kilometerstand zu Beginn des Fensters (590 + 10 × 61)", [s.text, s.erwartet], ["fällig ab 01.05.", { datum: "2026-05-01", km: 1200 }]);
+    s = ws("fenster", "2026-05-10");
+    gleich("Im Zeitfenster: erwarteter Kilometerstand am Ende des Fensters", [s.text, s.erwartet.datum, w.caKm(s.erwartet.km)], ["fällig bis 30.06.", "2026-06-30", "ca. 820 km"]);
+    gleich("Termin in der Vergangenheit: kein erwarteter Kilometerstand", ws("alt").erwartet, null);
+
+    // -------------------------------------------------------------
+    // 11. Rückgängig
+    // -------------------------------------------------------------
+    abschnitt("11. Löschen mit „Rückgängig“ (die Rückfrage bleibt)");
+    const v2Laden = () => { w.eval("daten = datenEinlesen(" + JSON.stringify(v2Text) + ")"); w.speichern(); };
+    v2Laden();
+    let frageAntwort = true;
+    w.frage = async () => frageAntwort;
+    const toast = () => [w.document.getElementById("toast-text").textContent, !w.document.getElementById("toast-knopf").hidden];
+    const datenText = () => JSON.stringify(kanonisch(w.eval("daten")));
+    const vorher = datenText(), speicherVorher = localStorage.getItem(TEST_SCHLUESSEL);
+    gleich("Angebot gilt einige Sekunden (6 s)", w.eval("RUECKGAENGIG_MS"), 6000);
+    frageAntwort = false;
+    await w.eintragLoeschen("e-tag1");
+    gleich("Rückfrage mit „Abbrechen“: nichts gelöscht", w.eval("daten.eintraege.length"), 6);
+    frageAntwort = true;
+    await w.eintragLoeschen("e-tag1");
+    gleich("Eintrag gelöscht und gespeichert, Meldung mit „Rückgängig“",
+      [w.eval("daten.eintraege.some(e => e.id === 'e-tag1')"), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.length, toast()],
+      [false, 5, ["Eintrag gelöscht", true]]);
+    w.document.getElementById("toast-knopf").click();
+    gleich("„Rückgängig“ stellt den Eintrag wieder her (Daten und Speicher wie vorher)",
+      [datenText() === vorher, localStorage.getItem(TEST_SCHLUESSEL) === speicherVorher, toast()], [true, true, ["Wiederhergestellt", false]]);
+    await w.protokollLoeschen("p-1");
+    gleich("Wartung gelöscht: verknüpfter Mangel wieder offen", [w.eval("daten.wartungsprotokoll.length"), w.eval("daten.maengel.find(m => m.id === 'm-1').status"), toast()],
+      [1, "offen", ["Wartung gelöscht", true]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“: Wartung und Verknüpfung des Mangels wieder da", [datenText() === vorher, w.eval("daten.maengel.find(m => m.id === 'm-1').protokollId")], [true, "p-1"]);
+    await w.mangelLoeschen("m-2");
+    gleich("Mangel gelöscht", [w.eval("daten.maengel.length"), toast()], [1, ["Mangel gelöscht", true]]);
+    w.rueckgaengig();
+    await w.vorlageLoeschen("v-einkauf");
+    gleich("Vorlage gelöscht", [w.eval("daten.vorlagen.length"), toast()], [1, ["Vorlage gelöscht", true]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“ bei Mangel und Vorlage: alles wieder wie vorher (auch die Reihenfolge der Vorlagen)", datenText() === vorher, true);
+    await w.eintragLoeschen("e-tag2");
+    w.eval("daten.vorlagen[0].km = 15");
+    w.speichern();
+    w.rueckgaengig();
+    gleich("Nach einer weiteren Änderung ist „Rückgängig“ nicht mehr möglich (die Änderung bliebe sonst nicht erhalten)",
+      [w.eval("daten.eintraege.some(e => e.id === 'e-tag2')"), w.eval("daten.vorlagen[0].km"), toast()[1]], [false, 15, false]);
+    await w.eintragLoeschen("e-tag3");
+    w.meldungAus();
+    w.rueckgaengig();
+    gleich("Nach Ablauf der Meldung ist „Rückgängig“ nicht mehr möglich", w.eval("daten.eintraege.some(e => e.id === 'e-tag3')"), false);
+
+    // -------------------------------------------------------------
+    // 12. Jetzt sichern: Prüfung vor dem Teilen
+    // -------------------------------------------------------------
+    abschnitt("12. Jetzt sichern: Prüfung der Exportdatei vor dem Teilen (Teilen-Menü durch Platzhalter ersetzt)");
+    v2Laden();
+    w.eval("sicherungsErgebnis = null; aktiverTab = 'uebersicht'; zeichnen()");
+    const downloads = [];
+    w.herunterladen = (inhalt, name) => downloads.push({ inhalt, name });
+    let geteilt = [], teilenVerhalten = "ok", teilenDauer = 0;
+    const teilen = async angaben => {
+      geteilt.push(angaben);
+      if (teilenDauer) await warten(teilenDauer);
+      if (teilenVerhalten !== "ok") throw new w.DOMException("Platzhalter", teilenVerhalten);
+    };
+    Object.defineProperty(w.navigator, "canShare", { value: () => true, configurable: true, writable: true });
+    Object.defineProperty(w.navigator, "share", { value: teilen, configurable: true, writable: true });
+    const zustand = () => datenText() + "\n" + localStorage.getItem(TEST_SCHLUESSEL);
+    const ausgang = zustand();
+    const letzte = () => localStorage.getItem(TEST_EXPORT_SCHLUESSEL);
+    const toastText = () => w.document.getElementById("toast-text").textContent;
+    const neuerVersuch = () => { localStorage.removeItem(TEST_EXPORT_SCHLUESSEL); geteilt = []; alerts.length = 0; w.eval("sicherungsErgebnis = null"); };
+
+    neuerVersuch();
+    await w.jetztSichern();
+    gleich("Prüfung erfolgreich: Teilen-Menü mit der Datei „rad-km-JJJJ-MM-TT.json“",
+      [geteilt.length, geteilt[0].files.length, geteilt[0].files[0].name, alerts], [1, 1, "rad-km-" + w.heute() + ".json", []]);
+    const geteilterText = await geteilt[0].files[0].text();
+    gleichInhalt("Die geteilte Datei enthält genau den aktuellen Stand (auch Umlaute, Emoji und Sonderzeichen)",
+      kopie(w.datenEinlesen(geteilterText)), kopie(w.eval("daten")));
+    gleich("Die geteilte Datei enthält die Kurzinfo", (({ zeitpunkt, appVersion, ...rest }) => rest)(JSON.parse(geteilterText).kurzinfo),
+      { eintraege: 6, kmSumme: 91.2, kmStand: 1286.7, wartungen: 2, maengel: 2 });
+    gleich("Teilen abgeschlossen: Meldung „Sicherung übergeben – Inhalt geprüft: 6 Einträge, 91,2 km“", toastText(), "Sicherung übergeben – Inhalt geprüft: 6 Einträge, 91,2 km");
+    gleich("Teilen abgeschlossen: Datum der letzten Sicherung = heute", letzte(), w.heute());
+    wahr("Danach auf der Startseite: „Gespeicherte Sicherung jetzt prüfen“",
+      w.document.querySelector('#inhalt [data-action="sicherung-pruefen"]') && w.document.getElementById("inhalt").textContent.includes("Gespeicherte Sicherung jetzt prüfen"));
+    gleich("Daten und Speicher unverändert", zustand() === ausgang, true);
+
+    neuerVersuch();
+    teilenVerhalten = "AbortError";
+    await w.jetztSichern();
+    gleich("Teilen abgebrochen: kein Datum der letzten Sicherung, Meldung „Sicherung abgebrochen“, Daten unverändert",
+      [geteilt.length, letzte(), toastText(), w.eval("sicherungsErgebnis"), zustand() === ausgang], [1, null, "Sicherung abgebrochen", null, true]);
+
+    // Die beim Wiederlesen gelesene Datei weicht vom erzeugten Inhalt ab
+    const echtesFile = w.File;
+    const dateiWirdGelesenAls = veraendern => {
+      w.File = class extends w.Blob { constructor(teile, name, opt) { super([veraendern(teile[0])], opt); this.name = name; } };
+    };
+    const pruefungScheitert = async (text, veraendern, teil) => {
+      neuerVersuch();
+      teilenVerhalten = "ok";
+      dateiWirdGelesenAls(veraendern);
+      await w.jetztSichern();
+      w.File = echtesFile;
+      const ok = geteilt.length === 0 && letzte() === null && zustand() === ausgang && alerts.length === 1 &&
+        alerts[0].includes("Prüfung der Exportdatei fehlgeschlagen") && alerts[0].includes(teil) && alerts[0].includes("Deine Daten in der App sind unverändert");
+      zeile(ok, text, ok ? "" : "geteilt: " + geteilt.length + ", letzte Sicherung: " + letzte() + ", Daten unverändert: " + (zustand() === ausgang) + "\nMeldungen: " + alerts.join("\n"));
+    };
+    await pruefungScheitert("Eintrag fehlt in der gelesenen Datei: kein Teilen-Menü, Meldung, Daten unverändert",
+      t => { const o = JSON.parse(t); o.eintraege.pop(); return JSON.stringify(o); }, "1 Eintrag fehlt (23.10.");
+    await pruefungScheitert("Zeichen beim Schreiben verändert (🚲 → ?): kein Teilen-Menü",
+      t => t.replace("🚲", "?"), "1 Eintrag geändert (23.10.");
+    await pruefungScheitert("Datei abgeschnitten: kein Teilen-Menü", t => t.slice(0, t.length / 2), "keine gültige JSON-Datei");
+    await pruefungScheitert("Kurzinfo passt nicht zum Inhalt: kein Teilen-Menü",
+      t => { const o = JSON.parse(t); o.kurzinfo.eintraege++; return JSON.stringify(o); }, "Kurzinfo");
+    neuerVersuch();
+    w.File = class extends w.Blob { constructor(teile, name, opt) { super(teile, opt); } text() { return Promise.reject(new Error("Lesefehler")); } };
+    await w.jetztSichern();
+    w.File = echtesFile;
+    gleich("Datei lässt sich nicht wieder lesen: kein Teilen-Menü, Daten unverändert",
+      [geteilt.length, letzte(), alerts.length === 1 && alerts[0].includes("konnte nicht wieder gelesen werden"), zustand() === ausgang], [0, null, true, true]);
+
+    neuerVersuch();
+    teilenVerhalten = "NotAllowedError";
+    await w.jetztSichern();
+    const fensterText = w.document.getElementById("fensterinhalt").textContent;
+    gleich("iPhone verlangt einen frischen Tipper: Fenster „Sicherung geprüft“ mit „Teilen …“, noch kein Datum gesetzt",
+      [geteilt.length, fensterText.includes("Sicherung geprüft") && fensterText.includes("6 Einträge, 91,2 km"), !!w.document.querySelector('[data-action="sicherung-teilen"]'), letzte()],
+      [1, true, true, null]);
+    teilenVerhalten = "ok";
+    w.document.querySelector('[data-action="sicherung-teilen"]').click();
+    await warten(50);
+    gleich("Tipper auf „Teilen …“: dieselbe geprüfte Datei wird geteilt, Datum gesetzt, Fenster zu",
+      [geteilt.length, geteilt[1].files[0] === geteilt[0].files[0], letzte(), w.eval("fenster.open"), zustand() === ausgang], [2, true, w.heute(), false, true]);
+
+    neuerVersuch();
+    downloads.length = 0;
+    teilenVerhalten = "DataError";
+    await w.jetztSichern();
+    gleich("Anderer Fehler beim Teilen: dieselbe geprüfte Datei wird heruntergeladen",
+      [downloads.length, downloads[0].name, JSON.stringify(kanonisch(w.datenEinlesen(downloads[0].inhalt))) === datenText(),
+        letzte(), toastText(), zustand() === ausgang],
+      [1, "rad-km-" + w.heute() + ".json", true, w.heute(), "Sicherung heruntergeladen – Inhalt geprüft: 6 Einträge, 91,2 km", true]);
+    neuerVersuch();
+    Object.defineProperty(w.navigator, "canShare", { value: undefined, configurable: true, writable: true });
+    await w.jetztSichern();
+    gleich("Ohne Teilen-Menü (Computer): geprüfte Datei wird heruntergeladen", [geteilt.length, downloads.length, letzte()], [0, 2, w.heute()]);
+    Object.defineProperty(w.navigator, "canShare", { value: () => true, configurable: true, writable: true });
+    neuerVersuch();
+    teilenVerhalten = "ok";
+    teilenDauer = 30;
+    await Promise.all([w.jetztSichern(), w.jetztSichern()]);
+    teilenDauer = 0;
+    gleich("Doppelter Tipper auf „Jetzt sichern“: nur ein Teilen-Menü", geteilt.length, 1);
+
+    // -------------------------------------------------------------
+    // 13. Sicherung prüfen
+    // -------------------------------------------------------------
+    abschnitt("13. Sicherung prüfen (liest nur, überschreibt nichts)");
+    v2Laden();
+    const HP = "2026-10-28";
+    const auswerten = text => w.sicherungAuswerten(text, w.eval("daten"), HP);
+    const sicherung = w.exportInhalt();
+    let erg = auswerten(sicherung);
+    gleich("Frische Sicherung: identisch", [erg.status, erg.titel, erg.kurzinfoPasst, erg.identischStreng], ["identisch", "Identisch mit dem aktuellen Stand", true, true]);
+    w.eval(`["2026-10-25", "2026-10-26", "2026-10-27"].forEach(d => daten.eintraege.push({ id: "neu" + d, datum: d, km: 14.2, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }))`);
+    erg = auswerten(sicherung);
+    gleich("Danach 3 Einträge erfasst: „Sicherung ist älter: 3 Einträge fehlen (25.–27.10.)“", [erg.status, erg.titel, erg.details], ["aelter", "Sicherung ist älter: 3 Einträge fehlen (25.–27.10.)", []]);
+    w.eval(`daten.wartungsprotokoll.push({ id: "p-neu", datum: "2026-10-27", wartungsartId: "reparatur", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" })`);
+    gleich("Zusätzlich eine Wartung eingetragen", auswerten(sicherung).titel, "Sicherung ist älter: 3 Einträge fehlen (25.–27.10.), 1 Wartung fehlt");
+    const anders = JSON.parse(sicherung);
+    anders.eintraege.find(e => e.datum === "2026-10-20").km = 20;
+    anders.eintraege.push({ id: "x", datum: "2026-09-01", km: 3 });
+    erg = auswerten(JSON.stringify(anders));
+    gleich("Sicherung mit anderen Werten: „weicht ab“ mit Einzelheiten", [erg.status, erg.titel, erg.details],
+      ["abweichend", "Sicherung weicht vom aktuellen Stand ab", ["3 Einträge fehlen (25.–27.10.)", "1 Wartung fehlt", "1 Eintrag nur in der Sicherung (01.09.)", "1 Eintrag geändert (20.10.)"]]);
+    gleich("Nachträglich veränderte Datei: Kurzinfo passt nicht zum Inhalt", erg.kurzinfoPasst, false);
+    w.eval(`daten.eintraege = daten.eintraege.filter(e => !e.id.startsWith("neu")); daten.wartungsprotokoll = daten.wartungsprotokoll.filter(p => p.id !== "p-neu")`);
+    erg = auswerten(v2Text);
+    gleich("Ältere Sicherung (Version 2, ohne Kurzinfo) desselben Stands: identisch; berechnete km-Stände im Protokoll zählen nicht",
+      [erg.status, erg.kurzinfoPasst, erg.identischStreng], ["identisch", null, false]);
+    erg = auswerten(sicherung.slice(0, 200));
+    gleich("Abgeschnittene Datei: beschädigt", [erg.status, erg.titel, erg.details], ["defekt", "Datei beschädigt bzw. keine Rad-km-Sicherung", ["Die Datei ist keine gültige JSON-Datei."]]);
+    erg = auswerten('{ "name": "Einkaufsliste" }');
+    gleich("Andere JSON-Datei: keine Rad-km-Sicherung", [erg.status, erg.details], ["defekt", ["Die Versionsnummer („version“) fehlt oder ist ungültig."]]);
+    erg = auswerten("\u0089PNG\r\n\u001a\n");
+    gleich("Bild statt Sicherung: beschädigt bzw. keine Rad-km-Sicherung", erg.status, "defekt");
+    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 4 })));
+    gleich("Sicherung einer neueren App-Version wird erkannt", [erg.status, erg.details[0].includes("neueren App-Version")], ["defekt", true]);
+    gleich("Datumsbereiche: zusammenhängende Tage, Monats- und Jahreswechsel, andere Jahre, Kürzung",
+      [w.datumsBereiche(["2026-10-27", "2026-10-25", "2026-10-26"], HP), w.datumsBereiche(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], HP),
+        w.datumsBereiche(["2025-12-30", "2025-12-31", "2026-01-01"], HP), w.datumsBereiche(["2025-10-25", "2025-10-26"], HP),
+        w.datumsBereiche(["2026-01-05", "2026-01-07", "2026-01-09", "2026-01-11", "2026-01-13"], HP)],
+      ["25.–27.10.", "30.10.–02.11.", "30.12.2025–01.01.2026", "25.–26.10.2025", "05.01., 07.01., 09.01., 11.01., …"]);
+    const vorPruefung = zustand(), letzteVorPruefung = letzte();
+    await w.pruefDateiGewaehlt(new w.File([sicherung], "rad-km-2026-10-28.json", { type: "application/json" }));
+    let pt = w.document.getElementById("fensterinhalt").textContent;
+    wahr("Prüfung über die Dateiauswahl: Ergebnis, Inhalt und Hinweis „nichts verändert“ im Fenster",
+      pt.includes("✓ Identisch mit dem aktuellen Stand") && pt.includes("6 Einträge, 91,2 km, 2 Wartungen, 2 Mängel") && pt.includes("In der App wurde nichts verändert"), pt);
+    await w.pruefDateiGewaehlt(new w.File(["kaputt"], "foto.jpg"));
+    pt = w.document.getElementById("fensterinhalt").textContent;
+    wahr("Beschädigte Datei über die Dateiauswahl: „Datei beschädigt bzw. keine Rad-km-Sicherung“", pt.includes("✗ Datei beschädigt bzw. keine Rad-km-Sicherung"), pt);
+    w.fensterSchliessen();
+    gleich("Nach allen Prüfungen: Daten, Speicher und Datum der letzten Sicherung unverändert", [zustand() === vorPruefung, letzte() === letzteVorPruefung], [true, true]);
+
+    // -------------------------------------------------------------
+    // 14. Oberfläche
+    // -------------------------------------------------------------
+    abschnitt("14. Oberfläche");
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    const einst = w.document.getElementById("inhalt");
+    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion3"), einst.textContent);
+    wahr("Einstellungen: „Jetzt sichern“, „Sicherung prüfen …“, „Daten importieren …“",
+      ["sichern", "sicherung-pruefen", "import"].every(a => einst.querySelector('[data-action="' + a + '"]')));
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    wahr("Startseite: „Jetzt sichern“ in der Karte Datensicherung", w.document.querySelector('#inhalt .karte [data-action="sichern"]'));
+    w.eval(`daten.eintraege.push({ id: "alt1", datum: "2024-05-06", km: 5, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }); offeneGruppen.clear(); zeichnen()`);
+    let knopf = w.document.querySelector('[data-action="gruppe"][data-key="j2024"]');
+    let pfeil = knopf.querySelector("svg.chevron");
+    gleich("Eintragsliste: Aufklapp-Pfeil als Chevron (22 px) in der Textfarbe, zugeklappt",
+      [!!pfeil, knopf.getAttribute("aria-expanded"), w.getComputedStyle(pfeil).width, w.getComputedStyle(pfeil).color === w.getComputedStyle(w.document.body).color, w.getComputedStyle(pfeil).transform],
+      [true, "false", "22px", true, "none"]);
+    knopf.querySelector(".titel").click();
+    knopf = w.document.querySelector('[data-action="gruppe"][data-key="j2024"]');
+    pfeil = knopf.querySelector("svg.chevron");
+    gleich("Antippen der Zeile (auch neben dem Pfeil) klappt auf, der Chevron zeigt nach unten",
+      [knopf.getAttribute("aria-expanded"), w.getComputedStyle(pfeil).transform !== "none", !!w.document.querySelector('[data-key="m2024-05"]')], ["true", true, true]);
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
     localStorage.removeItem(TEST_SCHLUESSEL);
+    localStorage.removeItem(TEST_EXPORT_SCHLUESSEL);
   }
 
   const erg = document.getElementById("ergebnis");
@@ -269,22 +727,23 @@ async function start() {
 }
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
-function pruefeUmwandlung(d, v1) {
-  gleich("version = 2", d.version, 2);
+function pruefeUmwandlungV1(d, v1) {
+  gleich("version = 3", d.version, 3);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
-  gleich("Vorlagen vollständig erhalten", d.vorlagen, v1.vorlagen);
+  gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele)", d.einstellungen, { fahrtage: [1, 2, 5], jahresziele: [] });
+  gleich("Vorlagen vollständig erhalten, Arbeitsweg aus", d.vorlagen, v1.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
   gleich("Anzahl Einträge", d.eintraege.length, v1.eintraege.length);
   const erwartet = v1.eintraege.map(e => ({
-    datum: e.datum, km: e.km, vorlage: e.vorlage || null, notiz: e.notiz || "", typ: e.typ || "tag"
+    datum: e.datum, km: e.km, vorlage: e.vorlage || null, notiz: e.notiz || "", typ: e.typ || "tag", arbeitsweg: false
   }));
-  gleich("Einträge vollständig erhalten (Datum, km, Vorlage, Notiz, Typ)",
-    d.eintraege.map(e => ({ datum: e.datum, km: e.km, vorlage: e.vorlage, notiz: e.notiz, typ: e.typ })), erwartet);
+  gleich("Einträge vollständig erhalten (Datum, km, Vorlage, Notiz, Typ), Arbeitsweg aus",
+    d.eintraege.map(e => ({ datum: e.datum, km: e.km, vorlage: e.vorlage, notiz: e.notiz, typ: e.typ, arbeitsweg: e.arbeitsweg })), erwartet);
   gleich("Vorhandene Eintrags-IDs bleiben erhalten",
     d.eintraege.filter((e, i) => v1.eintraege[i].id).map(e => e.id), v1.eintraege.filter(e => e.id).map(e => e.id));
   gleich("Eintrag ohne id bekommt eine neue id", typeof d.eintraege[4].id === "string" && d.eintraege[4].id.length > 0, true);
-  gleich("Wartungsarten erhalten, Zeitfenster leer", d.wartungsarten,
-    v1.wartungsarten.map(a => Object.assign({}, a, { fensterVon: null, fensterBis: null, gueltigAbJahr: null })));
+  gleich("Wartungsarten erhalten, Zeitfenster leer, nicht einmalig", d.wartungsarten,
+    v1.wartungsarten.map(a => Object.assign({}, a, { fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false })));
   gleich("Wartungsprotokoll vollständig erhalten", d.wartungsprotokoll, [
     Object.assign({}, v1.wartungsprotokoll[0]),
     Object.assign({}, v1.wartungsprotokoll[1]),
@@ -292,6 +751,20 @@ function pruefeUmwandlung(d, v1) {
   ].map(p => ({ id: p.id, datum: p.datum, wartungsartId: p.wartungsartId, werkstatt: p.werkstatt, kmStand: p.kmStand, kmManuell: p.kmManuell, notiz: p.notiz })));
   gleich("Termine vollständig erhalten", d.termine, v1.termine);
   gleich("Mängelliste ist leer", d.maengel, []);
+}
+
+// Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
+function pruefeUmwandlungV2(d, v2, wo) {
+  gleich(wo + ": version = 3", d.version, 3);
+  gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
+  gleich(wo + ": Einstellungen mit Standardwerten ergänzt", d.einstellungen, { fahrtage: [1, 2, 5], jahresziele: [] });
+  gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
+  gleichInhalt(wo + ": Einträge vollständig erhalten (auch 0 km, Wochensumme, Sonderzeichen), Arbeitsweg aus",
+    d.eintraege, v2.eintraege.map(e => Object.assign({}, e, { arbeitsweg: false })));
+  gleichInhalt(wo + ": Wartungsarten erhalten (Zeitfenster, gültig ab, Intervall in km), nicht einmalig",
+    d.wartungsarten, v2.wartungsarten.map(a => Object.assign({}, a, { einmalig: false })));
+  gleichInhalt(wo + ": Wartungsprotokoll, Termine und Mängel unverändert", [d.wartungsprotokoll, d.termine, d.maengel], [v2.wartungsprotokoll, v2.termine, v2.maengel]);
+  gleich(wo + ": exportiertAm wird nicht übernommen", "exportiertAm" in d, false);
 }
 
 start();

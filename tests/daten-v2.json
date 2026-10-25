@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "exportiertAm": "2026-10-20T17:30:00.000Z",
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5,
+               "rahmennummer": "TST 0001", "beschreibung": "Grün, 28 Zoll\nNabenschaltung" },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2 },
+    { "id": "v-einkauf", "name": "Einkauf", "km": 3.5 }
+  ],
+  "eintraege": [
+    { "id": "e-vorstart", "datum": "2025-02-20", "km": 5, "vorlage": null, "notiz": "vor dem Startdatum", "typ": "tag" },
+    { "id": "e-woche1", "datum": "2025-03-03", "km": 40, "vorlage": null, "notiz": "aus Excel", "typ": "woche" },
+    { "id": "e-tag1", "datum": "2026-10-19", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag" },
+    { "id": "e-tag2", "datum": "2026-10-20", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag" },
+    { "id": "e-null", "datum": "2026-10-21", "km": 0, "vorlage": null, "notiz": "Regen", "typ": "tag" },
+    { "id": "e-tag3", "datum": "2026-10-23", "km": 17.8, "vorlage": "Arbeit hin und zurück", "notiz": "Umweg über den Markt 🚲 <b>&</b> „Zitat“", "typ": "tag" }
+  ],
+  "wartungsarten": [
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null },
+    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027 },
+    { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null },
+    { "id": "kette", "name": "Kette wechseln", "intervallMonate": 24, "intervallKm": 3000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null }
+  ],
+  "wartungsprotokoll": [
+    { "id": "p-1", "datum": "2025-10-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1300, "kmManuell": true, "notiz": "Bremsen eingestellt" },
+    { "id": "p-2", "datum": "2026-10-20", "wartungsartId": "reparatur", "werkstatt": "",
+      "kmStand": null, "kmManuell": false, "notiz": "Schlauch geflickt" }
+  ],
+  "termine": [
+    { "wartungsartId": "kleine-inspektion", "datum": "2027-03-15", "werkstatt": "Beispiel-Werkstatt" }
+  ],
+  "maengel": [
+    { "id": "m-1", "datum": "2025-10-01", "beschreibung": "Bremse quietscht", "status": "erledigt",
+      "erledigtAm": "2025-10-15", "protokollId": "p-1" },
+    { "id": "m-2", "datum": "2026-10-22", "beschreibung": "Licht hinten wackelt", "status": "offen",
+      "erledigtAm": null, "protokollId": null }
+  ]
+}
