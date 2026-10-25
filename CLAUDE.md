@@ -35,4 +35,7 @@ sind immer erfunden.
   `http://localhost:8000/tests/test.html` öffnen (oder dieselbe Seite headless,
   z. B. mit Playwright). Oben steht „Alle … Tests bestanden“; der Seitentitel
   beginnt mit `OK` bzw. `FEHLER`.
+- Bei Änderungen an `sw.js` oder am Start der App zusätzlich
+  `node tests/offline-update-test.js` ausführen (Offline-Start, neue Version,
+  „Neu laden“, Daten unverändert).
 - README (Bedienung und JSON-Format) mit jedem Release aktualisieren.
