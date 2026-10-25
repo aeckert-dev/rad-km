@@ -19,8 +19,9 @@
 <body>
 <h1>Rad-km · Tests</h1>
 <p>Lädt <code>../index.html?test</code> unsichtbar und prüft Umwandlung, Zusammenfassung, Fälligkeit, Prognosen,
-Rückgängig und Datensicherung. Die Tests verwenden einen eigenen Speicherplatz; deine echten Daten werden nicht berührt.
-Das Teilen-Menü wird durch einen Platzhalter ersetzt, es öffnet sich also nichts.</p>
+Rückgängig, Datensicherung und das Wetter. Die Tests verwenden einen eigenen Speicherplatz; deine echten Daten werden nicht berührt.
+Das Teilen-Menü wird durch einen Platzhalter ersetzt, es öffnet sich also nichts. Die Wetterdienste werden nicht
+abgefragt: Die Tests verwenden aufgezeichnete Antworten (<code>tests/wetter-*.json</code>, erfundene Orte).</p>
 <p id="ergebnis">Tests laufen …</p>
 <div id="protokoll"></div>
 
@@ -61,6 +62,9 @@ function wirft(text, fn, teil) {
   catch (e) { const ok = !teil || e.message.includes(teil); zeile(ok, text, ok ? "" : "Meldung: " + e.message); }
 }
 const kopie = x => JSON.parse(JSON.stringify(x));
+// Standard-Wetter-Einstellungen der App (wird nach dem Laden der App gesetzt)
+let STD_WETTER = null;
+const stdEinstellungen = (fahrtage = [1, 2, 5], jahresziele = []) => ({ fahrtage, jahresziele, wetter: STD_WETTER });
 const warten = ms => new Promise(r => setTimeout(r, ms));
 
 // index.html im unsichtbaren Rahmen laden und auf den Start warten
@@ -84,6 +88,7 @@ async function start() {
   // ---------------------------------------------------------------
   localStorage.setItem(TEST_SCHLUESSEL, v1Text);
   const w = await appLaden();
+  STD_WETTER = kopie(w.standardWetter());
   try {
     abschnitt("1. Umwandlung einer Version-1-Datei beim Laden (localStorage)");
     gleich("Kein Ladefehler", w.eval("ladeFehler"), null);
@@ -122,14 +127,14 @@ async function start() {
       { zeitpunkt: "2026-10-25T12:00:00.000Z", appVersion: w.eval("APP_VERSION"), eintraege: 6, kmSumme: 110.7, kmStand: 1306.2, wartungen: 3, maengel: 0 });
     gleich("Export enthält die neuen Felder (Einstellungen, Arbeitsweg, einmalig)",
       [exp.einstellungen, "arbeitsweg" in exp.vorlagen[0], "arbeitsweg" in exp.eintraege[0], "einmalig" in exp.wartungsarten[0]],
-      [{ fahrtage: [1, 2, 5], jahresziele: [] }, true, true, true]);
+      [stdEinstellungen(), true, true, true]);
     gleich("Export → Import ergibt dieselben Daten (die Kurzinfo wird beim Import nicht übernommen)", kopie(w.datenEinlesen(exportText)), d);
 
     // Version-3-Daten mit allen neuen Feldern: Export → Import verlustfrei
     const v3 = kopie(d);
     v3.fahrrad.rahmennummer = "WAW 12345";
     v3.fahrrad.beschreibung = "Blau, 28 Zoll\nNabenschaltung";
-    v3.einstellungen = { fahrtage: [1, 3, 5, 6], jahresziele: [{ jahr: 2026, km: 5000 }, { jahr: 2027, km: 5500.5 }] };
+    v3.einstellungen = stdEinstellungen([1, 3, 5, 6], [{ jahr: 2026, km: 5000 }, { jahr: 2027, km: 5500.5 }]);
     v3.vorlagen[0].arbeitsweg = true;
     v3.eintraege[3].arbeitsweg = true;
     v3.wartungsarten[1].fensterVon = 3; v3.wartungsarten[1].fensterBis = 4; v3.wartungsarten[1].gueltigAbJahr = 2027;
@@ -142,7 +147,7 @@ async function start() {
       kopie(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v3))))), v3);
     const ohneEinst = kopie(v3); delete ohneEinst.einstellungen;
     gleich("Version 3 ohne „einstellungen“: Standardwerte (Mo, Di, Fr; keine Jahresziele)",
-      w.datenEinlesen(JSON.stringify(ohneEinst)).einstellungen, { fahrtage: [1, 2, 5], jahresziele: [] });
+      w.datenEinlesen(JSON.stringify(ohneEinst)).einstellungen, stdEinstellungen());
 
     // Fehlt "wartungsarten" in einer Version-1-Datei: Standardarten ohne Zeitfenster
     const ohneArten = Object.assign({}, v1);
@@ -154,13 +159,13 @@ async function start() {
       [["grosse-inspektion", 12, null, null, false], ["kleine-inspektion", null, null, null, false], ["reparatur", null, null, null, false]]);
     gleich("Neuinstallation: Standardarten mit Beispiel-Zeitfenstern, Standard-Fahrtage",
       [w.leereDaten().wartungsarten.map(a => [a.id, a.fensterVon, a.fensterBis, a.gueltigAbJahr, a.einmalig]), w.leereDaten().einstellungen],
-      [[["grosse-inspektion", 10, 11, null, false], ["kleine-inspektion", 3, 4, null, false], ["reparatur", null, null, null, false]], { fahrtage: [1, 2, 5], jahresziele: [] }]);
+      [[["grosse-inspektion", 10, 11, null, false], ["kleine-inspektion", 3, 4, null, false], ["reparatur", null, null, null, false]], stdEinstellungen()]);
 
     // Fehlerhafte Daten werden abgelehnt
     const mit = aend => JSON.stringify(Object.assign(kopie(v3), aend));
     const art = aend => [Object.assign({}, v3.wartungsarten[0], aend)];
     const nurArt = aend => mit({ wartungsarten: art(aend), wartungsprotokoll: [], termine: [], maengel: [] });
-    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 4 })), "neueren App-Version");
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 5 })), "neueren App-Version");
     wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 11, fensterBis: 2 })), "Jahreswechsel");
     wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 3, fensterBis: null })), "beide");
     wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 })), "gueltigAbJahr");
@@ -673,7 +678,7 @@ async function start() {
     gleich("Andere JSON-Datei: keine Rad-km-Sicherung", [erg.status, erg.details], ["defekt", ["Die Versionsnummer („version“) fehlt oder ist ungültig."]]);
     erg = auswerten("\u0089PNG\r\n\u001a\n");
     gleich("Bild statt Sicherung: beschädigt bzw. keine Rad-km-Sicherung", erg.status, "defekt");
-    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 4 })));
+    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 5 })));
     gleich("Sicherung einer neueren App-Version wird erkannt", [erg.status, erg.details[0].includes("neueren App-Version")], ["defekt", true]);
     gleich("Datumsbereiche: zusammenhängende Tage, Monats- und Jahreswechsel, andere Jahre, Kürzung",
       [w.datumsBereiche(["2026-10-27", "2026-10-25", "2026-10-26"], HP), w.datumsBereiche(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], HP),
@@ -697,7 +702,7 @@ async function start() {
     abschnitt("14. Oberfläche");
     w.eval("aktiverTab = 'einstellungen'; zeichnen()");
     const einst = w.document.getElementById("inhalt");
-    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion3"), einst.textContent);
+    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion4"), einst.textContent);
     wahr("Einstellungen: „Jetzt sichern“, „Sicherung prüfen …“, „Daten importieren …“",
       ["sichern", "sicherung-pruefen", "import"].every(a => einst.querySelector('[data-action="' + a + '"]')));
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
@@ -835,7 +840,7 @@ async function start() {
     w.eintragAnsicht("e-tag1");
     wahr("Detailansicht zeigt „Arbeitsweg: ja“", w.document.getElementById("fensterinhalt").textContent.includes("Arbeitswegja"));
     w.fensterSchliessen();
-    wahr("Vorlagenliste kennzeichnet die Vorlage", ohneTags(w.bildVorlagen()).includes("Büro Arbeitsweg 14,2 km"), ohneTags(w.bildVorlagen()));
+    wahr("Vorlagenliste kennzeichnet die Vorlage", ohneTags(w.vorlagenBereich()).includes("Büro Arbeitsweg 14,2 km"), ohneTags(w.vorlagenBereich()));
 
     // -------------------------------------------------------------
     // 18. Kennzahlen
@@ -982,11 +987,654 @@ async function start() {
       w.wartungsKarten(HR).map(s => [s.art.id, w.wartungsGruppe(s, HR)]), [["monate", 2], ["kette", 3], ["reparatur", 4]]);
     w.eval("daten.wartungsarten = daten.wartungsarten.filter(a => a.id !== 'monate')");
     gleich("Startseite: ohne Datum ist die km-Grenze die nächste Wartung", w.naechsteWartung(HR).text, "fällig bei ca. 500 km");
+
+    // =============================================================
+    // Release 4a: Wetter. Die Antworten der Wetterdienste stammen aus
+    // tests/wetter-*.json (aufgezeichnet, Orte, Namen und Kennungen erfunden).
+    // fetch wird durch einen Platzhalter ersetzt; es geht nichts ins Netz.
+    // =============================================================
+    const fx = {};
+    for (const n of ["wetter-open-meteo", "wetter-open-meteo-ein-ort", "wetter-dwd", "wetter-dwd-leer", "wetter-dwd-gebiet", "wetter-dwd-gebiet-leer",
+      "wetter-brightsky", "wetter-brightsky-ausland", "wetter-ortssuche", "wetter-ortssuche-leer"]) {
+      fx[n] = JSON.parse(await (await fetch(n + ".json", { cache: "no-store" })).text());
+    }
+    // Ersetzt fetch in der App. Regeln: [Teil der Adresse, Antwort, HTTP-Status] oder [Teil, "offline"]; ohne Regel: offline
+    const abrufe = [];
+    const netz = (...regeln) => {
+      abrufe.length = 0;
+      w.fetch = async url => {
+        abrufe.push(url);
+        const r = regeln.find(x => url.includes(x[0]));
+        if (!r || r[1] === "offline") throw new TypeError("Failed to fetch");
+        const status = r[2] || 200;
+        return { ok: status >= 200 && status < 300, status, json: async () => kopie(r[1]) };
+      };
+    };
+    const wetterLeeren = () => w.eval("wetter = { vorhersage: null, warnungen: null, gebiete: {} }; Object.assign(wetterStatus, { laeuft: false, fehlerVorhersage: null, fehlerWarnungen: null })");
+    // Zeitpunkt in Ortszeit, z. B. zeit("2026-10-27", "16:30")
+    const zeit = (datum, uhr) => { const [j, m, t] = datum.split("-").map(Number); const [hh, mm] = uhr.split(":").map(Number); return new Date(j, m - 1, t, hh, mm).getTime(); };
+    const MUSTERDORF = { name: "Musterdorf", lat: 51, lon: 10 }, BEISPIELSTADT = { name: "Beispielstadt", lat: 51.1, lon: 10.2 };
+    const setze4 = d => w.eval("daten = datenEinlesen(" + JSON.stringify(JSON.stringify(Object.assign({ version: 4 }, d))) + ")");
+    const wetterEinst = aend => Object.assign(kopie(STD_WETTER), { wohnort: MUSTERDORF, arbeitsort: BEISPIELSTADT }, aend);
+    const wetterDaten = (aend = {}, fahrtage = [1, 2, 5]) => setze4({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage, wetter: wetterEinst(aend) } });
+    // Aufgezeichnete Vorhersage mit ruhigem Wetter (10 °C, gefühlt 9 °C, trocken, Böen 15 km/h, Wind 5 km/h aus Süd);
+    // die Fälle ändern dann gezielt einzelne Werte
+    const ruhig = () => {
+      const om = kopie(fx["wetter-open-meteo"]);
+      om.forEach(o => {
+        const m = o.minutely_15, s = o.hourly, alle = (q, v) => q.time.map(() => v);
+        Object.assign(m, { temperature_2m: alle(m, 10), apparent_temperature: alle(m, 9), precipitation: alle(m, 0), weather_code: alle(m, 3),
+          wind_speed_10m: alle(m, 5), wind_direction_10m: alle(m, 180), wind_gusts_10m: alle(m, 15) });
+        Object.assign(s, { precipitation_probability: alle(s, 0), soil_temperature_0cm: alle(s, 8) });
+      });
+      return om;
+    };
+    // Setzt einen Wert für den Zeitraum [von, bis) Ortszeit: Momentwerte zu den Zeitpunkten darin, Mengen
+    // (Niederschlag, Böen, Regenwahrscheinlichkeit gelten für den Abschnitt davor) für die Abschnitte darin.
+    // ort: 0 = Wohnort, 1 = Arbeitsort, null = beide
+    const MENGEN = ["precipitation", "wind_gusts_10m", "precipitation_probability"];
+    const STUENDLICH = ["precipitation_probability", "soil_temperature_0cm"];
+    const aendern = (om, feld, datum, von, bis, wert, ort = null) => {
+      const a = zeit(datum, von), b = zeit(datum, bis);
+      om.forEach((o, i) => {
+        if (ort !== null && ort !== i) return;
+        const q = STUENDLICH.includes(feld) ? o.hourly : o.minutely_15;
+        q.time.forEach((t, k) => { const ms = t * 1000; if (MENGEN.includes(feld) ? ms > a && ms <= b : ms >= a && ms < b) q[feld][k] = wert; });
+      });
+      return om;
+    };
+    // Warnungen im aufgezeichneten Format des DWD bzw. von Bright Sky: [Ereignis, Schwere, Beginn, Ende, weitere Felder]
+    const dwdMit = (...liste) => {
+      const a = kopie(fx["wetter-dwd"]), vorlage = a.features[0];
+      a.features = liste.map(([EVENT, SEVERITY, beginn, ende, zusatz], i) => Object.assign(kopie(vorlage), {
+        properties: Object.assign(kopie(vorlage.properties), { EVENT, SEVERITY, EC_GROUP: "", IDENTIFIER: "test-" + i,
+          ONSET: new Date(beginn).toISOString(), EXPIRES: new Date(ende).toISOString() }, zusatz)
+      }));
+      a.totalFeatures = a.numberMatched = a.numberReturned = a.features.length;
+      return a;
+    };
+    const bsMit = (...liste) => {
+      const a = kopie(fx["wetter-brightsky"]), vorlage = a.alerts[0];
+      a.alerts = liste.map(([event_de, severity, beginn, ende], i) => Object.assign(kopie(vorlage), { id: i, alert_id: "test-" + i, event_de,
+        severity: severity.toLowerCase(), onset: new Date(beginn).toISOString(), expires: new Date(ende).toISOString() }));
+      return a;
+    };
+    const D = "2026-10-27";                   // Dienstag, Fahrtag
+    const ABEND = zeit("2026-10-26", "20:15"); // Vorabend: der Reiter zeigt Di 27.10.
+    const W = (ereignis, schwere, von, bis, zusatz) => [ereignis, schwere, zeit(D, von), zeit(D, bis), zusatz];
+    const laden = async (om, dwd = fx["wetter-dwd-leer"], jetzt = ABEND) => {
+      netz(["open-meteo", om], ["Warnungen_Gemeinden", dwd], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
+      wetterLeeren();
+      await w.wetterAktualisieren(true, jetzt);
+      return w.wetterAnsicht(jetzt);
+    };
+    const rueck = async (om, dwd) => (await laden(om, dwd)).fahrten[1];
+    const ampel = async (om, dwd) => (await rueck(om, dwd)).bewertung.text;
+    const TEST_WETTER_SCHLUESSEL = "radkm-test-wetter";
+    const uhr = m => w.uhrzeitAus(m);
+
+    // -------------------------------------------------------------
+    // 22. Umwandlung Version 3 → 4
+    // -------------------------------------------------------------
+    abschnitt("22. Umwandlung einer Version-3-Datei auf Version 4 (localStorage und Import)");
+    const v3Text = await (await fetch("daten-v3.json", { cache: "no-store" })).text();
+    const v3d = JSON.parse(v3Text);
+    const pruefeV3 = (d, wo) => {
+      gleich(wo + ": version = 4", d.version, 4);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Protokoll, Termine und Mängel unverändert",
+        [d.fahrrad, d.vorlagen, d.wartungsarten, d.wartungsprotokoll, d.termine, d.maengel],
+        [v3d.fahrrad, v3d.vorlagen, v3d.wartungsarten, v3d.wartungsprotokoll, v3d.termine, v3d.maengel]);
+      gleichInhalt(wo + ": Einträge vollständig erhalten (Arbeitsweg, 0 km, Wochensumme, Sonderzeichen), Wetter leer",
+        d.eintraege, v3d.eintraege.map(e => Object.assign({}, e, { wetter: null })));
+      gleichInhalt(wo + ": Fahrtage und Jahresziele erhalten, Wetter mit Standardwerten ergänzt",
+        d.einstellungen, { fahrtage: v3d.einstellungen.fahrtage, jahresziele: v3d.einstellungen.jahresziele, wetter: STD_WETTER });
+      gleich(wo + ": Kurzinfo wird nicht übernommen", "kurzinfo" in d, false);
+    };
+    pruefeV3(kopie(w.datenEinlesen(v3Text)), "Beim Import");
+    localStorage.setItem(TEST_SCHLUESSEL, v3Text);
+    const w3 = await appLaden();
+    gleich("Beim Laden: kein Ladefehler", w3.eval("ladeFehler"), null);
+    pruefeV3(kopie(w3.eval("daten")), "Beim Laden");
+    gleich("Beim Laden: Version-3-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v3Text);
+    w3.frameElement.remove();
+    gleich("Standardwerte Wetter: keine Orte; Hinfahrt 06:00–07:00, Rückfahrt 16:00–17:00, übliche Abfahrt 06:00 bzw. 16:00, Dauer 60 min",
+      [STD_WETTER.wohnort, STD_WETTER.arbeitsort, STD_WETTER.weitererOrt, STD_WETTER.hinfahrt, STD_WETTER.rueckfahrt],
+      [null, null, null, { von: "06:00", bis: "07:00", abfahrt: "06:00", dauer: 60 }, { von: "16:00", bis: "17:00", abfahrt: "16:00", dauer: 60 }]);
+    gleich("Standardwerte Ampel und Kleidung (Vorschlagswerte)", [STD_WETTER.ampel, STD_WETTER.kleidung.stufen.map(s => [s.ab, s.korrektur, s.text]), STD_WETTER.kleidung.regen], [
+      { rotBoeen: 60, rotStarkregen: 5, rotWarnstufe: 2, gelbRegenWahrscheinlichkeit: 50, gelbNiederschlag: 0.5, gelbBoeen: 40, gelbTemperatur: 0, glaetteTemperatur: 1 },
+      [[18, 0, "kurz"], [12, 0, "lange dünne Kleidung"], [6, 0, "Jacke, lange Hose"], [0, 0, "Handschuhe, Stirnband, Thermojacke"], [null, 0, "Winterhandschuhe, Mütze, Überschuhe"]],
+      [{ ab: 40, text: "Regenjacke" }, { ab: 60, text: "Regenhose" }]]);
+
+    // -------------------------------------------------------------
+    // 23. Version 4 prüfen
+    // -------------------------------------------------------------
+    abschnitt("23. Version 4: Orte, Fahrzeiten, Regeln und Wetter je Eintrag prüfen");
+    const v4 = { version: 4, fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], jahresziele: [], wetter: wetterEinst({
+      weitererOrt: { name: "Ferienort", lat: 54, lon: 9, aktiv: true }, hinfahrt: { von: "06:15", bis: "07:15", abfahrt: null, dauer: 45 } }) },
+      eintraege: [{ id: "e1", datum: "2026-10-27", km: 14.2, vorlage: null, notiz: "", typ: "tag", arbeitsweg: true, wetter: {
+        quelle: "vorhersage", stand: "2026-10-27T04:50:00.000Z",
+        hin: { temperatur: 2.5, gefuehlt: -0.5, niederschlag: 0.4, regenWahrscheinlichkeit: 55, wind: 12, boeen: 30, ampel: "gelb", kleidung: "kalt", rueckmeldung: null },
+        rueck: { temperatur: 8, gefuehlt: 6, niederschlag: 0, regenWahrscheinlichkeit: null, wind: 20, boeen: 41, ampel: "gelb", kleidung: "jacke", rueckmeldung: "zu-kalt" } } }] };
+    v4.einstellungen.wetter.kleidung.stufen[2].korrektur = 2;
+    v4.einstellungen.wetter.ampel.rotBoeen = 55;
+    const v4rund = kopie(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v4)))));
+    gleich("Alle neuen Felder (Orte, Fahrzeiten ohne übliche Abfahrt, Ampel, Kleidung mit Korrektur, Wetter je Eintrag): Import → Export → Import verlustfrei",
+      [v4rund.einstellungen, v4rund.eintraege[0].wetter], [v4.einstellungen, v4.eintraege[0].wetter]);
+    gleich("Koordinaten werden beim Einlesen auf 2 Nachkommastellen gerundet",
+      w.datenEinlesen(JSON.stringify(Object.assign(kopie(v4), { einstellungen: { wetter: { wohnort: { name: " Musterdorf ", lat: 51.123456, lon: 10.987654 } } } }))).einstellungen.wetter.wohnort,
+      { name: "Musterdorf", lat: 51.12, lon: 10.99 });
+    gleich("Fehlende Teile der Wetter-Einstellungen bekommen die Standardwerte",
+      kopie(w.datenEinlesen(JSON.stringify(Object.assign(kopie(v4), { einstellungen: { wetter: { wohnort: MUSTERDORF, rueckfahrt: { abfahrt: null } } } }))).einstellungen.wetter),
+      Object.assign(kopie(STD_WETTER), { wohnort: MUSTERDORF, rueckfahrt: { von: "16:00", bis: "17:00", abfahrt: null, dauer: 60 } }));
+    const mitWetter = aend => JSON.stringify(Object.assign(kopie(v4), { einstellungen: { wetter: Object.assign(wetterEinst(), aend) } }));
+    const kleid = aend => mitWetter({ kleidung: Object.assign(kopie(STD_WETTER.kleidung), aend) });
+    const stufen = f => { const s = kopie(STD_WETTER.kleidung.stufen); f(s); return s; };
+    const mitEintragWetter = (aend, typ = "tag") => JSON.stringify(Object.assign(kopie(v4), {
+      eintraege: [Object.assign(kopie(v4.eintraege[0]), { typ, wetter: Object.assign(kopie(v4.eintraege[0].wetter), aend) })] }));
+    wirft("Uhrzeit ohne führende Null wird abgelehnt", () => w.datenEinlesen(mitWetter({ hinfahrt: { von: "6:00", bis: "07:00", abfahrt: null, dauer: 60 } })), "HH:MM");
+    wirft("Fahrzeit „von“ nach „bis“ wird abgelehnt", () => w.datenEinlesen(mitWetter({ rueckfahrt: { von: "17:00", bis: "16:00", abfahrt: null, dauer: 60 } })), "vor „bis“");
+    wirft("Dauer 0 Minuten wird abgelehnt", () => w.datenEinlesen(mitWetter({ rueckfahrt: { von: "16:00", bis: "17:00", abfahrt: "16:00", dauer: 0 } })), "dauer");
+    wirft("Übliche Abfahrt ohne Uhrzeit wird abgelehnt", () => w.datenEinlesen(mitWetter({ rueckfahrt: { von: "16:00", bis: "17:00", abfahrt: "später", dauer: 60 } })), "abfahrt");
+    wirft("Breitengrad 91 wird abgelehnt", () => w.datenEinlesen(mitWetter({ wohnort: { name: "x", lat: 91, lon: 10 } })), "lat");
+    wirft("Ort ohne Name wird abgelehnt", () => w.datenEinlesen(mitWetter({ arbeitsort: { name: " ", lat: 51, lon: 10 } })), "Name fehlt");
+    wirft("„aktiv“ muss true oder false sein", () => w.datenEinlesen(mitWetter({ weitererOrt: { name: "x", lat: 51, lon: 10, aktiv: "ja" } })), "aktiv");
+    wirft("Warnstufe für Rot außerhalb 1–4 wird abgelehnt", () => w.datenEinlesen(mitWetter({ ampel: Object.assign(kopie(STD_WETTER.ampel), { rotWarnstufe: 5 }) })), "rotWarnstufe");
+    wirft("Negative Böen-Grenze wird abgelehnt", () => w.datenEinlesen(mitWetter({ ampel: Object.assign(kopie(STD_WETTER.ampel), { gelbBoeen: -1 }) })), "gelbBoeen");
+    wirft("Untergrenzen der Kleidung müssen abnehmen", () => w.datenEinlesen(kleid({ stufen: stufen(s => { s[1].ab = 20; }) })), "abnehmen");
+    wirft("Korrektur über 5 °C wird abgelehnt", () => w.datenEinlesen(kleid({ stufen: stufen(s => { s[0].korrektur = 6; }) })), "korrektur");
+    wirft("Die letzte Kleidungsstufe hat keine Untergrenze", () => w.datenEinlesen(kleid({ stufen: stufen(s => { s[4].ab = -5; }) })), "letzte Stufe");
+    wirft("Doppelte id einer Kleidungsstufe wird abgelehnt", () => w.datenEinlesen(kleid({ stufen: stufen(s => { s[1].id = "kurz"; }) })), "doppelt");
+    wirft("Regenschwellen müssen aufsteigen", () => w.datenEinlesen(kleid({ regen: [{ ab: 60, text: "Regenhose" }, { ab: 40, text: "Regenjacke" }] })), "aufsteigend");
+    wirft("Wetter je Eintrag: unbekannte Ampelfarbe wird abgelehnt",
+      () => w.datenEinlesen(mitEintragWetter({ hin: Object.assign(kopie(v4.eintraege[0].wetter.hin), { ampel: "blau" }) })), "ampel");
+    wirft("Wetter je Eintrag: unbekannte Rückmeldung wird abgelehnt",
+      () => w.datenEinlesen(mitEintragWetter({ rueck: Object.assign(kopie(v4.eintraege[0].wetter.rueck), { rueckmeldung: "super" }) })), "rueckmeldung");
+    wirft("Wetter je Eintrag: ungültiger Zeitpunkt wird abgelehnt", () => w.datenEinlesen(mitEintragWetter({ stand: "gestern" })), "stand");
+    wirft("Eine Wochensumme hat kein Wetter", () => w.datenEinlesen(mitEintragWetter({}, "woche")), "Wochensumme");
+    // Datum eines Eintrags ändern: das gespeicherte Wetter gehört zum alten Datum und entfällt
+    setze4(kopie(v4));
+    w.eintragsFormular(w.eval("daten.eintraege[0]"), "");
+    w.document.getElementById("f-km").value = "15";
+    await w.eintragSpeichern();
+    const nachKm = w.eval("daten.eintraege[0].wetter");
+    w.eintragsFormular(w.eval("daten.eintraege[0]"), "");
+    w.document.getElementById("f-datum").value = "2026-10-28";
+    await w.eintragSpeichern();
+    gleich("Eintrag ändern: Wetter bleibt bei gleichem Datum, entfällt bei neuem Datum", [!!nachKm, w.eval("daten.eintraege[0].wetter"), w.eval("daten.eintraege[0].km")], [true, null, 15]);
+    w.eval("daten.eintraege = []");
+    w.keineFahrt("2026-10-20");
+    gleich("„Keine Fahrt“ und neue Einträge: Wetter leer", w.eval("daten.eintraege[0].wetter"), null);
+
+    // -------------------------------------------------------------
+    // 24. Aufgezeichnete Antworten lesen
+    // -------------------------------------------------------------
+    abschnitt("24. Aufgezeichnete Antworten der Wetterdienste lesen (erfundene Orte)");
+    const om2 = w.vorhersageLesen(kopie(fx["wetter-open-meteo"]), 2);
+    const roh2 = fx["wetter-open-meteo"];
+    gleich("Open-Meteo, zwei Orte: 8 Tage und Vortag im 15-Minuten-Raster und stündlich, Zeiten in ms",
+      [om2.length, om2[0].m15.zeit.length, om2[0].stunde.zeit.length, om2[0].m15.zeit[0] === roh2[0].minutely_15.time[0] * 1000,
+        om2[0].m15.zeit[1] - om2[0].m15.zeit[0], om2[0].stunde.zeit[1] - om2[0].stunde.zeit[0]],
+      [2, 864, 216, true, 900000, 3600000]);
+    gleich("Open-Meteo: alle Werte übernommen (Stichprobe Arbeitsort)",
+      [om2[1].m15.temperatur[400], om2[1].m15.gefuehlt[400], om2[1].m15.niederschlag[400], om2[1].m15.code[400], om2[1].m15.wind[400], om2[1].m15.richtung[400],
+        om2[1].m15.boeen[400], om2[1].stunde.wahrscheinlichkeit[100], om2[1].stunde.boden[100]],
+      [roh2[1].minutely_15.temperature_2m[400], roh2[1].minutely_15.apparent_temperature[400], roh2[1].minutely_15.precipitation[400], roh2[1].minutely_15.weather_code[400],
+        roh2[1].minutely_15.wind_speed_10m[400], roh2[1].minutely_15.wind_direction_10m[400], roh2[1].minutely_15.wind_gusts_10m[400],
+        roh2[1].hourly.precipitation_probability[100], roh2[1].hourly.soil_temperature_0cm[100]]);
+    gleich("Open-Meteo, ein Ort (die Antwort ist ein Objekt statt einer Liste)", w.vorhersageLesen(kopie(fx["wetter-open-meteo-ein-ort"]), 1).map(o => o.m15.zeit.length), [864]);
+    wirft("Open-Meteo: falsche Anzahl Orte wird erkannt", () => w.vorhersageLesen(kopie(roh2), 1), "unerwartete Antwort");
+    wirft("Open-Meteo: Fehlermeldung statt Daten wird erkannt", () => w.vorhersageLesen({ error: true, reason: "Daily API request limit exceeded." }, 1), "unerwartete Antwort");
+    const dwdW = w.dwdWarnungenLesen(kopie(fx["wetter-dwd"]));
+    gleich("DWD (GeoServer): Warngebiet, Ereignis, Stufe, Art, Beginn und Ende",
+      [dwdW.abgedeckt, dwdW.gebiet, dwdW.warnungen.map(x => [x.ereignis, x.stufe, x.art, new Date(x.beginn).toISOString(), new Date(x.ende).toISOString()])],
+      [true, "Gemeinde Musterdorf", [
+        ["WINDBÖEN", 1, "sonst", "2026-10-25T17:00:00.000Z", "2026-10-25T23:00:00.000Z"],
+        ["STURMBÖEN", 2, "sonst", "2026-10-25T09:00:00.000Z", "2026-10-25T17:00:00.000Z"],
+        ["STARKES GEWITTER", 2, "gewitter", "2026-10-25T12:25:00.000Z", "2026-10-25T13:00:00.000Z"]]]);
+    const bsW = w.brightSkyLesen(kopie(fx["wetter-brightsky"]));
+    const vergleichbar = r => r.warnungen.map(x => [x.ereignis, x.stufe, x.art, x.beginn, x.ende, x.titel, x.text].join("|")).sort();
+    gleich("Bright Sky liefert dieselben Warnungen des DWD (Ereignis, Stufe, Art, Zeitraum, Überschrift, Text)", vergleichbar(bsW), vergleichbar(dwdW));
+    gleich("Bright Sky: Warngebiet aus „location“", [bsW.abgedeckt, bsW.gebiet], [true, "Gemeinde Musterdorf"]);
+    gleich("DWD ohne Warnung: offen, ob der Ort im Warngebiet liegt", w.dwdWarnungenLesen(kopie(fx["wetter-dwd-leer"])), { abgedeckt: null, gebiet: null, warnungen: [] });
+    gleich("Arten der Warnungen nach Ereignis und Gruppe",
+      ["GEWITTER", "SCHWERES GEWITTER mit HAGEL", "GLÄTTE", "GLATTEIS", "FROST", "STARKE HITZE", "UV-INDEX", "SCHNEEVERWEHUNG", "DAUERREGEN", "x THUNDERSTORM;WIND"].map(w.warnungsArt),
+      ["gewitter", "gewitter", "glaette", "glaette", "sonst", "gesundheit", "gesundheit", "sonst", "sonst", "gewitter"]);
+    const testUndAufhebung = dwdMit(["STURMBÖEN", "Moderate", 0, 1, { STATUS: "Test" }], ["GEWITTER", "Minor", 0, 1, { MSGTYPE: "Cancel" }], ["NEBEL", "Minor", 0, 1, { CATEGORY: "Health" }]);
+    gleich("DWD: Test- und Aufhebungsmeldungen werden nicht übernommen; Kategorie „Health“ nur zur Info",
+      w.dwdWarnungenLesen(testUndAufhebung).warnungen.map(x => [x.ereignis, x.art]), [["NEBEL", "gesundheit"]]);
+    gleichInhalt("Ortssuche: Treffer mit Bundesland und Land, Koordinaten sofort gerundet", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche"])), [
+      { name: "Musterdorf", zusatz: "Beispielland, Deutschland", lat: 51, lon: 10 },
+      { name: "Musterdorf am See", zusatz: "Beispielland, Deutschland", lat: 52.34, lon: 11.66 },
+      { name: "Musterdorf", zusatz: "Beispielbundesland, Österreich", lat: 47.12, lon: 13.99 }]);
+    gleich("Ortssuche ohne Treffer (Antwort ohne „results“)", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche-leer"])), []);
+    // Die aufgezeichnete Vorhersage selbst auswerten (unabhängig von der Zeitzone nur Plausibles)
+    wetterDaten();
+    const echt = await laden(kopie(roh2), kopie(fx["wetter-dwd"]), zeit("2026-10-26", "12:00"));
+    wahr("Aufgezeichnete Vorhersage: beide Fahrten am Mo 26.10. mit Ampel, Kleidung und Wind",
+      echt.fahrten.every(f => f.bewertung && ["gruen", "gelb", "rot"].includes(f.bewertung.farbe) && f.kleidung && f.wind), JSON.stringify(echt.fahrten.map(f => f.bewertung && f.bewertung.text)));
+    gleich("Aufgezeichnete Warnungen (25.10.) gelten nicht für Mo 26.10.", echt.warnungen.length, 0);
+
+    // -------------------------------------------------------------
+    // 25. Ampel: Grenzfälle
+    // -------------------------------------------------------------
+    abschnitt("25. Ampel je Fahrt: Grenzfälle (Rückfahrt Di 27.10. 16:00–17:00, am Vorabend)");
+    wetterDaten();
+    gleich("Ruhiges Wetter: grün mit kurzer Begründung", await ampel(ruhig()), "grün: trocken, Böen bis 15 km/h");
+    const boe = v => ampel(aendern(ruhig(), "wind_gusts_10m", D, "16:15", "16:30", v));
+    gleich("Böen 39 / 40 / 59 / 60 km/h", [await boe(39), await boe(40), await boe(59), await boe(60)],
+      ["grün: trocken, Böen bis 39 km/h", "gelb: Böen 40 km/h ab 16:15", "gelb: Böen 59 km/h ab 16:15", "rot: Böen 60 km/h ab 16:15"]);
+    const nied = v => ampel(aendern(ruhig(), "precipitation", D, "16:30", "16:45", v));
+    gleich("Niederschlag je 15 Minuten 0,1 / 0,125 / 1,2 / 1,25 mm, also 0,4 / 0,5 / 4,8 / 5 mm/h", [await nied(0.1), await nied(0.125), await nied(1.2), await nied(1.25)],
+      ["grün: kaum Regen, Böen bis 15 km/h", "gelb: Regen 0,5 mm/h ab 16:30", "gelb: Regen 4,8 mm/h ab 16:30", "rot: Starkregen 5 mm/h ab 16:30"]);
+    const wahrsch = v => ampel(aendern(ruhig(), "precipitation_probability", D, "16:00", "17:00", v));
+    gleich("Regenwahrscheinlichkeit 49 / 50 %", [await wahrsch(49), await wahrsch(50)], ["grün: trocken, Böen bis 15 km/h", "gelb: 50 % Regen"]);
+    const temp = v => ampel(aendern(ruhig(), "temperature_2m", D, "16:00", "17:00", v));
+    gleich("Temperatur 0 / −0,1 °C (trocken, also keine Glätte)", [await temp(0), await temp(-0.1)], ["grün: trocken, Böen bis 15 km/h", "gelb: Frost (−0,1 °C)"]);
+    gleich("Gewitter vorhergesagt (Wettercode 95) ab 16:45: rot", await ampel(aendern(ruhig(), "weather_code", D, "16:45", "17:00", 95)), "rot: Gewitter ab 16:45");
+    let om = aendern(ruhig(), "precipitation_probability", D, "16:00", "17:00", 70);
+    aendern(om, "precipitation", D, "16:30", "17:00", 0.1);
+    aendern(om, "wind_gusts_10m", D, "16:00", "17:00", 45);
+    gleich("Begründung wie im Beispiel", await ampel(om), "gelb: 70 % Regen ab 16:30, Böen 45 km/h");
+    gleich("Es zählt der ungünstigere Ort (Böen nur am Arbeitsort)", await ampel(aendern(ruhig(), "wind_gusts_10m", D, "16:00", "17:00", 62, 1)), "rot: Böen 62 km/h");
+    gleich("Außerhalb der Fahrzeit zählt nichts (Gewitter ab 17:00, Böen bis 16:00)",
+      await ampel(aendern(aendern(ruhig(), "weather_code", D, "17:00", "17:30", 95), "wind_gusts_10m", D, "15:30", "16:00", 80)), "grün: trocken, Böen bis 15 km/h");
+    const warnAmpel = (...liste) => ampel(ruhig(), dwdMit(...liste));
+    gleich("Amtliche Warnungen: Stufe 1 gelb, ab Stufe 2 rot, Gewitter und Glätte bei jeder Stufe rot, Hitze nur zur Info, nur während der Fahrt", [
+      await warnAmpel(W("WINDBÖEN", "Minor", "15:00", "18:00")),
+      await warnAmpel(W("STURMBÖEN", "Moderate", "16:30", "18:00")),
+      await warnAmpel(W("GEWITTER", "Minor", "16:45", "17:30", { EC_GROUP: "THUNDERSTORM" })),
+      await warnAmpel(W("GLÄTTE", "Minor", "05:00", "16:30")),
+      await warnAmpel(W("STARKE HITZE", "Moderate", "11:00", "19:00", { CATEGORY: "Health" })),
+      await warnAmpel(W("ORKANBÖEN", "Severe", "17:00", "20:00"))
+    ], ["gelb: Warnung WINDBÖEN (Stufe 1)", "rot: Warnung STURMBÖEN (Stufe 2) ab 16:30", "rot: Warnung GEWITTER (Stufe 1) ab 16:45", "rot: Warnung GLÄTTE (Stufe 1)",
+      "grün: trocken, Böen bis 15 km/h", "grün: trocken, Böen bis 15 km/h"]);
+    gleich("Höchstens drei Gründe, rote zuerst",
+      await ampel(aendern(aendern(aendern(ruhig(), "wind_gusts_10m", D, "16:00", "17:00", 45), "precipitation_probability", D, "16:00", "17:00", 80), "weather_code", D, "16:30", "16:45", 95),
+        dwdMit(W("WINDBÖEN", "Minor", "15:00", "18:00"))),
+      "rot: Gewitter ab 16:30, Warnung WINDBÖEN (Stufe 1), 80 % Regen");
+    gleich("Amtliche Warnung vor den Gründen aus der Vorhersage",
+      await ampel(aendern(aendern(ruhig(), "weather_code", D, "16:45", "17:00", 95), "wind_gusts_10m", D, "16:30", "17:00", 65), dwdMit(W("STARKES GEWITTER", "Moderate", "16:30", "18:00"))),
+      "rot: Warnung STARKES GEWITTER (Stufe 2) ab 16:30, Gewitter ab 16:45, Böen 65 km/h ab 16:30");
+
+    // -------------------------------------------------------------
+    // 26. Glätte
+    // -------------------------------------------------------------
+    abschnitt("26. Glätte aus der Vorhersage (Luft ≤ 1 °C oder Boden ≤ 0 °C, dazu nass)");
+    const kaltNass = (t, nVon, nBis) => aendern(aendern(ruhig(), "temperature_2m", D, "16:00", "17:00", t), "precipitation", D, nVon, nBis, 0.1);
+    gleich("1 °C und Niederschlag ab 16:15: Glätte", await ampel(kaltNass(1, "16:15", "16:30")), "rot: Glätte ab 16:15");
+    gleich("1,1 °C und Niederschlag: keine Glätte", await ampel(kaltNass(1.1, "16:15", "16:30")), "grün: kaum Regen, Böen bis 15 km/h");
+    gleich("0,5 °C, trocken, aber Niederschlag 5 Stunden vorher (nasse Straße): Glätte", await ampel(kaltNass(0.5, "11:00", "11:15")), "rot: Glätte (nasse Straße)");
+    gleich("0,5 °C, Niederschlag 7 Stunden vorher: keine Glätte", await ampel(kaltNass(0.5, "09:00", "09:15")), "grün: trocken, Böen bis 15 km/h");
+    om = aendern(aendern(aendern(ruhig(), "temperature_2m", D, "16:00", "17:00", 3), "soil_temperature_0cm", D, "16:00", "17:00", -1), "precipitation", D, "16:30", "16:45", 0.1);
+    gleich("Luft 3 °C, Boden −1 °C, Niederschlag ab 16:30: Glätte", await ampel(om), "rot: Glätte ab 16:30");
+    gleich("Gefrierender Regen (Wettercode 66): Glätte", await ampel(aendern(ruhig(), "weather_code", D, "16:15", "16:30", 66)), "rot: Glätte (gefrierender Regen) ab 16:15");
+    gleich("−2 °C und trocken: nur Frost (gelb)", await temp(-2), "gelb: Frost (−2 °C)");
+    om = aendern(aendern(ruhig(), "temperature_2m", D, "05:00", "08:00", 0.5), "precipitation", D, "03:00", "03:15", 0.3);
+    gleich("Hinfahrt 06:00–07:00 nach nächtlichem Regen bei 0,5 °C: Glätte, Rückfahrt grün",
+      (await laden(om)).fahrten.map(f => f.bewertung.text), ["rot: Glätte (nasse Straße)", "grün: trocken, Böen bis 15 km/h"]);
+    gleich("Amtliche Warnung GLATTEIS (Stufe 1): rot", await warnAmpel(W("GLATTEIS", "Minor", "15:00", "18:00")), "rot: Warnung GLATTEIS (Stufe 1)");
+
+    // -------------------------------------------------------------
+    // 27. Kleidung
+    // -------------------------------------------------------------
+    abschnitt("27. Kleidungsempfehlung nach gefühlter Temperatur und Regen");
+    const kl = (g, p, k = STD_WETTER.kleidung) => w.kleidungFuer(g, p, k).text;
+    gleich("Gefühlte Temperatur 18 / 17,9 / 12 / 11,9 / 6 / 5,9 / 0 / −0,1 °C (ein Grenzwert gehört zur wärmeren Stufe)",
+      [18, 17.9, 12, 11.9, 6, 5.9, 0, -0.1].map(g => kl(g, null)),
+      ["kurz", "lange dünne Kleidung", "lange dünne Kleidung", "Jacke, lange Hose", "Jacke, lange Hose", "Handschuhe, Stirnband, Thermojacke",
+        "Handschuhe, Stirnband, Thermojacke", "Winterhandschuhe, Mütze, Überschuhe"]);
+    gleich("Regenwahrscheinlichkeit 39 / 40 / 59 / 60 %", [39, 40, 59, 60].map(p => kl(10, p)),
+      ["Jacke, lange Hose", "Jacke, lange Hose + Regenjacke", "Jacke, lange Hose + Regenjacke", "Jacke, lange Hose + Regenjacke, Regenhose"]);
+    const korrigiert = kopie(STD_WETTER.kleidung);
+    korrigiert.stufen[2].korrektur = 2;
+    gleich("Gespeicherte Korrektur verschiebt die Grenze (Jacke ab 8 statt 6 °C)", [kl(7.9, null, korrigiert), kl(8, null, korrigiert)], ["Handschuhe, Stirnband, Thermojacke", "Jacke, lange Hose"]);
+    const k = (g, p) => w.kleidungFuer(g, p, STD_WETTER.kleidung);
+    gleich("Hinweise für die Rückfahrt", [
+      w.kleidungsHinweis(k(3, 45), k(3, 65)), w.kleidungsHinweis(k(8, 0), k(4, 0)), w.kleidungsHinweis(k(3, 10), k(8, 65)), w.kleidungsHinweis(k(8, 70), k(9, 10))
+    ], [
+      "Morgens: Handschuhe, Stirnband, Thermojacke + Regenjacke; für die Rückfahrt Regenhose einpacken.",
+      "Morgens: Jacke, lange Hose; für die Rückfahrt Handschuhe, Stirnband, Thermojacke einpacken.",
+      "Morgens: Handschuhe, Stirnband, Thermojacke; für die Rückfahrt reicht Jacke, lange Hose und Regenjacke, Regenhose einpacken.",
+      null]);
+    om = aendern(aendern(ruhig(), "apparent_temperature", D, "06:00", "07:00", 3), "apparent_temperature", D, "16:00", "17:00", 8);
+    aendern(om, "precipitation_probability", D, "16:00", "17:00", 65);
+    let ans = await laden(om);
+    gleich("Ansicht: Kleidung je Fahrt und Hinweis", [ans.fahrten.map(f => f.kleidung.text), ans.kleidungsHinweis], [
+      ["Handschuhe, Stirnband, Thermojacke", "Jacke, lange Hose + Regenjacke, Regenhose"],
+      "Morgens: Handschuhe, Stirnband, Thermojacke; für die Rückfahrt reicht Jacke, lange Hose und Regenjacke, Regenhose einpacken."]);
+
+    // -------------------------------------------------------------
+    // 28. Bestes Abfahrtsfenster
+    // -------------------------------------------------------------
+    abschnitt("28. Bestes Abfahrtsfenster im 15-Minuten-Raster");
+    wetterDaten(); // übliche Abfahrt 16:00, Dauer 60 min
+    const gewitterAb1645 = () => aendern(ruhig(), "weather_code", D, "16:45", "17:30", 95);
+    let r = await rueck(gewitterAb1645());
+    gleich("Gewitter ab 16:45: „Abfahrt 15:45 statt 16:00“", [r.bewertung.farbe, r.abfahrt.zeigen, r.abfahrt.text], ["rot", true, "Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"]);
+    gleich("Abfahrten 15:30–16:30 (Dauer 60 min), Zeitleiste 15:30–17:30", [
+      r.abfahrt.kandidaten.map(x => uhr(x.minuten) + " " + x.bewertung.farbe), r.abfahrt.felder.map(x => uhr(x.minuten) + " " + x.farbe)
+    ], [
+      ["15:30 gruen", "15:45 gruen", "16:00 rot", "16:15 rot", "16:30 rot"],
+      ["15:30 gruen", "15:45 gruen", "16:00 gruen", "16:15 gruen", "16:30 gruen", "16:45 rot", "17:00 rot", "17:15 rot"]]);
+    gleich("Zu meiden: 16:45–17:30 (Gewitter)", r.abfahrt.meiden.map(x => [uhr(x.von), uhr(x.bis), x.grund.text]), [["16:45", "17:30", "Gewitter"]]);
+    wetterDaten({ rueckfahrt: { von: "16:00", bis: "17:00", abfahrt: null, dauer: 60 } });
+    r = await rueck(gewitterAb1645());
+    gleich("Ohne übliche Abfahrt: beste Abfahrt und die zu meidende Zeit", r.abfahrt.text, "Beste Abfahrt 15:45: trocken · meiden: 16:45–17:30 (Gewitter)");
+    wetterDaten();
+    r = await rueck(aendern(ruhig(), "precipitation", D, "15:30", "16:30", 0.3));
+    gleich("Regen bis 16:30: „Abfahrt 16:30 statt 16:00“", r.abfahrt.text, "Abfahrt 16:30 statt 16:00: trocken, Regen 1,2 mm/h nur bis 16:30");
+    r = await rueck(ruhig());
+    gleich("Durchgehend grün: kein Hinweis", [r.abfahrt.zeigen, r.abfahrt.text], [false, null]);
+    r = await rueck(ruhig(), dwdMit(W("WINDBÖEN", "Minor", "14:00", "19:00")));
+    gleich("Warnung den ganzen Nachmittag: keine bessere Abfahrt", [r.abfahrt.zeigen, r.abfahrt.text], [true, "Keine bessere Abfahrt zwischen 15:30 und 16:30."]);
+    ans = await laden(gewitterAb1645(), undefined, zeit(D, "15:50"));
+    gleich("Heute um 15:50: nur noch kommende Abfahrten", [ans.fahrten[1].abfahrt.kandidaten.map(x => uhr(x.minuten)), ans.fahrten[1].abfahrt.text],
+      [["16:00", "16:15", "16:30"], "Keine bessere Abfahrt zwischen 16:00 und 16:30."]);
+    ans = await laden(aendern(ruhig(), "precipitation", D, "06:00", "06:30", 0.5));
+    gleich("Hinfahrt: Abfahrten 05:30–06:30 um die übliche Abfahrt 06:00", [ans.fahrten[0].abfahrt.kandidaten.map(x => uhr(x.minuten)), ans.fahrten[0].abfahrt.text],
+      [["05:30", "05:45", "06:00", "06:15", "06:30"], "Abfahrt 06:30 statt 06:00: trocken, Regen 2 mm/h nur bis 06:30"]);
+
+    // -------------------------------------------------------------
+    // 29. Wind relativ zur Strecke
+    // -------------------------------------------------------------
+    abschnitt("29. Wind relativ zur Strecke (nur Info)");
+    const kurs = w.kursZwischen(MUSTERDORF, BEISPIELSTADT), kursZurueck = w.kursZwischen(BEISPIELSTADT, MUSTERDORF);
+    wahr("Richtung Musterdorf → Beispielstadt: Nordost (ca. 51°), zurück Südwest", kurs > 48 && kurs < 55 && Math.abs(kursZurueck - kurs - 180) < 1, kurs + " / " + kursZurueck);
+    const proben = (v, r) => Array(4).fill({ v, r });
+    gleich("Gegenwind, Rückenwind, Seitenwind von rechts und von links, schräg von vorn, schwacher Wind", [
+      w.windZurStrecke(proben(20, kurs), kurs).text, w.windZurStrecke(proben(20, kurs + 180), kurs).text, w.windZurStrecke(proben(20, kurs + 90), kurs).text,
+      w.windZurStrecke(proben(20, kurs - 90), kurs).text, w.windZurStrecke(proben(20, kurs + 40), kurs).text, w.windZurStrecke(proben(8, kurs), kurs).text
+    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "Seitenwind von rechts 20 km/h", "Seitenwind von links 20 km/h", "Gegenwind 15 km/h", "schwacher Wind (8 km/h)"]);
+    om = aendern(aendern(ruhig(), "wind_speed_10m", D, "05:00", "18:00", 20), "wind_direction_10m", D, "05:00", "18:00", 50);
+    ans = await laden(om);
+    gleich("Wind aus Nordost: hin Gegenwind, zurück Rückenwind; die Ampel bleibt grün", ans.fahrten.map(f => [f.wind.text, f.bewertung.farbe]),
+      [["Gegenwind 20 km/h", "gruen"], ["Rückenwind 20 km/h", "gruen"]]);
+    wetterDaten({ arbeitsort: null });
+    ans = await laden([om[0]]);
+    gleich("Ohne Arbeitsort: Wind mit Himmelsrichtung", ans.fahrten.map(f => f.wind.text), ["Wind 20 km/h aus Nordost", "Wind 20 km/h aus Nordost"]);
+
+    // -------------------------------------------------------------
+    // 30. Umschalten heute / nächster Fahrtag
+    // -------------------------------------------------------------
+    abschnitt("30. Heute bis zum Ende der Rückfahrt (17:00), danach der nächste Fahrtag");
+    wetterDaten();
+    await laden(ruhig());
+    const tagBei = (datum, u) => { const a = w.wetterAnsicht(zeit(datum, u)); return [a.tag.datum, a.tag.titel, a.tag.fahrtag, a.fahrten ? a.fahrten.map(f => f.vorbei) : null]; };
+    gleich("Fahrtage Mo, Di, Fr: Di 06:59 / 07:00 / 16:59 / 17:00, Mo 20:15 und 00:30, Fr 17:00, Sa 10:00, So 18:00", [
+      tagBei(D, "06:59"), tagBei(D, "07:00"), tagBei(D, "16:59"), tagBei(D, "17:00"), tagBei("2026-10-26", "20:15"), tagBei("2026-10-26", "00:30"),
+      tagBei("2026-10-30", "17:00"), tagBei("2026-10-31", "10:00"), tagBei("2026-10-25", "18:00")
+    ], [
+      [D, "Heute", true, [false, false]], [D, "Heute", true, [true, false]], [D, "Heute", true, [true, false]], ["2026-10-30", "Fr 30.10.", true, [false, false]],
+      [D, "Morgen", true, [false, false]], ["2026-10-26", "Heute", true, [false, false]], ["2026-11-02", "Mo 02.11.", true, [false, false]],
+      ["2026-10-31", "Heute", false, null], ["2026-10-26", "Morgen", true, [false, false]]]);
+    ans = w.wetterAnsicht(zeit("2026-10-30", "17:00"));
+    let seite = ohneTags(w.bildWetter(zeit("2026-10-30", "17:00")));
+    gleich("Fr 17:00 → Mo 02.11.: über das Ende der Vorhersage hinaus", [ans.fahrten.map(f => f.bewertung), seite.includes("Mo 02.11.") && seite.includes("Für diese Zeit liegt noch keine Vorhersage vor.")], [[null, null], true]);
+    ans = w.wetterAnsicht(zeit("2026-10-31", "10:00"));
+    seite = ohneTags(w.bildWetter(zeit("2026-10-31", "10:00")));
+    gleich("Kein Fahrtag: nur eine kurze Übersicht", [ans.uebersicht.werte, seite.includes("Kein Fahrtag – kurze Übersicht für Musterdorf 10 °C bis 10 °C · Regen 0 %, 0 mm · Böen bis 15 km/h")],
+      [{ tmin: 10, tmax: 10, niederschlag: 0, regenWahrscheinlichkeit: 0, boeen: 15, gewitter: false }, true]);
+    seite = ohneTags(w.bildWetter(zeit(D, "10:00")));
+    wahr("Nach der Hinfahrt: Hinfahrt als „vorbei“, Rückfahrt mit allen Angaben", seite.includes("Hinfahrt 06:00–07:00 · vorbei") && seite.includes("Rückfahrt 16:00–17:00 grün:"), seite);
+    wetterDaten({ rueckfahrt: { von: "16:30", bis: "18:00", abfahrt: "16:30", dauer: 60 } });
+    gleich("Rückfahrt bis 18:00: um 17:30 noch heute, um 18:00 der nächste Fahrtag", [tagBei(D, "17:30")[0], tagBei(D, "18:00")[0]], [D, "2026-10-30"]);
+    wetterDaten({}, []);
+    gleich("Ohne Fahrtage: ab 17:00 morgen als kurze Übersicht", tagBei(D, "17:00"), ["2026-10-28", "Morgen", false, null]);
+    const dauerSo = zeit("2026-10-25", "07:00") - zeit("2026-10-25", "06:00");
+    gleich("Tag der Zeitumstellung (So 25.10.): 06:00–07:00 dauert eine Stunde und hat vier 15-Minuten-Werte",
+      [dauerSo, w.ortWerte(om2[0], zeit("2026-10-25", "06:00"), zeit("2026-10-25", "07:00")).temperatur.length], [3600000, 4]);
+    if (Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Berlin") {
+      gleich("Zeitumstellung (Europe/Berlin): 02:00–04:00 Ortszeit sind drei Stunden, also zwölf 15-Minuten-Werte",
+        w.ortWerte(om2[0], zeit("2026-10-25", "02:00"), zeit("2026-10-25", "04:00")).temperatur.length, 12);
+    }
+
+    // -------------------------------------------------------------
+    // 31. Ausfall einer Quelle
+    // -------------------------------------------------------------
+    abschnitt("31. Ausfall einer Quelle: deutlich angezeigt, die andere arbeitet weiter");
+    wetterDaten();
+    const holen = async (...regeln) => { netz(...regeln); wetterLeeren(); await w.wetterAktualisieren(true, ABEND); return w.wetterAnsicht(ABEND); };
+    ans = await holen(["open-meteo", ruhig()], ["Warnungen_Gemeinden", dwdMit(W("STURMBÖEN", "Moderate", "15:00", "18:00"))]);
+    seite = ohneTags(w.bildWetter(ABEND));
+    gleich("Normalfall: Warnungen vom DWD, Quelle wird angezeigt",
+      [ans.quellen.warnungen.quelle, ans.fahrten[1].bewertung.text, seite.includes("Quelle: Deutscher Wetterdienst · Warngebiet Gemeinde Musterdorf ·")],
+      ["dwd", "rot: Warnung STURMBÖEN (Stufe 2)", true]);
+    ans = await holen(["open-meteo", ruhig()], ["maps.dwd.de", "offline"], ["brightsky", bsMit(W("STURMBÖEN", "Moderate", "15:00", "18:00"))]);
+    seite = ohneTags(w.bildWetter(ABEND));
+    gleich("DWD nicht erreichbar: Warnungen über Bright Sky", [ans.quellen.warnungen.quelle, ans.quellen.warnungen.fehler, ans.quellen.warnungen.dwdFehler, ans.fahrten[1].bewertung.text],
+      ["brightsky", null, "keine Verbindung", "rot: Warnung STURMBÖEN (Stufe 2)"]);
+    wahr("… mit Hinweis auf die Ersatzquelle und „Quelle: Bright Sky“", seite.includes("Der GeoServer des DWD ist nicht erreichbar (keine Verbindung). Die Warnungen kommen deshalb über Bright Sky")
+      && seite.includes("Quelle: Bright Sky (Ersatz, Daten des DWD)") && seite.includes("zurzeit über Bright Sky"), seite);
+    ans = await holen(["open-meteo", ruhig()], ["maps.dwd.de", {}, 503], ["brightsky", fx["wetter-brightsky"]]);
+    gleich("DWD antwortet mit Fehler 503: ebenfalls Bright Sky", [ans.quellen.warnungen.quelle, ans.quellen.warnungen.dwdFehler], ["brightsky", "Fehler 503"]);
+    ans = await holen(["open-meteo", ruhig()], ["maps.dwd.de", "offline"], ["brightsky", "offline"]);
+    seite = ohneTags(w.bildWetter(ABEND));
+    gleich("Beide Warnquellen aus: Ampel aus der Vorhersage, deutlicher Hinweis", [ans.quellen.warnungen.vorhanden, ans.quellen.warnungen.fehler, ans.fahrten[1].bewertung.text,
+      seite.includes("Amtliche Warnungen nicht erreichbar (DWD: keine Verbindung; Bright Sky: keine Verbindung). Die Ampel berücksichtigt keine amtlichen Warnungen.")],
+      [false, "DWD: keine Verbindung; Bright Sky: keine Verbindung", "grün: trocken, Böen bis 15 km/h", true]);
+    ans = await holen(["open-meteo", "offline"], ["Warnungen_Gemeinden", dwdMit(W("STURMBÖEN", "Moderate", "15:00", "18:00"))]);
+    seite = ohneTags(w.bildWetter(ABEND));
+    gleich("Vorhersage aus: Warnungen werden weiter angezeigt", [ans.quellen.vorhersage.fehler, ans.fahrten.map(f => f.bewertung), ans.warnungen.map(x => x.ereignis),
+      seite.includes("Vorhersage nicht erreichbar (Open-Meteo: keine Verbindung). Es liegt noch keine Vorhersage vor."), seite.includes("STURMBÖEN Stufe 2")],
+      ["keine Verbindung", [null, null], ["STURMBÖEN"], true, true]);
+    ans = await holen(["open-meteo", { error: true, reason: "Daily API request limit exceeded." }, 429], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete", fx["wetter-dwd-gebiet"]]);
+    gleich("Open-Meteo mit Fehler 429 (Tageslimit)", ans.quellen.vorhersage.fehler, "Fehler 429");
+    ans = await holen(["open-meteo", { latitude: 51 }], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete", fx["wetter-dwd-gebiet"]]);
+    gleich("Open-Meteo mit unvollständiger Antwort", ans.quellen.vorhersage.fehler, "unerwartete Antwort");
+    // Weiterer Ort im Ausland
+    wetterDaten({ weitererOrt: { name: "Ferienort", lat: 45, lon: 10, aktiv: true } });
+    ans = await holen(["open-meteo", fx["wetter-open-meteo-ein-ort"]], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet-leer"]]);
+    seite = ohneTags(w.bildWetter(ABEND));
+    gleich("Weiterer Ort außerhalb des Warngebiets (DWD)", [ans.weitererOrt, ans.quellen.warnungen.gebiete.map(x => x.abgedeckt),
+      seite.includes("Für Ferienort gibt es keine Warnungen des DWD (außerhalb Deutschlands).")], [true, [false], true]);
+    ans = await holen(["open-meteo", fx["wetter-open-meteo-ein-ort"]], ["maps.dwd.de", "offline"], ["brightsky", fx["wetter-brightsky-ausland"], 404]);
+    gleich("Weiterer Ort außerhalb (Bright Sky antwortet mit 404)", [ans.quellen.warnungen.quelle, ans.quellen.warnungen.gebiete.map(x => x.abgedeckt)], ["brightsky", [false]]);
+    // Das Warngebiet wird je Ort nur einmal nachgesehen
+    wetterDaten();
+    netz(["open-meteo", ruhig()], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
+    wetterLeeren();
+    await w.wetterAktualisieren(true, ABEND);
+    const ersteRunde = abrufe.filter(u => u.includes("Warngebiete")).length;
+    abrufe.length = 0;
+    await w.wetterAktualisieren(true, ABEND + 60000);
+    gleich("Warngebiet je Ort nur einmal abgefragt", [ersteRunde, abrufe.filter(u => u.includes("Warngebiete")).length, abrufe.filter(u => u.includes("Warnungen_Gemeinden")).length], [2, 0, 2]);
+    abrufe.length = 0;
+    await w.wetterAktualisieren(false, ABEND + 5 * 60000);
+    gleich("Nach 5 Minuten wird nichts neu geladen; die Warnungen nach 10, die Vorhersage nach 15 Minuten", [abrufe.length,
+      (await (async () => { abrufe.length = 0; await w.wetterAktualisieren(false, ABEND + 11 * 60000); return abrufe.map(u => new URL(u).host); })()),
+      (await (async () => { abrufe.length = 0; await w.wetterAktualisieren(false, ABEND + 27 * 60000); return abrufe.map(u => new URL(u).host).sort(); })())],
+      [0, ["maps.dwd.de", "maps.dwd.de"], ["api.open-meteo.com", "maps.dwd.de", "maps.dwd.de"]]);
+
+    // -------------------------------------------------------------
+    // 32. Offline: zuletzt geladene Daten mit Zeitstempel, als nicht aktuell gekennzeichnet
+    // -------------------------------------------------------------
+    abschnitt("32. Offline-Anzeige (Stand mit Zeitstempel, deutlich als nicht aktuell gekennzeichnet)");
+    wetterDaten();
+    w.speichern();
+    const datenVorher = [localStorage.getItem(TEST_SCHLUESSEL), JSON.stringify(w.eval("daten"))];
+    localStorage.removeItem(TEST_WETTER_SCHLUESSEL);
+    await laden(gewitterAb1645());
+    const SPAETER = zeit("2026-10-26", "21:00");
+    netz(); // alles offline
+    await w.wetterAktualisieren(false, SPAETER);
+    ans = w.wetterAnsicht(SPAETER);
+    gleich("Offline: Vorhersage und Warnungen vom letzten Stand bleiben, als nicht aktuell markiert",
+      [ans.quellen.vorhersage.vorhanden, ans.quellen.vorhersage.aktuell, ans.quellen.vorhersage.fehler, ans.quellen.warnungen.aktuell, ans.fahrten[1].bewertung.text],
+      [true, false, "keine Verbindung", false, "rot: Gewitter ab 16:45"]);
+    const ablageW = w.document.createElement("div");
+    ablageW.innerHTML = w.bildWetter(SPAETER);
+    seite = ohneTags(ablageW.innerHTML);
+    wahr("„Vorhersage nicht erreichbar … letzter Stand von 20:15 Uhr – nicht aktuell“",
+      seite.includes("Vorhersage nicht erreichbar (Open-Meteo: keine Verbindung). Angezeigt wird der letzte Stand von 20:15 Uhr – nicht aktuell"), seite);
+    wahr("Stand mit Zeitstempel: „Stand: Vorhersage 20:15 Uhr (nicht aktuell) · Warnungen 20:15 Uhr (nicht aktuell)“",
+      seite.includes("Stand: Vorhersage 20:15 Uhr (nicht aktuell) · Warnungen 20:15 Uhr (nicht aktuell)"), seite);
+    gleich("Karten der Fahrten und der Warnungen zurückgenommen (veraltet)", ablageW.querySelectorAll(".karte.veraltet").length, 3);
+    wahr("Kachel: „Nicht aktuell – Stand: 20:15 Uhr“", ohneTags(w.wetterKachel(SPAETER)).includes("Nicht aktuell – Stand: 20:15 Uhr"), ohneTags(w.wetterKachel(SPAETER)));
+    gleich("Wetterabruf und Offline-Anzeige verändern die Daten der App nicht", [localStorage.getItem(TEST_SCHLUESSEL), JSON.stringify(w.eval("daten"))], datenVorher);
+    const zwischen = JSON.parse(localStorage.getItem(TEST_WETTER_SCHLUESSEL) || "null");
+    gleich("Zwischenspeicher unter eigenem Schlüssel (Stand 20:15 Uhr), nicht in den Daten", [!!zwischen && zwischen.vorhersage.stand === ABEND, "wetter" in w.eval("daten"), "vorhersage" in JSON.parse(w.exportInhalt())], [true, false, false]);
+    const w5 = await appLaden();
+    const MORGEN = zeit(D, "06:00");
+    ans = w5.wetterAnsicht(MORGEN);
+    seite = ohneTags(w5.bildWetter(MORGEN));
+    gleich("Neustart ohne Netz am nächsten Morgen: letzter Stand von gestern, nicht aktuell",
+      [ans.quellen.vorhersage.vorhanden, ans.quellen.vorhersage.aktuell, ans.fahrten[1].bewertung.text, seite.includes("Nicht aktuell – Vorhersage Stand: gestern, 20:15 Uhr.")],
+      [true, false, "rot: Gewitter ab 16:45", true]);
+    w5.frameElement.remove();
+    gleich("Zwischenspeicher mit Kennzahl seines Aufbaus", zwischen.version, w.eval("WETTER_SPEICHER_VERSION"));
+    localStorage.setItem(TEST_WETTER_SCHLUESSEL, "{ kaputt");
+    const w6 = await appLaden();
+    gleich("Unlesbarer Zwischenspeicher: kein Fehler, Wetter wird neu geladen", [w6.eval("ladeFehler"), w6.eval("wetter.vorhersage")], [null, null]);
+    w6.frameElement.remove();
+    localStorage.setItem(TEST_WETTER_SCHLUESSEL, JSON.stringify(Object.assign({}, zwischen, { version: 999 })));
+    const w7 = await appLaden();
+    gleich("Zwischenspeicher mit anderem Aufbau wird verworfen", w7.eval("wetter.vorhersage"), null);
+    w7.frameElement.remove();
+    localStorage.setItem(TEST_WETTER_SCHLUESSEL, JSON.stringify(Object.assign({}, zwischen, { vorhersage: Object.assign({}, zwischen.vorhersage, { orte: [{}, {}] }) })));
+    const w8 = await appLaden();
+    w8.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    gleich("Beschädigter Zwischenspeicher: Übersicht bleibt bedienbar, Kachel und Reiter melden es",
+      [!!w8.document.querySelector("#inhalt .stand-zahl"), ohneTags(w8.wetterKachel(MORGEN)), ohneTags(w8.bildWetter(MORGEN)).startsWith("Das Wetter kann nicht angezeigt werden")],
+      [true, "🌦️ Wetter kann nicht angezeigt werden", true]);
+    w8.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 33. Datenschutz: nur gerundete Koordinaten
+    // -------------------------------------------------------------
+    abschnitt("33. Datenschutz: Orte nur gerundet speichern und senden");
+    wetterDaten({ wohnort: { name: "Musterdorf", lat: 51.004987, lon: 10.004321 } });
+    gleich("Koordinaten beim Einlesen gerundet", w.eval("daten.einstellungen.wetter.wohnort"), { name: "Musterdorf", lat: 51, lon: 10 });
+    netz(["open-meteo", ruhig()], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
+    wetterLeeren();
+    await w.wetterAktualisieren(true, ABEND);
+    const zahlen = abrufe.flatMap(u => {
+      const d = decodeURIComponent(u);
+      return [...d.matchAll(/(?:latitude|longitude|lat|lon)=([-\d.,]+)/g)].flatMap(m => m[1].split(","))
+        .concat([...d.matchAll(/POINT\(([-\d. ]+)\)/g)].flatMap(m => m[1].split(" ")));
+    });
+    gleich("An Open-Meteo und den DWD gehen nur auf 2 Nachkommastellen gerundete Koordinaten",
+      [zahlen.length, zahlen.every(z => /^-?\d+\.\d{2}$/.test(z)), [...new Set(zahlen)].sort()], [12, true, ["10.00", "10.20", "51.00", "51.10"]]);
+    gleich("Keine Ortsnamen in den Abfragen; abgefragt werden nur Open-Meteo und der DWD",
+      [abrufe.some(u => /Musterdorf|Beispielstadt/.test(decodeURIComponent(u))), abrufe.map(u => new URL(u).host).sort()],
+      [false, ["api.open-meteo.com", "maps.dwd.de", "maps.dwd.de", "maps.dwd.de", "maps.dwd.de"]]);
+    netz(["geocoding", fx["wetter-ortssuche"]]);
+    w.ortFormular("wohnort");
+    w.document.getElementById("o-suche").value = "Musterdorf";
+    await w.ortSuchen();
+    gleich("Ortssuche: nur der Suchtext geht an Open-Meteo", abrufe, ["https://geocoding-api.open-meteo.com/v1/search?name=Musterdorf&count=8&language=de&format=json"]);
+    gleich("Ortssuche: Treffer mit Bundesland und Land", [...w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]')].map(b => ohneTags(b.innerHTML)),
+      ["Musterdorf Beispielland, Deutschland", "Musterdorf am See Beispielland, Deutschland", "Musterdorf Beispielbundesland, Österreich"]);
+    w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]')[1].click();
+    gleich("Treffer gewählt: Name übernommen, Koordinaten gerundet angezeigt", [w.document.getElementById("o-name").value, w.document.getElementById("o-gewaehlt").textContent],
+      ["Musterdorf am See", "Gewählt: 52,34 / 11,66 (gerundet)"]);
+    w.ortSpeichern();
+    gleich("Gespeichert wird nur gerundet", w.eval("daten.einstellungen.wetter.wohnort"), { name: "Musterdorf am See", lat: 52.34, lon: 11.66 });
+    netz(["geocoding", fx["wetter-ortssuche-leer"]]);
+    w.ortFormular("arbeitsort");
+    w.document.getElementById("o-suche").value = "Nirgendwo";
+    await w.ortSuchen();
+    const ohneTreffer = w.document.getElementById("o-treffer").textContent;
+    netz();
+    await w.ortSuchen();
+    gleich("Ortssuche ohne Treffer bzw. ohne Netz", [ohneTreffer, w.document.getElementById("o-treffer").textContent], ["Kein Ort gefunden.", "Ortssuche nicht möglich (keine Verbindung)."]);
+    w.fensterSchliessen();
+    let standortMoeglich = true;
+    try {
+      Object.defineProperty(w.navigator, "geolocation", { configurable: true, value: { getCurrentPosition: ok => ok({ coords: { latitude: 51.234567, longitude: 10.987654 } }) } });
+    } catch (e) { standortMoeglich = false; }
+    if (standortMoeglich) {
+      w.ortFormular("weitererOrt");
+      w.ortStandort();
+      w.document.getElementById("o-aktiv").checked = true;
+      w.ortSpeichern();
+      gleich("„Aktueller Standort“ (Standortabfrage durch Platzhalter ersetzt): gerundet, Name vorgeschlagen, aktiv",
+        w.eval("daten.einstellungen.wetter.weitererOrt"), { name: "Aktueller Standort", lat: 51.23, lon: 10.99, aktiv: true });
+      gleich("Weiterer Ort aktiv: nur er wird abgefragt", w.wetterOrte().map(x => x.rolle), ["weitererOrt"]);
+    }
+
+    // -------------------------------------------------------------
+    // 34. Navigation, Vorlagen in den Einstellungen, Wetter-Kachel
+    // -------------------------------------------------------------
+    abschnitt("34. Navigation, Vorlagen in den Einstellungen, Wetter-Kachel und Reiter Wetter");
+    gleich("Fünf Reiter: Übersicht, Wetter, Wartung, Statistik, Einstellungen", [...w.document.querySelectorAll("nav button")].map(b => [b.dataset.tab, b.lastChild.textContent]),
+      [["uebersicht", "Übersicht"], ["wetter", "Wetter"], ["wartung", "Wartung"], ["statistik", "Statistik"], ["einstellungen", "Einstellungen"]]);
+    setze4({ fahrrad: F("2026-01-01", 0), vorlagen: [{ id: "v1", name: "Arbeit", km: 14.2, arbeitsweg: true }, { id: "v2", name: "Einkauf", km: 3.5 }] });
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    const einstW = w.document.getElementById("inhalt");
+    gleich("Einstellungen: Bereiche", [...einstW.querySelectorAll("h2")].map(h => h.textContent),
+      ["Fahrrad", "Vorlagen", "Fahrtage", "Wetter", "Jahresziele", "Datensicherung", "Über Rad-km"]);
+    wahr("Vorlagen in den Einstellungen: Liste, ▲/▼ und „+ Neue Vorlage“", einstW.querySelectorAll('[data-action="vorlage-bearbeiten"]').length === 2 &&
+      einstW.querySelector('[data-action="vorlage-runter"][data-id="v1"]') && einstW.querySelector('[data-action="vorlage-neu"]'));
+    einstW.querySelector('[data-action="vorlage-runter"][data-id="v1"]').click();
+    gleich("Reihenfolge ändern wie bisher, die Einstellungen bleiben geöffnet", [w.eval("daten.vorlagen.map(v => v.id)"), w.eval("aktiverTab")], [["v2", "v1"], "einstellungen"]);
+    w.document.querySelector('#inhalt [data-action="vorlage-bearbeiten"][data-id="v1"]').click();
+    gleich("Vorlage antippen öffnet das Formular wie bisher", w.document.querySelector("#fensterinhalt h2").textContent, "Vorlage bearbeiten");
+    w.fensterSchliessen();
+    gleich("Bereich Wetter: Orte und Fahrzeiten", [...w.document.querySelectorAll('#inhalt [data-action="ort-bearbeiten"], #inhalt [data-action="fahrt-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
+      ["Wohnort nicht festgelegt ›", "Arbeitsort nicht festgelegt ›", "Weiterer Ort nicht festgelegt ›",
+        "Hinfahrt 06:00–07:00 übliche Abfahrt 06:00 · Dauer 60 min ›", "Rückfahrt 16:00–17:00 übliche Abfahrt 16:00 · Dauer 60 min ›"]);
+    w.fahrtFormular("rueckfahrt");
+    w.document.getElementById("fz-von").value = "15:30";
+    w.document.getElementById("fz-bis").value = "17:00";
+    w.document.getElementById("fz-abfahrt").value = "";
+    w.document.getElementById("fz-dauer").value = "45";
+    w.fahrtSpeichern();
+    gleich("Fahrzeit ändern, übliche Abfahrt leer lassen", w.eval("daten.einstellungen.wetter.rueckfahrt"), { von: "15:30", bis: "17:00", abfahrt: null, dauer: 45 });
+    alerts.length = 0;
+    w.fahrtFormular("hinfahrt");
+    w.document.getElementById("fz-dauer").value = "0";
+    w.fahrtSpeichern();
+    gleich("Ungültige Dauer wird nicht gespeichert", [alerts.length, w.eval("daten.einstellungen.wetter.hinfahrt.dauer")], [1, 60]);
+    w.fensterSchliessen();
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    gleich("Übersicht: die Vorlagen-Schaltflächen bleiben", w.document.querySelectorAll('#inhalt [data-action="vorlage-erfassen"]').length, 2);
+    let kachel = w.document.querySelector("#inhalt .wetter-kachel");
+    wahr("Übersicht: Wetter-Kachel, ohne Orte mit Hinweis", kachel && ohneTags(kachel.innerHTML).includes("Wohn- und Arbeitsort festlegen"), kachel && kachel.outerHTML);
+    kachel.click();
+    gleich("Antippen der Kachel öffnet den Reiter Wetter", [w.eval("aktiverTab"), w.document.getElementById("seitentitel").textContent], ["wetter", "Wetter"]);
+    wahr("Reiter Wetter ohne Orte: „Wohnort festlegen“, „Arbeitsort festlegen“",
+      w.document.querySelector('#inhalt [data-action="ort-bearbeiten"][data-rolle="wohnort"]') && w.document.querySelector('#inhalt [data-action="ort-bearbeiten"][data-rolle="arbeitsort"]'));
+    wetterDaten();
+    await laden(gewitterAb1645(), dwdMit(W("STARKE HITZE", "Moderate", "11:00", "19:00", { CATEGORY: "Health" })));
+    const kachelText = ohneTags(w.wetterKachel(ABEND));
+    gleich("Kachel: Ampeln der nächsten Hin- und Rückfahrt und der wichtigste Grund", kachelText, "🌦️ Morgen, Di 27.10. Hin grün Rück rot Rückfahrt rot: Gewitter ab 16:45");
+    const tagHeute = zeit(D, "10:00");
+    gleich("Kachel nach der Hinfahrt: nur noch die Rückfahrt", ohneTags(w.wetterKachel(tagHeute)).split(" Rückfahrt")[0].includes("Hin "), false);
+    const ablageR = w.document.createElement("div");
+    ablageR.innerHTML = w.bildWetter(ABEND);
+    seite = ohneTags(ablageR.innerHTML);
+    wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
+      ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken, Böen bis 15 km/h", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
+        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm · Böen bis 15 km/h", "👕 Jacke, lange Hose (gefühlt 9 °C)", "🧭 schwacher Wind (5 km/h)",
+        "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
+    gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
+      [ablageR.querySelectorAll(".zeitleiste .slot").length, ablageR.querySelectorAll(".zeitleiste .slot.rot").length, ablageR.querySelectorAll(".zeitleiste .slot.beste").length,
+        ohneTags(ablageR.querySelector(".zeitachse").innerHTML)], [8, 3, 4, "15:30 16:30 17:30"]);
+    wahr("Warnungen: Hitze nur zur Info, mit Zeitraum, Quelle und Stand",
+      seite.includes("STARKE HITZE Stufe 2 · nur zur Info") && seite.includes("morgen 11:00 – 19:00 Uhr") && seite.includes("Quelle: Deutscher Wetterdienst") &&
+      seite.includes("Stand: Vorhersage 20:15 Uhr · Warnungen 20:15 Uhr") && seite.includes("Open-Meteo.com"), seite);
+    wetterDaten({ weitererOrt: { name: "Ferienort", lat: 54, lon: 9, aktiv: true } });
+    netz(["open-meteo", fx["wetter-open-meteo-ein-ort"]], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
+    wetterLeeren();
+    await w.wetterAktualisieren(true, ABEND);
+    w.eval("aktiverTab = 'wetter'; zeichnen()");
+    ans = w.wetterAnsicht(ABEND);
+    gleich("Weiterer Ort aktiv: Heute und Morgen ohne Hin- und Rückfahrt", [ans.weitererOrt, ans.tage.map(t => t.titel), !!ans.fahrten, ans.tage.every(t => t.werte)], [true, ["Heute", "Morgen"], false, true]);
+    w.document.querySelector('#inhalt [data-action="weiterer-ort-aus"]').click();
+    gleich("„Zurück zu Wohn- und Arbeitsort“ schaltet den weiteren Ort aus", [w.eval("daten.einstellungen.wetter.weitererOrt.aktiv"), w.wetterOrte().map(x => x.rolle)], [false, ["wohnort", "arbeitsort"]]);
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    const schalter = w.document.querySelector('#inhalt input[data-change="weiterer-ort-aktiv"]');
+    schalter.checked = true;
+    schalter.dispatchEvent(new w.Event("change", { bubbles: true }));
+    gleich("Schalter „aktiv“ in den Einstellungen", w.eval("daten.einstellungen.wetter.weitererOrt.aktiv"), true);
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    wetterLeeren();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
     localStorage.removeItem(TEST_SCHLUESSEL);
     localStorage.removeItem(TEST_EXPORT_SCHLUESSEL);
+    localStorage.removeItem("radkm-test-wetter");
   }
 
   const erg = document.getElementById("ergebnis");
@@ -999,17 +1647,17 @@ async function start() {
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV1(d, v1) {
-  gleich("version = 3", d.version, 3);
+  gleich("version = 4", d.version, 4);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
-  gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele)", d.einstellungen, { fahrtage: [1, 2, 5], jahresziele: [] });
+  gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele; Wetter ohne Orte)", d.einstellungen, stdEinstellungen());
   gleich("Vorlagen vollständig erhalten, Arbeitsweg aus", d.vorlagen, v1.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
   gleich("Anzahl Einträge", d.eintraege.length, v1.eintraege.length);
   const erwartet = v1.eintraege.map(e => ({
-    datum: e.datum, km: e.km, vorlage: e.vorlage || null, notiz: e.notiz || "", typ: e.typ || "tag", arbeitsweg: false
+    datum: e.datum, km: e.km, vorlage: e.vorlage || null, notiz: e.notiz || "", typ: e.typ || "tag", arbeitsweg: false, wetter: null
   }));
-  gleich("Einträge vollständig erhalten (Datum, km, Vorlage, Notiz, Typ), Arbeitsweg aus",
-    d.eintraege.map(e => ({ datum: e.datum, km: e.km, vorlage: e.vorlage, notiz: e.notiz, typ: e.typ, arbeitsweg: e.arbeitsweg })), erwartet);
+  gleich("Einträge vollständig erhalten (Datum, km, Vorlage, Notiz, Typ), Arbeitsweg aus, ohne Wetter",
+    d.eintraege.map(e => ({ datum: e.datum, km: e.km, vorlage: e.vorlage, notiz: e.notiz, typ: e.typ, arbeitsweg: e.arbeitsweg, wetter: e.wetter })), erwartet);
   gleich("Vorhandene Eintrags-IDs bleiben erhalten",
     d.eintraege.filter((e, i) => v1.eintraege[i].id).map(e => e.id), v1.eintraege.filter(e => e.id).map(e => e.id));
   gleich("Eintrag ohne id bekommt eine neue id", typeof d.eintraege[4].id === "string" && d.eintraege[4].id.length > 0, true);
@@ -1026,12 +1674,12 @@ function pruefeUmwandlungV1(d, v1) {
 
 // Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV2(d, v2, wo) {
-  gleich(wo + ": version = 3", d.version, 3);
+  gleich(wo + ": version = 4", d.version, 4);
   gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
-  gleich(wo + ": Einstellungen mit Standardwerten ergänzt", d.einstellungen, { fahrtage: [1, 2, 5], jahresziele: [] });
+  gleich(wo + ": Einstellungen mit Standardwerten ergänzt (auch Wetter)", d.einstellungen, stdEinstellungen());
   gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
-  gleichInhalt(wo + ": Einträge vollständig erhalten (auch 0 km, Wochensumme, Sonderzeichen), Arbeitsweg aus",
-    d.eintraege, v2.eintraege.map(e => Object.assign({}, e, { arbeitsweg: false })));
+  gleichInhalt(wo + ": Einträge vollständig erhalten (auch 0 km, Wochensumme, Sonderzeichen), Arbeitsweg aus, ohne Wetter",
+    d.eintraege, v2.eintraege.map(e => Object.assign({}, e, { arbeitsweg: false, wetter: null })));
   gleichInhalt(wo + ": Wartungsarten erhalten (Zeitfenster, gültig ab, Intervall in km), nicht einmalig",
     d.wartungsarten, v2.wartungsarten.map(a => Object.assign({}, a, { einmalig: false })));
   gleichInhalt(wo + ": Wartungsprotokoll, Termine und Mängel unverändert", [d.wartungsprotokoll, d.termine, d.maengel], [v2.wartungsprotokoll, v2.termine, v2.maengel]);
