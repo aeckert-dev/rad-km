@@ -6,10 +6,14 @@ ist für das iPhone optimiert.
 
 - Kilometer pro Tag erfassen, mit Vorlagen in zwei Klicks
 - Aktueller Kilometerstand und Summen für heute, diese Woche, diesen Monat, dieses Jahr
+- Jahresprognose, Jahresziel und Kilometerstand-Prognose für ein beliebiges Datum
 - Einträge übersichtlich zusammengefasst nach Woche, Monat und Jahr
-- Wartungsprotokoll mit Fälligkeit (Intervall oder jährliches Zeitfenster) und geplanten Terminen
+- Wartungsprotokoll mit Fälligkeit (Intervall in Monaten und/oder km, jährliches
+  Zeitfenster oder einmalig) und geplanten Terminen
 - Mängelliste, die beim Eintragen einer Wartung abgehakt werden kann
-- Export und Import aller Daten als JSON-Datei
+- Löschen mit „Rückgängig“
+- Datensicherung als JSON-Datei, die vor dem Teilen geprüft wird; gespeicherte
+  Sicherungen lassen sich prüfen, ohne etwas zu überschreiben
 - Hell- und Dunkelmodus nach Systemeinstellung
 
 Die ganze App steckt in **einer einzigen Datei: `index.html`**. Es gibt keine
@@ -25,11 +29,11 @@ Das bedeutet:
 
 - Die App auf dem **Home-Bildschirm** hat ihren eigenen Speicher, getrennt von
   Safari. Erfasse deine Daten deshalb immer in derselben App. Zum Übertragen
-  dienen Export und Import.
+  dienen Sicherung und Import.
 - Löschst du die Website-Daten, oder wechselst du das iPhone, sind die Daten
-  weg, wenn du keine Sicherung hast. **Exportiere deshalb regelmäßig.** Die
-  App erinnert dich auf der Startseite, wenn der letzte Export mehr als 30
-  Tage zurückliegt.
+  weg, wenn du keine Sicherung hast. **Sichere deshalb regelmäßig** („Jetzt
+  sichern“ auf der Startseite). Die App erinnert dich, wenn die letzte
+  Sicherung mehr als 30 Tage zurückliegt.
 
 ## Installation auf dem iPhone (über GitHub Pages)
 
@@ -87,12 +91,17 @@ nächsten Start. Deine Daten bleiben erhalten.
 
 - **Kilometerstand** = Start-Kilometerstand + alle Einträge ab dem Startdatum.
 - **Nächste fällige Wartung:** ein geplanter Termin oder die berechnete
-  Fälligkeit, je nachdem, was zuerst kommt.
+  Fälligkeit, je nachdem, was zuerst kommt. Liegt sie in der Zukunft, steht
+  der erwartete Kilometerstand dabei, z. B. „(ca. 4.350 km)“.
 - **Summen:**
   - Heute.
   - Woche: Montag bis Sonntag.
   - Monat und Jahr.
   - Ein Wochen-Eintrag zählt dabei vollständig zu seinem Datum.
+- **Jahr:** Jahresziel mit Fortschritt und Jahresprognose (siehe
+  „Prognosen und Jahresziel“) sowie „Kilometerstand für ein Datum …“.
+- **Datensicherung:** Datum der letzten Sicherung und „Jetzt sichern“ (siehe
+  „Datensicherung“).
 - **Liste der Einträge:** die neuesten zuerst, abgeschlossene Zeiträume
   zusammengefasst (siehe unten). Antippen eines Eintrags öffnet die
   Detailansicht.
@@ -120,9 +129,10 @@ zusammen:
   beiden Monaten als **Teilwoche**, z. B. „KW 44 (Teil)“ mit 26.10.–31.10.
   im Oktober und 01.11.–01.11. im November. Die Kalenderwoche wird nach ISO
   8601 gezählt.
-- **Antippen** einer Zeile klappt die nächste Ebene auf: Jahr → Monate →
-  Wochen → Einträge. Importierte Wochensummen erscheinen in ihrer Woche als
-  ein Eintrag.
+- **Antippen** einer Zeile (irgendwo in der Zeile) klappt die nächste Ebene
+  auf: Jahr → Monate → Wochen → Einträge. Der Pfeil zeigt › (zugeklappt) bzw.
+  ⌄ (aufgeklappt). Importierte Wochensummen erscheinen in ihrer Woche als ein
+  Eintrag.
 
 ### Erst lesen, dann ändern
 
@@ -130,6 +140,14 @@ Antippen eines Eintrags, eines Wartungsprotokoll-Eintrags oder eines Mangels
 zeigt ihn zunächst nur an. Erst **Ändern** öffnet das Formular. **Löschen**
 gibt es nur im Formular, immer mit Rückfrage. Das Erfassen über eine Vorlage
 bleibt bei zwei Klicks (Vorlage antippen, Speichern).
+
+### Rückgängig
+
+Nach dem Löschen eines Eintrags, eines Wartungsprotokoll-Eintrags, eines
+Mangels oder einer Vorlage erscheint unten etwa 6 Sekunden lang eine Meldung
+mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
+Verknüpfungen (z. B. die Mängel eines gelöschten Protokoll-Eintrags). Jede
+weitere Änderung beendet das Angebot, damit sie nicht überschrieben wird.
 
 ### Vorlagen
 
@@ -144,20 +162,27 @@ Jeder Eintrag speichert seine Kilometer und den Namen der Vorlage selbst. Das
     Oktober–November), „Kleine Inspektion“ (Zeitfenster März–April) und
     „Reparatur“ (ohne Intervall). Wer Daten aus Version 1 übernimmt, behält
     seine Wartungsarten unverändert, also ohne Zeitfenster.
-  - Eigene Wartungsarten kannst du anlegen und bearbeiten.
-  - Das Intervall in km wird schon gespeichert, aber erst in einer späteren
-    Version ausgewertet.
+  - Eigene Wartungsarten kannst du anlegen und bearbeiten, z. B. für
+    Verschleißteile wie Kette oder Bremsbeläge mit einem Intervall in km.
+- **Einmalig (optional):** für Wartungen, die nur einmal anfallen, z. B. die
+  Erstinspektion.
+  - Vor der Durchführung zeigt die Karte die normale Fälligkeit.
+  - Nach der ersten Durchführung zeigt sie nur noch „erledigt am TT.MM.JJJJ“,
+    ohne „Termin planen“ und „Erledigt eintragen“, und steht am Ende der
+    Liste. Ein noch geplanter Termin wird beim Eintragen entfernt.
+  - Nicht mit einem Zeitfenster kombinierbar.
 - **Jährliches Zeitfenster (optional):**
   - Monat von und Monat bis, z. B. Oktober bis November. Das Fenster darf
     nicht über den Jahreswechsel gehen.
   - **Gültig ab Jahr (optional):** Vor diesem Jahr zeigt die App keine
     Fälligkeit („noch nicht fällig“). Praktisch beim Umstellen auf den
     saisonalen Rhythmus. Leer = sofort gültig.
-  - Ist ein Zeitfenster gesetzt, wird das Intervall in Monaten nicht
+  - Ist ein Zeitfenster gesetzt, werden die Intervalle (Monate und km) nicht
     ausgewertet.
 - **Termin planen:**
   - Pro Wartungsart ist ein geplanter Termin mit Datum und Werkstatt möglich.
-  - Der Termin wird statt der berechneten Fälligkeit angezeigt.
+  - Der Termin wird statt der berechneten Fälligkeit angezeigt, zusammen mit
+    dem erwarteten Kilometerstand an diesem Tag.
 - **Erledigt eintragen:**
   - Gibt es einen geplanten Termin, bietet die App an, ihn ins Protokoll zu
     übernehmen. Danach wird der Termin entfernt.
@@ -180,11 +205,24 @@ Jeder Eintrag speichert seine Kilometer und den Namen der Vorlage selbst. Das
     dem Startdatum des Fahrrads enden.
   - Ein geplanter Termin hat weiterhin Vorrang in der Anzeige; die Fälligkeit
     nach Zeitfenster steht dann klein darunter.
+  - Vor und im Fenster steht der erwartete Kilometerstand zu Beginn bzw. am
+    Ende des Fensters dabei.
 - **Fälligkeit mit Intervall (ohne Zeitfenster):**
-  - Berechnung: letzte Durchführung + Intervall.
-  - Anzeige: „fällig in X Tagen“, „heute fällig“ oder „überfällig seit X
-    Tagen“, dazu „Seit letzter Wartung gefahren: X km“.
-  - Ohne Durchführung steht dort „noch nicht durchgeführt“.
+  - Intervall in Monaten und/oder in km. **Fällig ist, was zuerst erreicht
+    wird.**
+  - Grundlage ist die letzte Durchführung (Datum und Kilometerstand). Ohne
+    bisherige Durchführung zählt das Intervall ab dem Startdatum und dem
+    Start-Kilometerstand.
+  - Nach Monaten: „fällig in X Tagen“, „heute fällig“ oder „überfällig seit X
+    Tagen“, bei einem Datum in der Zukunft mit dem erwarteten Kilometerstand.
+  - Nach km: Den Tag, an dem die km-Grenze erreicht wird, schätzt die App mit
+    der Prognose (siehe unten), z. B. „fällig ca. im Mai 2027 bei ca. 7.500
+    km“, darunter „Noch ca. 800 km bis zur km-Grenze“. Ist keine Schätzung
+    möglich (zu wenige Daten oder keine Fahrten), steht dort nur „fällig bei
+    ca. 7.500 km“. Ist die Grenze überschritten: „überfällig: km-Grenze
+    (7.500 km) um 120 km überschritten“.
+  - Dazu „Seit letzter Wartung gefahren: X km“.
+  - Ohne Fahrrad und ohne Durchführung steht dort „noch nicht durchgeführt“.
 - Eine Wartungsart, die im Protokoll verwendet wird, kann nicht gelöscht
   werden. Umbenennen geht jederzeit.
 
@@ -203,30 +241,82 @@ Jeder Eintrag speichert seine Kilometer und den Namen der Vorlage selbst. Das
 - Wird ein Protokoll-Eintrag gelöscht, werden die verknüpften Mängel wieder
   auf „offen“ gesetzt. Die Rückfrage nennt sie.
 
+### Prognosen und Jahresziel
+
+- **Grundlage aller Prognosen:** die durchschnittlichen km pro Kalendertag der
+  letzten 365 Tage bis gestern. Liegt das Startdatum kürzer zurück, zählt die
+  Zeit ab dem Startdatum. Einträge vor dem Startdatum zählen nicht mit.
+- Prognosen gibt es erst, wenn seit dem Startdatum mindestens 7 Tage vergangen
+  sind. Sie werden immer als „ca.“ angezeigt und auf 10 km gerundet.
+- **Jahresprognose** (Startseite): km des laufenden Jahres bis heute +
+  Durchschnitt × restliche Tage des Jahres.
+- **Kilometerstand für ein Datum** (Startseite): erwarteter Kilometerstand am
+  Ende eines frei wählbaren Tages. Für heute und vergangene Tage zeigt die App
+  den tatsächlichen Stand.
+- **Jahresziel:** unter **Einstellungen → Jahresziele** je Kalenderjahr ein
+  Ziel in km. Die Startseite zeigt für das laufende Jahr:
+  - den Fortschritt, z. B. „2.340 von 5.000 km · 47 %“, als Balken; der
+    Strich im Balken markiert das zeitanteilige Soll,
+  - den Vergleich mit dem zeitanteiligen Soll bis heute (Ziel × vergangene
+    Tage ÷ Tage des Jahres), z. B. „ca. 120 km voraus“ oder „ca. 80 km im
+    Rückstand“,
+  - die Jahresprognose im Vergleich zum Ziel, z. B. „ca. 130 km unter dem
+    Ziel“.
+
 ### Datensicherung
 
-- **Daten exportieren:**
-  - Auf dem iPhone öffnet sich das **Teilen-Menü**. Dort z. B. „In Dateien
-    sichern“ wählen, um die Datei in iCloud Drive abzulegen.
-  - Wo Teilen nicht möglich ist (z. B. am Computer), wird die Datei
-    heruntergeladen.
-  - Der Dateiname lautet `rad-km-JJJJ-MM-TT.json`.
+- **Jetzt sichern** (Startseite und Einstellungen):
+  1. Die App erzeugt die Sicherungsdatei `rad-km-JJJJ-MM-TT.json`, liest sie
+     sofort wieder ein, prüft sie mit denselben Regeln wie beim Import und
+     vergleicht sie mit dem aktuellen Stand.
+  2. Nur wenn das stimmt, öffnet sich auf dem iPhone das **Teilen-Menü**.
+     Dort z. B. „In Dateien sichern“ wählen, um die Datei in iCloud Drive
+     abzulegen. Wo Teilen nicht möglich ist (z. B. am Computer), wird die
+     Datei heruntergeladen.
+  3. Ist das Teilen abgeschlossen, erscheint „Sicherung übergeben – Inhalt
+     geprüft: N Einträge, X km“ (X = Summe aller Einträge), und das Datum der
+     letzten Sicherung wird gesetzt. Bei Abbruch bleibt es unverändert.
+  - Schlägt die Prüfung fehl, öffnet sich das Teilen-Menü nicht, und eine
+    Meldung nennt den Grund. Eine fehlgeschlagene Prüfung oder ein Problem
+    beim Teilen verändert nie die Daten in der App.
+  - Verlangt das iPhone für das Teilen-Menü einen frischen Tipper, zeigt die
+    App „Sicherung geprüft“ mit der Schaltfläche **Teilen …**.
+- **Gespeicherte Sicherung jetzt prüfen:** erscheint direkt nach dem Sichern.
+  Wähle die eben gespeicherte Datei aus. Die App liest und prüft sie, **ohne
+  etwas zu überschreiben**, und vergleicht sie mit dem aktuellen Stand.
+- **Sicherung prüfen …** (Einstellungen): dasselbe für eine beliebige, auch
+  ältere Sicherung. Mögliche Ergebnisse:
+  - „Identisch mit dem aktuellen Stand“
+  - „Sicherung ist älter: 3 Einträge fehlen (25.–27.10.)“, wenn seitdem nur
+    Neues dazugekommen ist
+  - „Sicherung weicht vom aktuellen Stand ab“ mit Einzelheiten, z. B. „1
+    Eintrag geändert (20.10.)“
+  - „Datei beschädigt bzw. keine Rad-km-Sicherung“ mit dem Grund
+  - Dazu Zeitpunkt und Inhalt der Sicherung und ein Hinweis, falls die
+    Kurzinfo nicht zum Inhalt passt (Datei nachträglich verändert).
 - **Daten importieren:**
-  - Eine solche Datei auswählen.
+  - Eine Sicherungsdatei auswählen.
   - Die App prüft die Datei und zeigt eine Zusammenfassung.
   - Nach deiner Bestätigung **ersetzt** sie alle vorhandenen Daten.
   - Fehlerhafte Dateien werden mit einer Meldung abgelehnt, z. B. bei einem
     doppelten Datum.
 
-## JSON-Format für Export und Import
+### Einstellungen
+
+- Fahrrad, Jahresziele, Datensicherung.
+- **Über Rad-km:** App-Version und Datenversion.
+
+## JSON-Format für Sicherung und Import
 
 Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `2` |
-| `exportiertAm` | Text | nein | Zeitpunkt des Exports; wird beim Import ignoriert |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `3` |
+| `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
+| `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
+| `einstellungen` | Objekt | nein | Fahrtage und Jahresziele (ab Version 3); fehlt das Feld, gelten die Standardwerte |
 | `vorlagen` | Liste | nein | Vorlagen in Anzeigereihenfolge |
 | `eintraege` | Liste | nein | Kilometer-Einträge |
 | `wartungsarten` | Liste | nein | Fehlt das Feld, werden die drei Standard-Wartungsarten angelegt |
@@ -243,6 +333,30 @@ Allgemeine Regeln:
   `null` sein.
 - **`id`-Felder** sind beliebige eindeutige Texte. Bei Vorlagen, Einträgen und
   Protokolleinträgen dürfen sie fehlen, die App vergibt dann eigene.
+- **Ja/Nein-Merkmale** (`arbeitsweg`, `einmalig`) als `true` oder `false`;
+  fehlt das Feld, gilt `false`.
+
+### `kurzinfo` (nur in der Sicherungsdatei)
+
+Steht am Anfang der Datei, damit man den Inhalt auch ohne App erkennt. „Sicherung
+prüfen“ vergleicht sie mit dem Inhalt der Datei.
+
+| Feld | Typ | Bedeutung |
+|---|---|---|
+| `zeitpunkt` | Text | Zeitpunkt der Sicherung (ISO 8601, UTC), z. B. `"2026-10-25T14:03:00.000Z"` |
+| `appVersion` | Text | App-Version, mit der gesichert wurde, z. B. `"3a"` |
+| `eintraege` | Zahl | Anzahl der Einträge |
+| `kmSumme` | Zahl | Summe der km aller Einträge |
+| `kmStand` | Zahl oder `null` | Kilometerstand (Start-Kilometerstand + Einträge ab dem Startdatum) |
+| `wartungen` | Zahl | Anzahl der Einträge im Wartungsprotokoll |
+| `maengel` | Zahl | Anzahl der Mängel |
+
+### `einstellungen` (ab Version 3)
+
+| Feld | Typ | Pflicht | Bedeutung |
+|---|---|---|---|
+| `fahrtage` | Liste von Zahlen | nein | Übliche Fahrtage, 1 = Montag … 7 = Sonntag; Standard `[1, 2, 5]` (Mo, Di, Fr). Wird in einer späteren Version ausgewertet |
+| `jahresziele` | Liste | nein | Jahresziele, je Jahr höchstens eines: `{ "jahr": 2026, "km": 5000 }` (km > 0) |
 
 ### `fahrrad`
 
@@ -261,6 +375,7 @@ Allgemeine Regeln:
 | `id` | Text | nein | Eindeutige Kennung |
 | `name` | Text | ja | Name der Strecke |
 | `km` | Zahl | ja | Gesamt-km für den Tag |
+| `arbeitsweg` | `true`/`false` | nein | Strecke zur Arbeit (ab Version 3); wird beim Erfassen in den Eintrag übernommen. Wird in einer späteren Version ausgewertet |
 
 ### `eintraege[]`
 
@@ -272,6 +387,7 @@ Allgemeine Regeln:
 | `vorlage` | Text | nein | Name der verwendeten Vorlage (nur zur Anzeige) |
 | `notiz` | Text | nein | Notiz |
 | `typ` | `"tag"` oder `"woche"` | nein | Standard `"tag"`. `"woche"` = importierte Wochensumme, Datum = Montag der Woche bzw. erster Fahrtag |
+| `arbeitsweg` | `true`/`false` | nein | Fahrt zur Arbeit (ab Version 3); beim Erfassen aus der Vorlage übernommen |
 
 ### `wartungsarten[]`
 
@@ -280,10 +396,11 @@ Allgemeine Regeln:
 | `id` | Text | ja | Eindeutige Kennung, wird von Protokoll und Terminen verwendet |
 | `name` | Text | ja | z. B. `"Große Inspektion"` |
 | `intervallMonate` | ganze Zahl ≥ 1 oder `null` | nein | Intervall in Monaten |
-| `intervallKm` | Zahl > 0 oder `null` | nein | Intervall in km (für später) |
+| `intervallKm` | Zahl > 0 oder `null` | nein | Intervall in km (ausgewertet ab Version 3); mit `intervallMonate` gilt, was zuerst erreicht wird |
 | `fensterVon` | Monat 1–12 oder `null` | nein | Beginn des jährlichen Zeitfensters (ab Version 2) |
 | `fensterBis` | Monat 1–12 oder `null` | nein | Ende des Zeitfensters; nur zusammen mit `fensterVon`, `fensterVon` ≤ `fensterBis` |
 | `gueltigAbJahr` | Jahreszahl oder `null` | nein | Nur mit Zeitfenster: vor diesem Jahr keine Fälligkeit; `null` = sofort gültig |
+| `einmalig` | `true`/`false` | nein | Einmalige Wartung (ab Version 3); nach der ersten Durchführung erledigt. Nicht mit Zeitfenster |
 
 Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
 `kleine-inspektion` und `reparatur`.
@@ -323,26 +440,33 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
 
 ```json
 {
-  "version": 2,
+  "version": 3,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "3a", "eintraege": 4,
+                "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
+  "einstellungen": { "fahrtage": [1, 2, 5], "jahresziele": [{ "jahr": 2025, "km": 3000 }] },
   "vorlagen": [
-    { "name": "Arbeit hin und zurück", "km": 10 },
-    { "name": "Einkauf", "km": 3.5 }
+    { "name": "Arbeit hin und zurück", "km": 10, "arbeitsweg": true },
+    { "name": "Einkauf", "km": 3.5, "arbeitsweg": false }
   ],
   "eintraege": [
     { "datum": "2025-01-06", "km": 40, "typ": "woche", "notiz": "aus Excel" },
     { "datum": "2025-01-13", "km": 35.5, "typ": "woche" },
-    { "datum": "2025-01-20", "km": 10, "vorlage": "Arbeit hin und zurück" },
+    { "datum": "2025-01-20", "km": 10, "vorlage": "Arbeit hin und zurück", "arbeitsweg": true },
     { "datum": "2025-01-21", "km": 12.5, "notiz": "Umweg" }
   ],
   "wartungsarten": [
     { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null,
-      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null },
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null, "einmalig": false },
     { "id": "kleine-inspektion", "name": "Kleine Inspektion", "intervallMonate": null, "intervallKm": null,
-      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027 },
+      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027, "einmalig": false },
     { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null,
-      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null }
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "kette", "name": "Kette", "intervallMonate": 24, "intervallKm": 3000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "erstinspektion", "name": "Erstinspektion", "intervallMonate": 3, "intervallKm": 300,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": true }
   ],
   "wartungsprotokoll": [
     { "id": "p1", "datum": "2025-01-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
@@ -373,14 +497,36 @@ damit nichts verloren geht.
   leere Liste `maengel`. Bestehende Wartungsarten bekommen also kein
   Zeitfenster. Die umgewandelten Daten werden beim nächsten Speichern als
   Version 2 abgelegt.
+- **Version 2 → 3:** Alle vorhandenen Angaben bleiben unverändert. Ergänzt
+  werden `einstellungen` mit den Standardwerten (Fahrtage Mo, Di, Fr; keine
+  Jahresziele), `arbeitsweg: false` bei jeder Vorlage und jedem Eintrag und
+  `einmalig: false` bei jeder Wartungsart. `exportiertAm` entfällt; neue
+  Sicherungen enthalten stattdessen die `kurzinfo`. Ein vorhandenes
+  `intervallKm` wird ab jetzt ausgewertet. Die umgewandelten Daten werden
+  beim nächsten Speichern als Version 3 abgelegt.
+- Daten aus Version 1 werden in einem Schritt über Version 2 auf Version 3
+  gebracht.
 
 ## Tests
 
-`tests/test.html` prüft die Umwandlung einer Version-1-Datei
-(`tests/daten-v1.json`, erfundene Werte), die Zusammenfassung der Einträge an
-den Wochen-, Monats- und Jahresgrenzen und die saisonale Fälligkeit. Die
-Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
+`tests/test.html` prüft unter anderem:
+
+- die Umwandlung von Version 1 und 2 auf Version 3 (`tests/daten-v1.json`,
+  `tests/daten-v2.json`, erfundene Werte) und die Ablehnung fehlerhafter Daten,
+- die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
+- die saisonale Fälligkeit, Verschleißteile (km zuerst / Zeit zuerst) und
+  einmalige Wartungen,
+- Prognosen und Jahresziel mit festen Testdaten und Stichtagen,
+- Löschen mit „Rückgängig“,
+- die Prüfung der Sicherungsdatei vor dem Teilen (das Teilen-Menü wird dabei
+  durch einen Platzhalter ersetzt) und „Sicherung prüfen“ (identisch, älter,
+  abweichend, beschädigt).
+
+Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
+
+**Regel:** Jedes Release erweitert `tests/test.html` um Tests für alle neuen
+Funktionen, und der Pull Request beschreibt die Ergebnisse.
 
 Aufruf im Browser, z. B. nach der Veröffentlichung unter
 `https://aeckert-dev.github.io/rad-km/tests/test.html`, oder lokal über einen
@@ -406,14 +552,17 @@ Oben steht „Alle … Tests bestanden“ oder die Anzahl der Fehler.
    1. Grundeinstellungen
    2. Hilfsfunktionen für Datum und Zahlen
    3. Datenmodell: Laden, Prüfen, Umwandeln, Speichern
-   4. Berechnungen: Kilometerstand, Summen, Fälligkeit, Zusammenfassung
-   5. Fenster, Rückfragen, Meldungen
+   4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit, Zusammenfassung
+   5. Fenster, Rückfragen, Meldungen, Rückgängig
    6. Die vier Bildschirme und ihre Formulare
-   7. Export und Import
+   7. Datensicherung: Export, Prüfung, Import
    8. Zuordnung der Klicks zu den Funktionen
    9. Start
 
-## Geplant (Stufe 2)
+## Geplant
 
-- Statistiken und Diagramme (z. B. km pro Monat, Jahresvergleich)
-- Kilometerbasierte Wartungsintervalle (z. B. Kette)
+- Statistiken und Diagramme (km pro Monat, Vergleich mit dem Vorjahr),
+  Kennzahlen wie Radtage und längste Serie
+- Arbeitstage mit dem Rad (Merkmal „Arbeitsweg“ an Vorlagen)
+- Hinweis auf Fahrtage ohne Eintrag, mit „Nachtragen“ und „Keine Fahrt“
+- Offline-Fähigkeit mit Hinweis auf neue Versionen
