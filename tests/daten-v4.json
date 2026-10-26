@@ -1,0 +1,61 @@
+{
+  "version": 4,
+  "kurzinfo": { "zeitpunkt": "2026-10-25T18:00:00.000Z", "appVersion": "4a", "eintraege": 5,
+                "kmSumme": 63.9, "kmStand": 1264.4, "wartungen": 1, "maengel": 1 },
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5,
+               "rahmennummer": "TST 0001", "beschreibung": "Grün, 28 Zoll\nNabenschaltung" },
+  "einstellungen": {
+    "fahrtage": [1, 2, 5],
+    "jahresziele": [{ "jahr": 2026, "km": 4000 }],
+    "wetter": {
+      "wohnort": { "name": "Musterdorf", "lat": 51.0, "lon": 10.0 },
+      "arbeitsort": { "name": "Beispielstadt", "lat": 51.1, "lon": 10.2 },
+      "weitererOrt": { "name": "Ferienort", "lat": 54.0, "lon": 9.0, "aktiv": false },
+      "hinfahrt": { "von": "06:15", "bis": "07:15", "abfahrt": "06:15", "dauer": 50 },
+      "rueckfahrt": { "von": "16:00", "bis": "17:00", "abfahrt": null, "dauer": 60 },
+      "ampel": { "rotBoeen": 60, "rotStarkregen": 5, "rotWarnstufe": 2, "gelbRegenWahrscheinlichkeit": 50,
+                 "gelbNiederschlag": 0.5, "gelbBoeen": 40, "gelbTemperatur": 0, "glaetteTemperatur": 1 },
+      "kleidung": {
+        "stufen": [
+          { "id": "kurz", "ab": 18, "korrektur": 0, "text": "kurz" },
+          { "id": "duenn", "ab": 12, "korrektur": 0, "text": "lange dünne Kleidung" },
+          { "id": "jacke", "ab": 6, "korrektur": 0, "text": "Jacke, lange Hose" },
+          { "id": "kalt", "ab": 0, "korrektur": 0, "text": "Handschuhe, Stirnband, Thermojacke" },
+          { "id": "frost", "ab": null, "korrektur": 0, "text": "Winterhandschuhe, Mütze, Überschuhe" }
+        ],
+        "regen": [{ "ab": 40, "text": "Regenjacke" }, { "ab": 60, "text": "Regenhose" }]
+      }
+    }
+  },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2, "arbeitsweg": true },
+    { "id": "v-einkauf", "name": "Einkauf", "km": 3.5, "arbeitsweg": false }
+  ],
+  "eintraege": [
+    { "id": "e-woche1", "datum": "2025-03-03", "km": 40, "vorlage": null, "notiz": "aus Excel", "typ": "woche", "arbeitsweg": false, "wetter": null },
+    { "id": "e-tag1", "datum": "2026-10-19", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true,
+      "wetter": { "quelle": "vorhersage", "stand": "2026-10-19T04:50:00.000Z",
+        "hin": { "temperatur": 2.5, "gefuehlt": -0.5, "niederschlag": 0, "regenWahrscheinlichkeit": 10, "wind": 12, "boeen": 25,
+                 "ampel": "gruen", "kleidung": "kalt", "rueckmeldung": null },
+        "rueck": { "temperatur": 8, "gefuehlt": 6, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18, "boeen": 42,
+                   "ampel": "gelb", "kleidung": "jacke", "rueckmeldung": "zu-kalt" } } },
+    { "id": "e-null", "datum": "2026-10-20", "km": 0, "vorlage": null, "notiz": "Regen", "typ": "tag", "arbeitsweg": false, "wetter": null },
+    { "id": "e-tag2", "datum": "2026-10-23", "km": 6, "vorlage": "Einkauf", "notiz": "Umweg über den Markt 🚲 <b>&</b> „Zitat“", "typ": "tag", "arbeitsweg": false, "wetter": null },
+    { "id": "e-tag3", "datum": "2026-10-24", "km": 3.7, "vorlage": null, "notiz": "", "typ": "tag", "arbeitsweg": false, "wetter": null }
+  ],
+  "wartungsarten": [
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false }
+  ],
+  "wartungsprotokoll": [
+    { "id": "p-1", "datum": "2025-10-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1300, "kmManuell": true, "notiz": "Bremsen eingestellt" }
+  ],
+  "termine": [],
+  "maengel": [
+    { "id": "m-1", "datum": "2026-10-22", "beschreibung": "Licht hinten wackelt", "status": "offen",
+      "erledigtAm": null, "protokollId": null }
+  ]
+}
