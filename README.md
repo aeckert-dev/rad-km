@@ -7,11 +7,15 @@ ist für das iPhone optimiert.
 - Kilometer pro Tag erfassen, mit Vorlagen in zwei Klicks
 - Wetter für den Arbeitsweg: Ampel, Kleidung, amtliche Warnungen des DWD, beste
   Abfahrtszeit und Wind je Hin- und Rückfahrt, am Vorabend für den nächsten Fahrtag
+- Kleidung und Ampel-Grenzen selbst einstellen; die Rückmeldung „zu warm /
+  passte / zu kalt“ nach der Fahrt passt die Kleidung an
+- Wetter jeder Fahrt zur Arbeit beim Eintrag gespeichert, auf Wunsch auch
+  nachträglich; Statistik „km bei Regen“, „Tage unter 0 °C“ und Ampelverteilung
 - Aktueller Kilometerstand und Summen für heute, diese Woche, diesen Monat, dieses Jahr
 - Jahresprognose, Jahresziel und Kilometerstand-Prognose für ein beliebiges Datum
 - Statistik: km pro Monat im Vergleich zum Vorjahr, Radtage, Arbeitstage mit
   dem Rad und längste Serie
-- Hinweis auf übliche Fahrtage ohne Eintrag, mit „Nachtragen“ und „Keine Fahrt“
+- Hinweis auf übliche Fahrtage ohne Eintrag (für heute ab 18:00), mit „Nachtragen“ und „Keine Fahrt“
 - Einträge übersichtlich zusammengefasst nach Woche, Monat und Jahr
 - Wartungsprotokoll mit Fälligkeit (Intervall in Monaten und/oder km, jährliches
   Zeitfenster oder einmalig) und geplanten Terminen
@@ -47,18 +51,20 @@ Das bedeutet:
 
 ### Was geht beim Wetter ins Netz?
 
-Nur für den Reiter Wetter fragt die App Wetterdienste ab, und nur, wenn du Orte
+Nur für das Wetter fragt die App Wetterdienste ab, und nur, wenn du Orte
 festgelegt hast:
 
 | Dienst | Wofür | Was gesendet wird |
 |---|---|---|
-| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes | die auf 2 Nachkommastellen gerundeten Koordinaten (ca. 1 km) von Wohn- und Arbeitsort bzw. des weiteren Orts |
+| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort bzw. des weiteren Orts |
 | [Deutscher Wetterdienst](https://www.dwd.de/) (GeoServer `maps.dwd.de`) | amtliche Warnungen für die Gemeinde des Orts | dieselben gerundeten Koordinaten |
 | [Bright Sky](https://brightsky.dev/) (`api.brightsky.dev`) | nur wenn der DWD nicht erreichbar ist: dieselben amtlichen Warnungen des DWD | dieselben gerundeten Koordinaten |
 | Ortssuche von Open-Meteo (`geocoding-api.open-meteo.com`) | Ort beim Festlegen suchen | nur der eingegebene Name |
+| Rückblick von Open-Meteo (`historical-forecast-api.open-meteo.com`) | nur nach „Wetter nachtragen …“ und deiner Bestätigung: das Wetter vergangener Fahrten zur Arbeit | die gerundeten Koordinaten von Wohn- und Arbeitsort und der Zeitraum (Datum von–bis) |
 
 - Gespeichert werden Orte nur mit gerundeten Koordinaten; ungerundete Werte (aus
-  der Ortssuche oder vom aktuellen Standort) rundet die App sofort.
+  der Ortssuche, vom aktuellen Standort, von Hand eingegeben oder aus einer
+  importierten Datei) rundet die App sofort.
 - Wie bei jedem Abruf im Internet sehen die Dienste deine IP-Adresse. Es gibt
   keine Anmeldung, keinen Schlüssel und keine Cookies.
 - Die Orte gehören zu den Einstellungen und stehen deshalb auch in der
@@ -66,7 +72,9 @@ festgelegt hast:
 - Die zuletzt geladenen Wetterdaten liegen in einem eigenen Zwischenspeicher
   (`localStorage`, Schlüssel `radkm-wetter`). Er gehört nicht zu deinen Daten,
   steht nicht in der Sicherung und darf jederzeit gelöscht werden. Das Laden des
-  Wetters verändert deine Daten nie.
+  Wetters verändert deine Daten nie. In deine Daten kommt Wetter nur beim
+  Speichern eines Eintrags mit Arbeitsweg und mit „Wetter nachtragen …“ (nach
+  Rückfrage).
 
 ## Installation auf dem iPhone (über GitHub Pages)
 
@@ -132,7 +140,9 @@ Auf dem iPhone:
 - Pro Datum gibt es genau einen Eintrag. Ist ein Datum schon erfasst, zeigt
   die App den vorhandenen Eintrag an; mit **Ändern** kannst du ihn bearbeiten.
 - **Arbeitsweg:** Das Häkchen im Formular übernimmt die App aus der Vorlage
-  (siehe „Vorlagen“). Du kannst es für den einzelnen Eintrag ändern.
+  (siehe „Vorlagen“). Du kannst es für den einzelnen Eintrag ändern. Bei einem
+  Eintrag mit Arbeitsweg und mehr als 0 km speichert die App das Wetter der
+  Hin- und Rückfahrt mit (siehe „Wetter je Eintrag“).
 - **Keine Fahrt:** Ein Eintrag mit 0 km bedeutet „an diesem Tag nicht
   gefahren“. Er erscheint in der Liste dezent als „keine Fahrt“ und zählt in
   der Statistik nicht als Radtag.
@@ -151,7 +161,8 @@ Auf dem iPhone:
 - **Fahrtage ohne Eintrag:** Fehlt für einen deiner üblichen Fahrtage (siehe
   „Einstellungen“) der letzten 14 Tage (bis gestern, ab dem Startdatum) ein
   Eintrag, erscheint z. B. „2 Fahrtage ohne Eintrag: Di 20.10., Fr 23.10.“.
-  Je Tag gibt es zwei Schaltflächen:
+  Der heutige Fahrtag kommt ab 18:00 dazu („…, heute“); die Uhrzeit lässt sich
+  unter Einstellungen → Fahrtage ändern. Je Tag gibt es zwei Schaltflächen:
   - **Nachtragen** öffnet die Erfassung für diesen Tag.
   - **Keine Fahrt** legt mit einem Tipper einen Eintrag mit 0 km an (mit
     „Rückgängig“).
@@ -211,8 +222,10 @@ bleibt bei zwei Klicks (Vorlage antippen, Speichern).
 ### Rückgängig
 
 Nach dem Löschen eines Eintrags, eines Wartungsprotokoll-Eintrags, eines
-Mangels oder einer Vorlage und nach „Keine Fahrt“ erscheint unten etwa 6
-Sekunden lang eine Meldung mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
+Mangels oder einer Vorlage, nach „Keine Fahrt“, einer Rückmeldung zur Kleidung,
+„Wetter nachtragen …“, „Auf Standard zurücksetzen“ (Kleidung, Ampel-Grenzen)
+und „Rückmeldungen zurücksetzen“ erscheint unten etwa 6 Sekunden lang eine
+Meldung mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
 Verknüpfungen (z. B. die Mängel eines gelöschten Protokoll-Eintrags). Jede
 weitere Änderung beendet das Angebot, damit sie nicht überschrieben wird.
 
@@ -241,7 +254,10 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     antippen.
   - **📍 Aktueller Standort:** übernimmt den Standort des iPhones (es fragt
     einmal nach der Erlaubnis). Den Namen vergibst du selbst.
-  - Die Koordinaten werden auf 2 Nachkommastellen gerundet (ca. 1 km), siehe
+  - **Koordinaten direkt:** Breite und Länge in Grad eingeben, z. B. `51,123`
+    und `10,456` (Komma oder Punkt, Süd und West mit Minus). Suche und Standort
+    tragen ihre Koordinaten in dieselben Felder ein.
+  - Die Koordinaten werden auf 3 Nachkommastellen gerundet (ca. 100 m), siehe
     „Was geht beim Wetter ins Netz?“.
   - **Weiterer Ort „aktiv“:** Dann zeigt der Reiter das Wetter dort für heute
     und morgen, ohne Hin- und Rückfahrt. Ausschalten mit dem Schalter in den
@@ -260,7 +276,8 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   und gefühlte Temperatur, Regenwahrscheinlichkeit und Niederschlag, Böen),
   Kleidung, Wind und, wenn nötig, das beste Abfahrtsfenster.
 - **Ampel:** Geprüft wird die Fahrzeit an Wohn- und Arbeitsort; es zählt der
-  ungünstigere Wert.
+  ungünstigere Wert. Die Grenzen (Standardwerte in der Tabelle) lassen sich
+  unter **Einstellungen → Wetter → Ampel-Grenzen** ändern.
 
   | Farbe | Wann |
   |---|---|
@@ -271,6 +288,9 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Die Begründung nennt höchstens drei Gründe mit Uhrzeit, rote zuerst, z. B.
     „gelb: 70 % Regen ab 16:30, Böen 45 km/h“. Amtliche Warnungen stehen vor
     den Gründen aus der Vorhersage.
+  - Bei Grün steht nur „trocken“ bzw. „kaum Regen“. Böen erscheinen in der
+    Ampelzeile nur, wenn sie die Ampel gelb oder rot machen; sonst stehen sie
+    nur bei den Werten.
   - Niederschlag in mm/h ist die Menge einer Viertelstunde mal 4.
   - Eine Wahrscheinlichkeit für Gewitter liefert das Vorhersagemodell nicht;
     „hohe Wahrscheinlichkeit“ heißt hier: Das Modell sagt Gewitter vorher.
@@ -283,21 +303,66 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
 - **Kleidung** nach der niedrigsten gefühlten Temperatur der Fahrt (sie
   enthält schon Wind, Luftfeuchte und Sonne):
 
-  | Gefühlte Temperatur | Kleidung |
+  | Gefühlte Temperatur | Kleidung (Standard) |
   |---|---|
-  | ab 18 °C | kurz |
-  | ab 12 °C | lange dünne Kleidung |
-  | ab 6 °C | Jacke, lange Hose |
-  | ab 0 °C | Handschuhe, Stirnband, Thermojacke |
-  | unter 0 °C | Winterhandschuhe, Mütze, Überschuhe |
+  | ab 20 °C | kurz (T-Shirt, kurze Hose) |
+  | 15–20 °C | lange Hose, Langarmshirt, dünne Jacke |
+  | 11–15 °C | Jacke, lange Hose, leichter Pullover |
+  | 7–11 °C | Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal |
+  | 3–7 °C | Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme Handschuhe |
+  | −2–3 °C | Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe |
+  | unter −2 °C | Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe, Überschuhe, lange Unterhose |
 
-  - Ein Grenzwert gehört zum Bereich darüber: genau 18 °C ergibt „kurz“,
-    17,9 °C „lange dünne Kleidung“.
+  - Ein Grenzwert gehört zum Bereich darüber: genau 20 °C ergibt „kurz“,
+    19,9 °C die nächste Stufe.
   - Regenwahrscheinlichkeit ab 40 %: dazu Regenjacke; ab 60 %: Regenjacke und
     Regenhose.
   - Braucht die Rückfahrt andere Kleidung, steht ein Hinweis darunter, z. B.
-    „Morgens: Handschuhe, Stirnband, Thermojacke + Regenjacke; für die
-    Rückfahrt Regenhose einpacken.“
+    „Morgens: Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme
+    Handschuhe + Regenjacke; für die Rückfahrt Regenhose einpacken.“
+- **Kleidung anpassen** (Einstellungen → Wetter → Kleidung): je Stufe die
+  Grenze („ab … °C“) und die Kleidung ändern, mit **+ Stufe** eine Stufe vor der
+  letzten einfügen, mit ✕ entfernen (mindestens zwei bleiben); ebenso den
+  Regenzusatz. Die Grenzen müssen von warm nach kalt abnehmen. **Auf Standard
+  zurücksetzen** stellt die Tabelle oben wieder her (mit Rückfrage und
+  „Rückgängig“).
+- **Rückmeldung nach der Fahrt:** „Wie war die Kleidung?“ mit **zu warm**,
+  **passte** und **zu kalt** – im Reiter Wetter für die vorbeigegangenen
+  Fahrten von heute und den zwei Tagen davor (höchstens zwei auf einmal) und in
+  der Detailansicht jedes Eintrags mit gespeichertem Wetter.
+  - **Zu kalt** verschiebt beide Grenzen der empfohlenen Stufe um 1 °C nach
+    oben, z. B. „Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal“ von
+    7–11 °C auf 8–12 °C: Die wärmere Kleidung gilt dann schon früher. **Zu
+    warm** verschiebt sie um 1 °C nach unten, **passte** ändert nichts.
+  - Je Grenze höchstens ±5 °C; ein Schritt, der die Reihenfolge der Stufen
+    verletzen würde, entfällt. Die Meldung nennt den Bereich vorher und
+    nachher.
+  - Eine geänderte Rückmeldung nimmt den Schritt der vorigen zurück.
+  - Das Formular „Kleidung“ zeigt die Verschiebung, z. B. „+1 °C aus
+    Rückmeldungen, gilt ab 12 °C“. **Rückmeldungen zurücksetzen** setzt alle
+    Verschiebungen auf 0; deine Grenzen und Texte bleiben.
+- **Wetter je Eintrag:** Speicherst du einen Eintrag mit Arbeitsweg und mehr
+  als 0 km, übernimmt die App aus der geladenen Vorhersage je Hin- und
+  Rückfahrt die Werte (Temperatur, gefühlt, Regen, Wind, Böen), die Ampel und
+  die empfohlene Kleidung – sofern die Vorhersage den Tag abdeckt und für die
+  aktuellen Wohn- und Arbeitsorte geladen ist. Die gespeicherte Ampel kommt nur
+  aus den Wetterwerten, ohne amtliche Warnungen (die gibt es im Rückblick
+  nicht). Die Detailansicht des Eintrags zeigt das Wetter mit „Wie war die
+  Kleidung?“.
+  - Beim Ändern eines Eintrags bleibt das Wetter bei gleichem Datum; bei
+    neuem Datum holt die App es neu aus der Vorhersage, ohne Arbeitsweg
+    entfällt es.
+  - Andere Einträge (ohne Arbeitsweg, 0 km, Wochensummen) bekommen kein
+    Wetter.
+- **Wetter nachtragen …** (Statistik): holt für vergangene Fahrten zur Arbeit
+  ohne Wetter oder mit dem Wetter aus der Vorhersage das Wetter aus dem
+  **Rückblick** von Open-Meteo (archivierte Vorhersagen desselben Modells, ab
+  2022). Die App fragt vorher nach (Anzahl, Zeitraum, was gesendet wird) und
+  fragt je bis zu 31 Tage auf einmal ab, mit den aktuellen Wohn- und
+  Arbeitsorten. Empfohlene Kleidung und Rückmeldungen bleiben, damit die
+  Verschiebungen stimmen. Danach gibt es „Rückgängig“. Ohne Netz oder bei einem
+  Fehler bleiben deine Daten unverändert; bricht der Abruf mittendrin ab, wird
+  das schon Geholte übernommen und die Meldung sagt es.
 - **Amtliche Warnungen:** alle Warnungen des DWD für den angezeigten Tag mit
   Stufe (1 Wetterwarnung bis 4 extremes Unwetter), Zeitraum, betroffenen Orten
   und Text. Darunter steht, woher sie gerade kommen („Quelle: Deutscher
@@ -482,6 +547,18 @@ Der Reiter **Statistik** zeigt:
   - Radtage, Ø km, Arbeitstage und Serie zählen **ohne Wochensummen**, weil
     bei ihnen die einzelnen Tage unbekannt sind. Die App nennt Anzahl und km
     der Wochensummen je Jahr.
+- **Wetter auf dem Arbeitsweg** je Jahr und gesamt, nur Einträge mit
+  Arbeitsweg und mehr als 0 km:
+  - **mit Wetter:** wie viele dieser Tage gespeichertes Wetter haben, z. B.
+    „38 von 41“.
+  - **km bei Regen:** km der Tage, an denen auf einer der Fahrten mindestens
+    0,1 mm Niederschlag fiel.
+  - **Tage unter 0 °C:** Tage, an denen auf einer der Fahrten die Temperatur
+    unter 0 °C lag.
+  - **Ampel der Fahrten:** Verteilung grün / gelb / rot über alle Fahrten als
+    Balken mit Zahlen (aus den Wetterwerten, ohne amtliche Warnungen).
+  - Darunter **Wetter nachtragen …** mit der Anzahl der Tage, für die es
+    möglich ist (siehe „Wetter“).
 
 ### Datensicherung
 
@@ -524,12 +601,15 @@ Der Reiter **Statistik** zeigt:
 
 ### Einstellungen
 
-- Fahrrad, Vorlagen, Fahrtage, Wetter (Orte und Fahrzeiten), Jahresziele,
-  Datensicherung.
+- Fahrrad, Vorlagen, Fahrtage, Wetter (Orte, Fahrzeiten, Kleidung,
+  Ampel-Grenzen), Jahresziele, Datensicherung.
 - **Fahrtage:** deine üblichen Fahrtage zum Ankreuzen (Voreinstellung
   Montag, Dienstag, Freitag). Sie gelten für den Hinweis auf fehlende
   Einträge, die längste Serie und den Reiter Wetter. Änderungen werden sofort
   gespeichert.
+- **Hinweis für heute ab** (unter den Fahrtagen, Standard 18:00): ab dieser
+  Uhrzeit weist die Übersicht schon am selben Tag auf einen fehlenden Eintrag
+  hin. Leer = erst ab dem nächsten Tag. Wird sofort gespeichert.
 - **Über Rad-km:** App-Version und Datenversion.
 
 ## JSON-Format für Sicherung und Import
@@ -538,11 +618,11 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `4` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `5` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
-| `einstellungen` | Objekt | nein | Fahrtage und Jahresziele (ab Version 3), Wetter (ab Version 4); fehlt das Feld, gelten die Standardwerte |
+| `einstellungen` | Objekt | nein | Fahrtage und Jahresziele (ab Version 3), Wetter (ab Version 4), Hinweis für heute (ab Version 5); fehlt das Feld, gelten die Standardwerte |
 | `vorlagen` | Liste | nein | Vorlagen in Anzeigereihenfolge |
 | `eintraege` | Liste | nein | Kilometer-Einträge |
 | `wartungsarten` | Liste | nein | Fehlt das Feld, werden die drei Standard-Wartungsarten angelegt |
@@ -571,7 +651,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 | Feld | Typ | Bedeutung |
 |---|---|---|
 | `zeitpunkt` | Text | Zeitpunkt der Sicherung (ISO 8601, UTC), z. B. `"2026-10-25T14:03:00.000Z"` |
-| `appVersion` | Text | App-Version, mit der gesichert wurde, z. B. `"4a"` |
+| `appVersion` | Text | App-Version, mit der gesichert wurde, z. B. `"4b"` |
 | `eintraege` | Zahl | Anzahl der Einträge |
 | `kmSumme` | Zahl | Summe der km aller Einträge |
 | `kmStand` | Zahl oder `null` | Kilometerstand (Start-Kilometerstand + Einträge ab dem Startdatum) |
@@ -584,6 +664,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 |---|---|---|---|
 | `fahrtage` | Liste von Zahlen | nein | Übliche Fahrtage, 1 = Montag … 7 = Sonntag; Standard `[1, 2, 5]` (Mo, Di, Fr). Für den Hinweis auf Fahrtage ohne Eintrag und die längste Serie; `[]` = keine |
 | `jahresziele` | Liste | nein | Jahresziele, je Jahr höchstens eines: `{ "jahr": 2026, "km": 5000 }` (km > 0) |
+| `hinweisHeuteAb` | Uhrzeit oder `null` | nein | Ab dieser Uhrzeit zählt der heutige Fahrtag schon als „ohne Eintrag“ (ab Version 5); Standard `"18:00"`, `null` = erst ab dem nächsten Tag |
 | `wetter` | Objekt | nein | Orte, Fahrzeiten und Regeln für den Reiter Wetter (ab Version 4, siehe unten); fehlende Teile bekommen die Standardwerte |
 
 ### `einstellungen.wetter` (ab Version 4)
@@ -600,8 +681,8 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 
 **Ort:** `{ "name": "Musterdorf", "lat": 51.0, "lon": 10.0 }`. `name` ist ein
 Text zur Anzeige, `lat` (−90 bis 90) und `lon` (−180 bis 180) sind Grad und
-werden beim Einlesen auf 2 Nachkommastellen gerundet. Beim weiteren Ort kommt
-`"aktiv": true` oder `false` dazu.
+werden beim Einlesen auf 3 Nachkommastellen gerundet (bis Version 4: 2). Beim
+weiteren Ort kommt `"aktiv": true` oder `false` dazu.
 
 **Fahrzeit:**
 
@@ -611,7 +692,9 @@ werden beim Einlesen auf 2 Nachkommastellen gerundet. Beim weiteren Ort kommt
 | `abfahrt` | Uhrzeit oder `null` | übliche Abfahrt für „Abfahrt 15:45 statt 16:00“; `null` = keine, dann nennt die App die beste Abfahrt und die zu meidende Zeit |
 | `dauer` | ganze Zahl 5–240 | Dauer der Fahrt in Minuten, für das beste Abfahrtsfenster |
 
-**`ampel`** (Vorschlagswerte; jedes fehlende Feld bekommt den Standardwert):
+**`ampel`** (Vorschlagswerte; jedes fehlende Feld bekommt den Standardwert;
+ab Version 5 muss `gelbBoeen` kleiner als `rotBoeen` und `gelbNiederschlag`
+kleiner als `rotStarkregen` sein):
 
 | Feld | Standard | Bedeutung |
 |---|---|---|
@@ -628,11 +711,14 @@ werden beim Einlesen auf 2 Nachkommastellen gerundet. Beim weiteren Ort kommt
 
 | Feld | Typ | Bedeutung |
 |---|---|---|
-| `stufen` | Liste | von warm nach kalt, mindestens zwei: `{ "id": "jacke", "ab": 6, "korrektur": 0, "text": "Jacke, lange Hose" }`. Eine Stufe gilt ab der gefühlten Temperatur `ab` + `korrektur` (°C); die letzte Stufe hat `"ab": null` und gilt darunter. Die Untergrenzen müssen abnehmen. `korrektur` (ganze Zahl −5 bis 5) verschieben später Rückmeldungen nach der Fahrt; `id` ist eine eindeutige Kennung |
+| `stufen` | Liste | von warm nach kalt, mindestens zwei: `{ "id": "jacke", "ab": 11, "korrektur": 0, "text": "Jacke, lange Hose, leichter Pullover" }`. Eine Stufe gilt ab der gefühlten Temperatur `ab` + `korrektur` (°C); die letzte Stufe hat `"ab": null` und gilt darunter. Die Untergrenzen müssen abnehmen. `korrektur` (ganze Zahl −5 bis 5) ist die Verschiebung durch Rückmeldungen nach der Fahrt; `id` ist eine eindeutige Kennung (neue Stufen bekommen eine eigene) |
 | `regen` | Liste | Regenkleidung ab einer Regenwahrscheinlichkeit, aufsteigend: `{ "ab": 40, "text": "Regenjacke" }` |
 
-Standard-Stufen: `kurz` ab 18, `duenn` ab 12, `jacke` ab 6, `kalt` ab 0,
-`frost` darunter; Regen: Regenjacke ab 40 %, Regenhose ab 60 %.
+Standard-Stufen (ab Version 5): `kurz` ab 20, `duenn` ab 15, `jacke` ab 11,
+`kuehl` ab 7, `kalt` ab 3, `frost` ab −2, `eis` darunter, Texte wie in der
+Tabelle unter „Wetter“; Regen: Regenjacke ab 40 %, Regenhose ab 60 %. (Bis
+Version 4: `kurz` ab 18, `duenn` ab 12, `jacke` ab 6, `kalt` ab 0, `frost`
+darunter.)
 
 ### `fahrrad`
 
@@ -664,11 +750,13 @@ Standard-Stufen: `kurz` ab 18, `duenn` ab 12, `jacke` ab 6, `kalt` ab 0,
 | `notiz` | Text | nein | Notiz |
 | `typ` | `"tag"` oder `"woche"` | nein | Standard `"tag"`. `"woche"` = importierte Wochensumme, Datum = Montag der Woche bzw. erster Fahrtag |
 | `arbeitsweg` | `true`/`false` | nein | Fahrt zur Arbeit (ab Version 3); beim Erfassen aus der Vorlage übernommen. Zählt für die Arbeitstage in der Statistik |
-| `wetter` | Objekt oder `null` | nein | Wetter der Hin- und Rückfahrt an diesem Tag (ab Version 4, siehe unten); `null` = keins. Nur bei `"typ": "tag"`. Ändert sich das Datum des Eintrags, entfällt es |
+| `wetter` | Objekt oder `null` | nein | Wetter der Hin- und Rückfahrt an diesem Tag (ab Version 4, siehe unten); `null` = keins. Nur bei `"typ": "tag"`. Ändert sich das Datum des Eintrags, gilt es nicht mehr und wird für das neue Datum neu bestimmt |
 
 ### `eintraege[].wetter` (ab Version 4)
 
-Wird ab Release 4b gefüllt (beim Erfassen bzw. auf Wunsch nachträglich).
+Seit Release 4b gefüllt, nur bei Einträgen mit `"arbeitsweg": true` und mehr
+als 0 km: beim Speichern aus der Vorhersage, mit „Wetter nachtragen …“ aus dem
+Rückblick. `ampel` kommt nur aus den Wetterwerten, ohne amtliche Warnungen.
 
 | Feld | Typ | Bedeutung |
 |---|---|---|
@@ -727,14 +815,15 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
 
 ```json
 {
-  "version": 4,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "4a", "eintraege": 4,
+  "version": 5,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "4b", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
   "einstellungen": {
     "fahrtage": [1, 2, 5],
     "jahresziele": [{ "jahr": 2025, "km": 3000 }],
+    "hinweisHeuteAb": "18:00",
     "wetter": {
       "wohnort": { "name": "Musterdorf", "lat": 51.0, "lon": 10.0 },
       "arbeitsort": { "name": "Beispielstadt", "lat": 51.1, "lon": 10.2 },
@@ -745,11 +834,13 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
                  "gelbNiederschlag": 0.5, "gelbBoeen": 40, "gelbTemperatur": 0, "glaetteTemperatur": 1 },
       "kleidung": {
         "stufen": [
-          { "id": "kurz", "ab": 18, "korrektur": 0, "text": "kurz" },
-          { "id": "duenn", "ab": 12, "korrektur": 0, "text": "lange dünne Kleidung" },
-          { "id": "jacke", "ab": 6, "korrektur": 0, "text": "Jacke, lange Hose" },
-          { "id": "kalt", "ab": 0, "korrektur": 0, "text": "Handschuhe, Stirnband, Thermojacke" },
-          { "id": "frost", "ab": null, "korrektur": 0, "text": "Winterhandschuhe, Mütze, Überschuhe" }
+          { "id": "kurz", "ab": 20, "korrektur": 0, "text": "kurz (T-Shirt, kurze Hose)" },
+          { "id": "duenn", "ab": 15, "korrektur": 0, "text": "lange Hose, Langarmshirt, dünne Jacke" },
+          { "id": "jacke", "ab": 11, "korrektur": 0, "text": "Jacke, lange Hose, leichter Pullover" },
+          { "id": "kuehl", "ab": 7, "korrektur": 1, "text": "Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal" },
+          { "id": "kalt", "ab": 3, "korrektur": 1, "text": "Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme Handschuhe" },
+          { "id": "frost", "ab": -2, "korrektur": 0, "text": "Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe" },
+          { "id": "eis", "ab": null, "korrektur": 0, "text": "Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe, Überschuhe, lange Unterhose" }
         ],
         "regen": [{ "ab": 40, "text": "Regenjacke" }, { "ab": 60, "text": "Regenhose" }]
       }
@@ -765,9 +856,9 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
     { "datum": "2025-01-20", "km": 10, "vorlage": "Arbeit hin und zurück", "arbeitsweg": true,
       "wetter": { "quelle": "vorhersage", "stand": "2025-01-20T04:50:00.000Z",
         "hin": { "temperatur": 0.5, "gefuehlt": -2.5, "niederschlag": 0, "regenWahrscheinlichkeit": 10, "wind": 12,
-                 "boeen": 25, "ampel": "gruen", "kleidung": "frost", "rueckmeldung": null },
-        "rueck": { "temperatur": 3, "gefuehlt": 0.5, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18,
-                   "boeen": 42, "ampel": "gelb", "kleidung": "kalt", "rueckmeldung": null } } },
+                 "boeen": 25, "ampel": "gruen", "kleidung": "eis", "rueckmeldung": "passte" },
+        "rueck": { "temperatur": 6, "gefuehlt": 3.5, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18,
+                   "boeen": 42, "ampel": "gelb", "kleidung": "kalt", "rueckmeldung": "zu-kalt" } } },
     { "datum": "2025-01-21", "km": 12.5, "notiz": "Umweg" }
   ],
   "wartungsarten": [
@@ -824,16 +915,23 @@ damit nichts verloren geht.
   60 Minuten; Ampel- und Kleidungsregeln mit den Vorschlagswerten, ohne
   Korrektur) und `wetter: null` bei jedem Eintrag. Die umgewandelten Daten
   werden beim nächsten Speichern als Version 4 abgelegt.
-- Daten aus Version 1 und 2 werden in einem Schritt über die Zwischenversionen
-  auf Version 4 gebracht.
+- **Version 4 → 5:** Alle vorhandenen Angaben bleiben unverändert. Ergänzt
+  wird `einstellungen.hinweisHeuteAb` mit `"18:00"`. Sind die Kleidungsstufen
+  noch genau die alten Standardwerte (in Version 4 ließen sie sich nicht
+  ändern), ersetzt die App sie durch die neuen Standardstufen; jede Abweichung
+  bleibt erhalten. Koordinaten werden ab jetzt auf 3 statt 2 Nachkommastellen
+  gerundet; vorhandene Werte ändern sich dadurch nicht. Die umgewandelten Daten
+  werden beim nächsten Speichern als Version 5 abgelegt.
+- Daten aus Version 1 bis 3 werden in einem Schritt über die Zwischenversionen
+  auf Version 5 gebracht.
 
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1, 2 und 3 auf Version 4 (`tests/daten-v1.json`,
-  `tests/daten-v2.json`, `tests/daten-v3.json`, erfundene Werte) und die
-  Ablehnung fehlerhafter Daten,
+- die Umwandlung von Version 1, 2, 3 und 4 auf Version 5 (`tests/daten-v1.json`
+  bis `tests/daten-v4.json`, erfundene Werte; auch dass geänderte
+  Kleidungsregeln erhalten bleiben) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
 - die saisonale Fälligkeit, Verschleißteile (km zuerst / Zeit zuerst),
   einmalige Wartungen und die Reihenfolge im Reiter Wartung,
@@ -851,7 +949,16 @@ damit nichts verloren geht.
   Abfahrtsfenster, Wind relativ zur Strecke, Umschalten „heute/nächster
   Fahrtag“ um 17 Uhr (auch am Tag der Zeitumstellung), Ausfall einer Quelle,
   Offline-Anzeige, Rundung der Koordinaten, die fünf Reiter und die Vorlagen in
-  den Einstellungen.
+  den Einstellungen,
+- Release 4b: Formulare für Kleidung und Ampel-Grenzen (Ändern, Hinzufügen,
+  Entfernen, Prüfung, „Auf Standard zurücksetzen“, Wirkung), die Rückmeldung
+  zur Kleidung (beide Grenzen ±1 °C, Obergrenze ±5 °C, Reihenfolge, wärmste und
+  kälteste Stufe, Ändern, „Rückgängig“, Anzeige), Wetter je Eintrag beim
+  Speichern, „Wetter nachtragen …“ mit dem aufgezeichneten Rückblick
+  (Abschnitte, Rückfrage, Ausfall, „Rückgängig“), die Wetter-Statistik mit
+  festen Testdaten, Koordinaten direkt eingeben, die Reiterleiste (Farben,
+  Kontrast, keine Fläche), Böen in der Ampelzeile und den Hinweis für heute ab
+  18:00.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -859,7 +966,8 @@ nicht berührt.
 **Wetter in den Tests:** Die Wetterdienste werden nicht abgefragt. Die Tests
 ersetzen `fetch` durch einen Platzhalter, der mit aufgezeichneten Antworten
 antwortet (`tests/wetter-*.json`, aufgezeichnet am 25.10.2026 für erfundene
-Koordinaten; Ortsnamen, Warngebiete und Kennungen sind durch erfundene ersetzt).
+Koordinaten; Ortsnamen, Warngebiete und Kennungen sind durch erfundene ersetzt;
+`tests/wetter-rueckblick.json` ist der Rückblick für den 12.–23.10.2026).
 Für die einzelnen Fälle setzen die Tests die aufgezeichnete Vorhersage auf
 ruhiges Wetter und ändern dann gezielt einzelne Werte. Die Tests laufen in jeder
 Zeitzone; eine Prüfung zur Zeitumstellung läuft nur in der Zeitzone
@@ -908,7 +1016,8 @@ node tests/offline-update-test.js
    3. Datenmodell: Laden, Prüfen, Umwandeln, Speichern
    4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit, Zusammenfassung
    5. Wetter: Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher,
-      Ampel, Glätte, Kleidung, bestes Abfahrtsfenster, Wind
+      Ampel, Glätte, Kleidung, bestes Abfahrtsfenster, Wind, Wetter je Eintrag
+      und Rückblick
    6. Fenster, Rückfragen, Meldungen, Rückgängig
    7. Die fünf Bildschirme (Übersicht, Wetter, Wartung, Statistik,
       Einstellungen) und ihre Formulare (das Diagramm ist ein SVG, ohne

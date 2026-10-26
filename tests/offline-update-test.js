@@ -147,7 +147,8 @@ const BEISPIEL = JSON.stringify({
     await page.goto(url + "tests/test.html");
     await page.waitForFunction(() => /^(OK|FEHLER)/.test(document.title), null, { timeout: 60000 });
     const titel = await page.title();
-    pruefe("Testseite unter aktivem Service Worker: " + titel, titel.startsWith("OK"), await page.textContent("#ergebnis"));
+    pruefe("Testseite unter aktivem Service Worker: " + titel, titel.startsWith("OK"), await page.textContent("#ergebnis") +
+      (await page.$$eval("#protokoll .fehler", els => els.map(el => "\n    " + el.textContent + (el.nextElementSibling && el.nextElementSibling.tagName === "PRE" ? "\n      " + el.nextElementSibling.textContent.replace(/\n/g, "\n      ") : "")).join(""))));
     pruefe("… die Daten der App sind danach unverändert", (await daten()) === d0);
 
     // 7. Wetter: Abruf beim Start (die Wetterdienste antworten mit den aufgezeichneten
