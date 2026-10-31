@@ -175,6 +175,7 @@ button:disabled { opacity: .4; }
 }
 .zeile .inhalt .text { flex: 1; min-width: 0; }
 .zeile .inhalt .text > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zeile .inhalt .text > div.umbrechen { white-space: normal; }
 .zeile .zahl { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .zeile .symbol { background: none; min-width: 48px; padding: 0; color: var(--text2); font-size: 20px; }
 .zeile .pfeile { display: flex; }
@@ -252,12 +253,13 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .rueckmeldung { display: flex; gap: 6px; margin: 6px 0 4px; }
 .rueckmeldung button { flex: 1; min-height: 44px; padding: 6px 4px; }
 .eintrag-wetter { border-top: 1px solid var(--linie); padding: 8px 0; }
-.regel-zeile { margin: 12px 0; }
-.regel-kopf { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.regel-kopf label { margin: 0; color: var(--text); font-size: 17px; }
-.regel-kopf .kurzfeld { width: 84px; flex: none; }
-.regel-kopf .symbol { margin-left: auto; background: none; min-width: 44px; padding: 0; color: var(--text2); }
-.regel-zeile textarea.kurztext { min-height: 0; }
+/* Kleidung je Körperbereich im Reiter Wetter, Tagesverlauf */
+.bereiche { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; }
+.bereiche dt { color: var(--text2); font-size: 15px; }
+.bereiche dd { margin: 0; }
+.tabelle.verlauf { margin-top: 8px; }
+.tabelle.verlauf td:first-child { white-space: nowrap; }
+input.kurzfeld { max-width: 140px; }
 .verteilung-zeile { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .verteilung-titel { width: 52px; font-size: 15px; }
 .verteilung { flex: 1 1 120px; display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; }
@@ -394,19 +396,27 @@ const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzt
 // Zuletzt geladene Wetterdaten (Zwischenspeicher, kein Teil der Daten und der Sicherung)
 const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "4b";
+const APP_VERSION = "4c";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 5;
+const DATEN_VERSION = 6;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;
 // So lange (ms) wird nach dem Löschen "Rückgängig" angeboten
-const RUECKGAENGIG_MS = 6000;
+const RUECKGAENGIG_MS = 12000;
 // Übliche Fahrtage bei einer Neuinstallation: 1 = Montag … 7 = Sonntag
 const STANDARD_FAHRTAGE = [1, 2, 5];
 // Ab dieser Uhrzeit weist die Übersicht schon am selben Tag auf einen fehlenden Eintrag hin
 const STANDARD_HINWEIS_HEUTE_AB = "18:00";
+// Körperbereiche der Kleidung: [Schlüssel in den Daten, Bezeichnung]
+const BEREICHE = [["kopf", "Kopf"], ["hals", "Hals"], ["haende", "Hände"], ["oberkoerper", "Oberkörper"], ["beine", "Beine"], ["fuesse", "Füße"]];
+const BEREICH_SCHLUESSEL = BEREICHE.map(b => b[0]);
+const BEREICH_NAME = Object.fromEntries(BEREICHE);
+// Bei Regen gilt in diesen Bereichen das Zwiebelprinzip (eine Schicht weniger unter dem Regenzeug)
+const ZWIEBEL_BEREICHE = ["oberkoerper", "beine", "fuesse"];
+// Höchstens so viele Wegpunkte zwischen Wohn- und Arbeitsort
+const MAX_WEGPUNKTE = 3;
 
 /* =====================================================================
    2. HILFSFUNKTIONEN: Datum, Zahlen, Text
@@ -555,24 +565,48 @@ function standardAmpel() {
   return { rotBoeen: 60, rotStarkregen: 5, rotWarnstufe: 2, gelbRegenWahrscheinlichkeit: 50, gelbNiederschlag: 0.5,
     gelbBoeen: 40, gelbTemperatur: 0, glaetteTemperatur: 1 };
 }
-// Kleidung nach gefühlter Temperatur, von warm nach kalt. Eine Stufe gilt ab
-// ihrer Untergrenze "ab" (verschoben um "korrektur" aus Rückmeldungen); die
-// letzte Stufe gilt darunter. Regenkleidung ab der Regenwahrscheinlichkeit "ab".
+// Kleidung je Körperbereich ("" = nichts), aus einem Objekt mit beliebigen Bereichen
+function bereicheAus(b = {}) {
+  return Object.fromEntries(BEREICH_SCHLUESSEL.map(k => [k, b[k] || ""]));
+}
+// Kleidung nach gefühlter Temperatur, von warm nach kalt, je Körperbereich. Eine
+// Stufe gilt ab ihrer Untergrenze "ab"; die letzte Stufe gilt darunter.
+// "haendeBeiRegen" ersetzt die Hände, sobald ein Regenzusatz greift. Der
+// Regenzusatz kommt ab der Regenwahrscheinlichkeit "ab" in seinen Bereichen dazu.
+// "rueckmeldung": Rückmeldung zur Kleidung nach der Fahrt anbieten.
 function standardKleidung() {
-  const stufe = (id, ab, text) => ({ id, ab, korrektur: 0, text });
+  const b = (kopf, hals, haende, oberkoerper, beine, fuesse) => ({ kopf, hals, haende, oberkoerper, beine, fuesse });
+  const stufe = (id, ab, bereiche, haendeBeiRegen = null) => ({ id, ab, bereiche, haendeBeiRegen });
   return {
     stufen: [
-      stufe("kurz", 20, "kurz (T-Shirt, kurze Hose)"),
-      stufe("duenn", 15, "lange Hose, Langarmshirt, dünne Jacke"),
-      stufe("jacke", 11, "Jacke, lange Hose, leichter Pullover"),
-      stufe("kuehl", 7, "Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal"),
-      stufe("kalt", 3, "Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme Handschuhe"),
-      stufe("frost", -2, "Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe"),
-      stufe("eis", null, "Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe, Überschuhe, lange Unterhose")
+      stufe("stufe1", 20, b("", "", "", "T-Shirt", "kurze Hose", "Sneakersocken")),
+      stufe("stufe2", 15, b("", "", "", "T-Shirt, leichter Pullover", "Hose", "Sneakersocken")),
+      stufe("stufe3", 11, b("", "", "", "T-Shirt, warmer Pullover", "Hose", "Socken")),
+      stufe("stufe4", 7, b("leichte Mütze", "", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"), "Übergangshandschuhe"),
+      stufe("stufe5", 3, b("mittlere Mütze", "Schal", "Übergangshandschuhe", "T-Shirt, leichter Pullover, warmer Pullover", "Hose", "Socken")),
+      stufe("stufe6", -1, b("warme Mütze", "Schal", "Unterziehhandschuhe, Übergangshandschuhe", "T-Shirt, leichter Pullover, Regenjacke als Windschutz", "Hose", "Socken")),
+      stufe("stufe7", -6, b("warme Mütze, leichte Mütze", "Schal, Tuch", "Winterhandschuhe", "2 T-Shirts, warmer Pullover, Regenjacke als Windschutz",
+        "Hose, Regenhose als Windschutz", "Socken, Gamaschen")),
+      stufe("stufe8", null, b("warme Mütze, mittlere Mütze", "Schal, Tuch", "Unterziehhandschuhe, Winterhandschuhe",
+        "2 T-Shirts, leichter Pullover, warmer Pullover, Regenjacke als Windschutz", "lange Unterhose, Hose, Regenhose als Windschutz", "2 Paar Socken, Gamaschen"))
     ],
-    regen: [{ ab: 40, text: "Regenjacke" }, { ab: 60, text: "Regenhose" }]
+    regen: [{ ab: 40, bereiche: b("", "", "", "Regenjacke", "", "") }, { ab: 60, bereiche: b("", "", "", "", "Regenhose", "Gamaschen") }],
+    rueckmeldung: true
   };
 }
+// Die Standard-Kleidungsstufen aus Version 5 (Release 4b; für die Umwandlung auf Version 6)
+const KLEIDUNG_VERSION_5 = {
+  stufen: [
+    { id: "kurz", ab: 20, korrektur: 0, text: "kurz (T-Shirt, kurze Hose)" },
+    { id: "duenn", ab: 15, korrektur: 0, text: "lange Hose, Langarmshirt, dünne Jacke" },
+    { id: "jacke", ab: 11, korrektur: 0, text: "Jacke, lange Hose, leichter Pullover" },
+    { id: "kuehl", ab: 7, korrektur: 0, text: "Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal" },
+    { id: "kalt", ab: 3, korrektur: 0, text: "Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme Handschuhe" },
+    { id: "frost", ab: -2, korrektur: 0, text: "Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe" },
+    { id: "eis", ab: null, korrektur: 0, text: "Thermojacke, warmer Pullover, Mütze, Schal, Winterhandschuhe, Überschuhe, lange Unterhose" }
+  ],
+  regen: [{ ab: 40, text: "Regenjacke" }, { ab: 60, text: "Regenhose" }]
+};
 // Die Standard-Kleidungsstufen aus Version 4 (für die Umwandlung auf Version 5)
 const KLEIDUNG_VERSION_4 = {
   stufen: [
@@ -582,14 +616,23 @@ const KLEIDUNG_VERSION_4 = {
   ],
   regen: [{ ab: 40, text: "Regenjacke" }, { ab: 60, text: "Regenhose" }]
 };
-// Wetter: Orte, Fahrzeiten (Zeitraum, übliche Abfahrt, Dauer in Minuten), Ampel, Kleidung
+// Wetter: Orte, Wegpunkte (Wohnort → Arbeitsort) und je Teilstrecke, ob sie
+// für den Wind zählt, Fahrzeiten (Zeitraum, übliche Abfahrt, Dauer in Minuten), Ampel, Kleidung
 function standardWetter() {
+  const v4 = wetterVersion4();
+  return {
+    wohnort: null, arbeitsort: null, weitererOrt: null, wegpunkte: [], windTeilstrecken: [true],
+    hinfahrt: v4.hinfahrt, rueckfahrt: v4.rueckfahrt, ampel: v4.ampel, kleidung: standardKleidung()
+  };
+}
+// Wetter-Einstellungen, wie die Umwandlung 3 → 4 sie anlegt (Aufbau von Version 4)
+function wetterVersion4() {
   return {
     wohnort: null, arbeitsort: null, weitererOrt: null,
     hinfahrt: { von: "06:00", bis: "07:00", abfahrt: "06:00", dauer: 60 },
     rueckfahrt: { von: "16:00", bis: "17:00", abfahrt: "16:00", dauer: 60 },
     ampel: standardAmpel(),
-    kleidung: standardKleidung()
+    kleidung: JSON.parse(JSON.stringify(KLEIDUNG_VERSION_4))
   };
 }
 function leereDaten() {
@@ -643,11 +686,12 @@ const MIGRATIONEN = {
   },
   // Version 3 → 4: Wetter in den Einstellungen (noch ohne Orte, Fahrzeiten,
   // Ampel- und Kleidungsregeln mit Standardwerten), Wetter je Eintrag (leer).
+  // (Jede Umwandlung legt die Standardwerte ihrer Zielversion an, nicht die aktuellen.)
   3: alt => {
     const d = Object.assign({}, alt, { version: 4 });
     const es = d.einstellungen;
-    if (es === undefined) d.einstellungen = standardEinstellungen();
-    else if (es && typeof es === "object" && !Array.isArray(es) && es.wetter === undefined) d.einstellungen = Object.assign({}, es, { wetter: standardWetter() });
+    if (es === undefined) d.einstellungen = { fahrtage: [...STANDARD_FAHRTAGE], jahresziele: [], wetter: wetterVersion4() };
+    else if (es && typeof es === "object" && !Array.isArray(es) && es.wetter === undefined) d.einstellungen = Object.assign({}, es, { wetter: wetterVersion4() });
     d.eintraege = felderErgaenzen(d.eintraege, { wetter: null });
     return d;
   },
@@ -659,12 +703,75 @@ const MIGRATIONEN = {
     if (istObjekt(d.einstellungen)) {
       const es = Object.assign({}, d.einstellungen);
       if (es.hinweisHeuteAb === undefined) es.hinweisHeuteAb = STANDARD_HINWEIS_HEUTE_AB;
-      if (istObjekt(es.wetter) && gleicherInhalt(es.wetter.kleidung, KLEIDUNG_VERSION_4)) es.wetter = Object.assign({}, es.wetter, { kleidung: standardKleidung() });
+      if (istObjekt(es.wetter) && gleicherInhalt(es.wetter.kleidung, KLEIDUNG_VERSION_4)) es.wetter = Object.assign({}, es.wetter, { kleidung: JSON.parse(JSON.stringify(KLEIDUNG_VERSION_5)) });
       d.einstellungen = es;
+    }
+    return d;
+  },
+  // Version 5 → 6: Kleidung nach Körperbereichen, Rückmeldung ohne Verschiebung
+  // der Grenzen, Wegpunkte. Bei jeder Fahrt mit Wetter wird festgehalten, was
+  // 4b empfohlen hat (Text der Stufe und Regenzusatz, im Feld Oberkörper).
+  5: alt => {
+    const d = Object.assign({}, alt, { version: 6 });
+    const es = istObjekt(d.einstellungen) ? d.einstellungen : null;
+    const w = es && istObjekt(es.wetter) ? es.wetter : null;
+    const k = w && istObjekt(w.kleidung) ? w.kleidung : null;
+    const stufen5 = k && Array.isArray(k.stufen) ? k.stufen : KLEIDUNG_VERSION_5.stufen;
+    const regen5 = k && Array.isArray(k.regen) ? k.regen : KLEIDUNG_VERSION_5.regen;
+    if (Array.isArray(d.eintraege)) d.eintraege = d.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion5(e.wetter.hin, stufen5, regen5), rueck: fahrtAusVersion5(e.wetter.rueck, stufen5, regen5) }) })
+      : e);
+    if (w) {
+      const neu = Object.assign({}, w);
+      if (neu.wegpunkte === undefined) neu.wegpunkte = [];
+      if (neu.windTeilstrecken === undefined) neu.windTeilstrecken = [true];
+      if (k) neu.kleidung = kleidungAusVersion5(k);
+      d.einstellungen = Object.assign({}, es, { wetter: neu });
     }
     return d;
   }
 };
+
+// Kleidungsregeln aus Version 5: Sind die Stufen (ohne die Verschiebungen aus
+// Rückmeldungen) noch die Standardwerte aus 4b, kommen die neuen Standardstufen;
+// die Verschiebungen gehörten zur alten Kleidung und entfallen. Sonst bleibt
+// jede Stufe mit ihrer id; ihr Text kommt nach Oberkörper, die Verschiebung in
+// die Grenze (die wirksame Grenze bleibt gleich). Beim Regenzusatz ebenso.
+function kleidungAusVersion5(k) {
+  const std = standardKleidung();
+  const ohneKorrektur = liste => liste.map(s => istObjekt(s) ? { id: s.id, ab: s.ab, text: s.text } : s);
+  const neu = {};
+  if (k.stufen !== undefined) {
+    if (Array.isArray(k.stufen) && gleicherInhalt(ohneKorrektur(k.stufen), ohneKorrektur(KLEIDUNG_VERSION_5.stufen))) neu.stufen = std.stufen;
+    else if (Array.isArray(k.stufen)) neu.stufen = k.stufen.map((s, i) => {
+      if (!istObjekt(s)) return s;
+      const korrektur = s.korrektur ?? 0;
+      if (!(Number.isInteger(korrektur) && Math.abs(korrektur) <= 5)) throw new Error("Wetter, Kleidung, Stufe " + (i + 1) + ": korrektur muss eine ganze Zahl von -5 bis 5 sein.");
+      return { id: s.id, ab: istEndlich(s.ab) ? s.ab + korrektur : s.ab, bereiche: { oberkoerper: s.text }, haendeBeiRegen: null };
+    });
+    else neu.stufen = k.stufen;
+  }
+  if (k.regen !== undefined) {
+    if (Array.isArray(k.regen) && gleicherInhalt(k.regen, KLEIDUNG_VERSION_5.regen)) neu.regen = std.regen;
+    else if (Array.isArray(k.regen)) neu.regen = k.regen.map(r => istObjekt(r) ? { ab: r.ab, bereiche: { oberkoerper: r.text } } : r);
+    else neu.regen = k.regen;
+  }
+  neu.rueckmeldung = true;
+  return neu;
+}
+// Eine Fahrt mit Wetter aus Version 5: empfohlene Kleidung festhalten, wie 4b
+// sie angezeigt hat ("Jacke, lange Hose + Regenjacke"), und ob Regenkleidung galt
+function fahrtAusVersion5(f, stufen5, regen5) {
+  if (!istObjekt(f)) return f;
+  const s = typeof f.kleidung === "string" ? stufen5.find(x => istObjekt(x) && x.id === f.kleidung) : null;
+  const p = istEndlich(f.regenWahrscheinlichkeit) ? f.regenWahrscheinlichkeit : null;
+  const regen = p === null ? [] : regen5.filter(r => istObjekt(r) && istEndlich(r.ab) && p >= r.ab && typeof r.text === "string").map(r => r.text.trim());
+  const text = s && typeof s.text === "string" ? s.text.trim() + (regen.length ? " + " + regen.join(", ") : "") : null;
+  return Object.assign({}, f, {
+    empfehlung: f.empfehlung !== undefined ? f.empfehlung : text ? bereicheAus({ oberkoerper: text }) : null,
+    regenkleidung: f.regenkleidung !== undefined ? f.regenkleidung : !!f.kleidung && regen.length > 0
+  });
+}
 
 function migrieren(roh) {
   if (!roh || typeof roh !== "object" || Array.isArray(roh)) throw new Error("Die Datei enthält keine Rad-km-Daten.");
@@ -690,20 +797,39 @@ function wetterPruefen(w, fehler) {
   if (w === undefined || w === null) return std;
   if (!istObjekt(w)) fehler("Einstellungen: „wetter“ muss ein Objekt sein.");
 
-  const ort = (feld, name) => {
-    const o = w[feld], wo = "Wetter, " + name;
-    if (o === undefined || o === null) return null;
+  const ortLesen = (o, wo) => {
     if (!istObjekt(o)) fehler(wo + ": muss ein Objekt oder null sein.");
     if (typeof o.name !== "string" || !o.name.trim()) fehler(wo + ": Name fehlt.");
     if (!(istEndlich(o.lat) && Math.abs(o.lat) <= 90)) fehler(wo + ": lat muss eine Zahl von -90 bis 90 sein.");
     if (!(istEndlich(o.lon) && Math.abs(o.lon) <= 180)) fehler(wo + ": lon muss eine Zahl von -180 bis 180 sein.");
-    const erg = { name: o.name.trim(), lat: koordinateRunden(o.lat), lon: koordinateRunden(o.lon) };
+    return { name: o.name.trim(), lat: koordinateRunden(o.lat), lon: koordinateRunden(o.lon) };
+  };
+  const ort = (feld, name) => {
+    const o = w[feld], wo = "Wetter, " + name;
+    if (o === undefined || o === null) return null;
+    const erg = ortLesen(o, wo);
     if (feld === "weitererOrt") {
       if (o.aktiv !== undefined && o.aktiv !== null && typeof o.aktiv !== "boolean") fehler(wo + " (aktiv): muss true oder false sein.");
       erg.aktiv = o.aktiv === true;
     }
     return erg;
   };
+
+  // Wegpunkte (höchstens 3, vom Wohnort zum Arbeitsort) und je Teilstrecke, ob sie für den Wind zählt
+  let wegpunkte = [];
+  if (w.wegpunkte !== undefined && w.wegpunkte !== null) {
+    if (!Array.isArray(w.wegpunkte)) fehler("Wetter: „wegpunkte“ muss eine Liste sein.");
+    if (w.wegpunkte.length > MAX_WEGPUNKTE) fehler("Wetter: Es sind höchstens " + MAX_WEGPUNKTE + " Wegpunkte möglich.");
+    wegpunkte = w.wegpunkte.map((o, i) => ortLesen(o, "Wetter, Wegpunkt " + (i + 1)));
+  }
+  let windTeilstrecken = wegpunkte.map(() => true).concat(true);
+  if (w.windTeilstrecken !== undefined && w.windTeilstrecken !== null) {
+    const t = w.windTeilstrecken;
+    if (!Array.isArray(t) || t.length !== wegpunkte.length + 1 || t.some(x => typeof x !== "boolean")) {
+      fehler("Wetter: „windTeilstrecken“ muss eine Liste mit " + (wegpunkte.length + 1) + " Werten true oder false sein (eine Teilstrecke mehr als Wegpunkte).");
+    }
+    windTeilstrecken = [...t];
+  }
 
   // Fahrzeit: fehlende Felder bekommen den Standardwert; abfahrt null = keine übliche Abfahrt
   const fahrt = (feld, name) => {
@@ -753,18 +879,16 @@ function wetterPruefen(w, fehler) {
         if (typeof s.id !== "string" || !s.id) fehler(wn + ": id fehlt.");
         if (ids.has(s.id)) fehler(wn + ": id „" + s.id + "“ kommt doppelt vor.");
         ids.add(s.id);
-        if (typeof s.text !== "string" || !s.text.trim()) fehler(wn + ": text fehlt.");
         const ab = s.ab ?? null;
         if (letzte && ab !== null) fehler(wn + ": Die letzte Stufe gilt unterhalb der vorigen und hat kein „ab“ (null).");
         if (!letzte && !istEndlich(ab)) fehler(wn + ": ab muss eine Zahl (°C) sein.");
-        const korrektur = s.korrektur ?? 0;
-        if (!(Number.isInteger(korrektur) && Math.abs(korrektur) <= 5)) fehler(wn + ": korrektur muss eine ganze Zahl von -5 bis 5 sein.");
-        if (letzte && korrektur !== 0) fehler(wn + ": Die letzte Stufe hat keine Untergrenze, ihre korrektur ist 0.");
-        return { id: s.id, ab, korrektur, text: s.text.trim() };
+        const bereiche = bereichePruefen(s.bereiche, wn, fehler);
+        const hr = s.haendeBeiRegen ?? null;
+        if (hr !== null && typeof hr !== "string") fehler(wn + ": haendeBeiRegen muss ein Text oder null sein.");
+        return { id: s.id, ab, bereiche, haendeBeiRegen: hr && hr.trim() ? hr.trim() : null };
       });
       for (let i = 1; i < stufen.length - 1; i++) {
-        const a = stufen[i - 1], b = stufen[i];
-        if (!(b.ab < a.ab && b.ab + b.korrektur < a.ab + a.korrektur)) fehler(wo + ": Die Untergrenzen der Stufen müssen von warm nach kalt abnehmen.");
+        if (!(stufen[i].ab < stufen[i - 1].ab)) fehler(wo + ": Die Untergrenzen der Stufen müssen von warm nach kalt abnehmen.");
       }
     }
     let regen = std.kleidung.regen;
@@ -774,18 +898,32 @@ function wetterPruefen(w, fehler) {
         const wn = wo + ", Regen Nr. " + (i + 1);
         if (!istObjekt(r)) fehler(wn + ": ist kein Objekt.");
         if (!(istEndlich(r.ab) && r.ab >= 0 && r.ab <= 100)) fehler(wn + ": ab muss eine Regenwahrscheinlichkeit von 0 bis 100 sein.");
-        if (typeof r.text !== "string" || !r.text.trim()) fehler(wn + ": text fehlt.");
-        return { ab: r.ab, text: r.text.trim() };
+        return { ab: r.ab, bereiche: bereichePruefen(r.bereiche, wn, fehler) };
       });
       regen.forEach((r, i) => { if (i && !(r.ab > regen[i - 1].ab)) fehler(wo + ": Die Regenschwellen müssen aufsteigend sein."); });
     }
-    kleidung = { stufen, regen };
+    const rueckmeldung = k.rueckmeldung ?? true;
+    if (typeof rueckmeldung !== "boolean") fehler(wo + ": rueckmeldung muss true oder false sein.");
+    kleidung = { stufen, regen, rueckmeldung };
   }
 
   return {
     wohnort: ort("wohnort", "Wohnort"), arbeitsort: ort("arbeitsort", "Arbeitsort"), weitererOrt: ort("weitererOrt", "weiterer Ort"),
-    hinfahrt: fahrt("hinfahrt", "Hinfahrt"), rueckfahrt: fahrt("rueckfahrt", "Rückfahrt"), ampel, kleidung
+    wegpunkte, windTeilstrecken, hinfahrt: fahrt("hinfahrt", "Hinfahrt"), rueckfahrt: fahrt("rueckfahrt", "Rückfahrt"), ampel, kleidung
   };
+}
+
+// Kleidung je Körperbereich prüfen: sechs Texte (fehlend = ""), mindestens einer ausgefüllt
+function bereichePruefen(b, wo, fehler, mindestensEiner = true, feld = "bereiche") {
+  if (!istObjekt(b)) fehler(wo + ": „" + feld + "“ muss ein Objekt sein (kopf, hals, haende, oberkoerper, beine, fuesse).");
+  const erg = {};
+  BEREICH_SCHLUESSEL.forEach(k => {
+    const v = b[k] ?? "";
+    if (typeof v !== "string") fehler(wo + ": " + k + " muss ein Text sein.");
+    erg[k] = v.trim();
+  });
+  if (mindestensEiner && !BEREICH_SCHLUESSEL.some(k => erg[k])) fehler(wo + ": Mindestens ein Bereich (Kopf, Hals, Hände, Oberkörper, Beine, Füße) muss ausgefüllt sein.");
+  return erg;
 }
 
 // Wetter der Hin- und Rückfahrt eines Tageseintrags (ab Version 4; null = keins)
@@ -806,10 +944,14 @@ function eintragWetterPruefen(ew, wo, fehler) {
     if (!AMPELFARBEN.includes(f.ampel)) fehler(wn + ": ampel muss „gruen“, „gelb“ oder „rot“ sein.");
     const kleidung = f.kleidung ?? null;
     if (kleidung !== null && (typeof kleidung !== "string" || !kleidung)) fehler(wn + ": kleidung muss die id einer Kleidungsstufe oder null sein.");
+    const em = f.empfehlung ?? null;
+    const empfehlung = em === null ? null : bereichePruefen(em, wn, fehler, false, "empfehlung");
+    const regenkleidung = f.regenkleidung ?? false;
+    if (typeof regenkleidung !== "boolean") fehler(wn + ": regenkleidung muss true oder false sein.");
     const rm = f.rueckmeldung ?? null;
     if (rm !== null && !RUECKMELDUNGEN.includes(rm)) fehler(wn + ": rueckmeldung muss „zu-warm“, „passte“, „zu-kalt“ oder null sein.");
     return { temperatur: zahl("temperatur"), gefuehlt: zahl("gefuehlt"), niederschlag: zahl("niederschlag", 0), regenWahrscheinlichkeit: w,
-      wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, rueckmeldung: rm };
+      wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, empfehlung, regenkleidung, rueckmeldung: rm };
   };
   return { quelle: ew.quelle, stand: ew.stand, hin: fahrt(ew.hin, "hin"), rueck: fahrt(ew.rueck, "rueck") };
 }
@@ -1543,11 +1685,35 @@ const QUELLEN_NAME = { dwd: "Deutscher Wetterdienst", brightsky: "Bright Sky (Er
 
 // ---------- Orte und Adressen ----------
 
-// Orte, für die das Wetter geladen wird: der weitere Ort, wenn er aktiv ist, sonst Wohn- und Arbeitsort
+// Orte, für die das Wetter geladen wird: der weitere Ort, wenn er aktiv ist, sonst die Strecke
 function wetterOrte(w = daten.einstellungen.wetter) {
-  if (w.weitererOrt && w.weitererOrt.aktiv) return [{ rolle: "weitererOrt", ort: w.weitererOrt }];
-  return ["wohnort", "arbeitsort"].filter(r => w[r]).map(r => ({ rolle: r, ort: w[r] }));
+  if (w.weitererOrt && w.weitererOrt.aktiv) return [{ rolle: "weitererOrt", titel: ORT_TITEL.weitererOrt, ort: w.weitererOrt }];
+  return streckenOrte(w);
 }
+// Orte der Fahrten zur Arbeit: Wohnort, Wegpunkte, Arbeitsort. Wegpunkte zählen
+// nur, wenn Wohn- und Arbeitsort festgelegt sind.
+function streckenOrte(w = daten.einstellungen.wetter) {
+  const orte = [];
+  if (w.wohnort) orte.push({ rolle: "wohnort", titel: ORT_TITEL.wohnort, ort: w.wohnort });
+  if (w.wohnort && w.arbeitsort) w.wegpunkte.forEach((o, i) => orte.push({ rolle: "wegpunkt", titel: wegpunktTitel(i), ort: o }));
+  if (w.arbeitsort) orte.push({ rolle: "arbeitsort", titel: ORT_TITEL.arbeitsort, ort: w.arbeitsort });
+  return orte;
+}
+function wegpunktTitel(i) { return "Wegpunkt " + (i + 1); }
+// Teilstrecken Wohnort → Wegpunkte → Arbeitsort: Länge (km, Luftlinie), Richtung
+// hin und zurück, ob sie für den Wind zählt, und die Nummern ihrer beiden Orte
+// in streckenOrte (dieselbe Reihenfolge wie in der Vorhersage). [] ohne Strecke.
+function teilstrecken(w = daten.einstellungen.wetter) {
+  const orte = streckenOrte(w);
+  if (!w.wohnort || !w.arbeitsort) return [];
+  return orte.slice(1).map((b, i) => {
+    const a = orte[i];
+    return { von: a, bis: b, a: i, b: i + 1, laenge: entfernungKm(a.ort, b.ort), kursHin: kursZwischen(a.ort, b.ort), kursRueck: kursZwischen(b.ort, a.ort),
+      wind: w.windTeilstrecken[i] !== false };
+  });
+}
+// "Wohnort → Brücke"
+function teilstreckeTitel(t, rueck) { return rueck ? t.bis.ort.name + " → " + t.von.ort.name : t.von.ort.name + " → " + t.bis.ort.name; }
 // Koordinate für Adressen: immer gerundet, "51.100"
 function koordinate(x) { return koordinateRunden(x).toFixed(3); }
 function ortSchluessel(o) { return koordinate(o.lat) + "," + koordinate(o.lon); }
@@ -1772,15 +1938,26 @@ function standText(ms, jetzt) {
   return tag + uhrzeit(ms) + " Uhr";
 }
 
-// Angezeigter Tag: heute bis zum Ende der Rückfahrt (Standard 17 Uhr), danach der nächste Fahrtag
+// Angezeigter Tag: heute bis zum Ende der Rückfahrt (Standard 17 Uhr), danach
+// morgen. Hin- und Rückfahrt gibt es nur, wenn dieser Tag ein Fahrtag ist, also
+// für einen Fahrtag erst ab dem Ende der Rückfahrt am Vortag. Sonst nennt
+// "naechster" den nächsten Fahrtag und "empfehlungAb" den Vortag, ab dem es sie gibt.
 function wetterTag(jetzt, w = daten.einstellungen.wetter, fahrtage = daten.einstellungen.fahrtage) {
   const d = new Date(jetzt), h = isoAusDate(d);
-  let datum = h;
-  if (d.getHours() * 60 + d.getMinutes() >= minutenAus(w.rueckfahrt.bis)) {
-    datum = plusTage(h, 1);
-    if (fahrtage.length) while (!fahrtage.includes(isoWochentag(datum))) datum = plusTage(datum, 1);
+  const datum = d.getHours() * 60 + d.getMinutes() >= minutenAus(w.rueckfahrt.bis) ? plusTage(h, 1) : h;
+  const fahrtag = fahrtage.includes(isoWochentag(datum));
+  let naechster = null;
+  if (!fahrtag && fahrtage.length) {
+    naechster = plusTage(datum, 1);
+    while (!fahrtage.includes(isoWochentag(naechster))) naechster = plusTage(naechster, 1);
   }
-  return { datum, heute: datum === h, fahrtag: fahrtage.includes(isoWochentag(datum)), titel: tagTitel(datum, h) };
+  return { datum, heute: datum === h, fahrtag, titel: tagTitel(datum, h), naechster, empfehlungAb: naechster && plusTage(naechster, -1) };
+}
+// "Empfehlung für Mo 02.11. ab So 17:00" bzw. "… ab heute 17:00"
+function empfehlungAbText(tag, h, w = daten.einstellungen.wetter) {
+  if (!tag.naechster) return null;
+  return "Empfehlung für " + wochentag(tag.naechster) + " " + kurzDatum(tag.naechster) + " ab " +
+    (tag.empfehlungAb === h ? "heute" : wochentag(tag.empfehlungAb)) + " " + w.rueckfahrt.bis;
 }
 
 // ---------- Werte eines Zeitraums ----------
@@ -1874,7 +2051,8 @@ function fahrtBewerten(orteDaten, warnungen, von, bis, g = daten.einstellungen.w
     intensitaet: groesster("niederschlag") * 4,
     regenWahrscheinlichkeit: alle("wahrscheinlichkeit").length ? groesster("wahrscheinlichkeit") : null,
     boeen: alle("boeen").length ? groesster("boeen") : 0,
-    windProben: alle("wind")
+    windProben: alle("wind"),
+    windJeOrt: orte.map(o => o.wind)
   };
   const gruende = [];
   const grund = (farbe, art, text, zeit) => gruende.push({ farbe, art, text, zeit: zeit !== null && zeit > von ? zeit : null });
@@ -1920,7 +2098,7 @@ function warnungenZusammen(teil, orte) {
   teil.orte.forEach((o, i) => o.warnungen.forEach(wn => {
     const k = [wn.ereignis, wn.stufe, wn.beginn, wn.ende].join("|");
     if (!m.has(k)) m.set(k, Object.assign({}, wn, { orte: [] }));
-    if (!m.get(k).orte.includes(orte[i].rolle)) m.get(k).orte.push(orte[i].rolle);
+    if (!m.get(k).orte.includes(orte[i].titel)) m.get(k).orte.push(orte[i].titel);
   }));
   return [...m.values()].sort((a, b) => b.stufe - a.stufe || (a.beginn ?? 0) - (b.beginn ?? 0));
 }
@@ -1928,23 +2106,59 @@ function warnungImZeitraum(wn, von, bis) { return (wn.beginn === null || wn.begi
 
 // ---------- Kleidung ----------
 
-// Stufe nach der niedrigsten gefühlten Temperatur: die erste (wärmste), deren
-// Untergrenze (mit Korrektur) erreicht ist; dazu Regenkleidung nach der Regenwahrscheinlichkeit
+// Teile einer Kleidung ("T-Shirt, warmer Pullover" → ["T-Shirt", "warmer Pullover"])
+function teileVon(text) { return String(text || "").split(",").map(t => t.trim()).filter(Boolean); }
+// Steht das Teil schon in der Kleidung? ("Regenjacke als Windschutz" enthält "Regenjacke")
+function enthaelt(text, teil) { return String(text || "").toLowerCase().includes(teil.toLowerCase()); }
+// Empfehlung in einer Zeile, leere Bereiche weggelassen: "leichte Mütze · Socken"
+function empfehlungText(bereiche) { return BEREICH_SCHLUESSEL.map(b => bereiche[b]).filter(Boolean).join(" · "); }
+
+// Kleidung je Körperbereich nach der niedrigsten gefühlten Temperatur (Stufe:
+// die erste, deren Untergrenze erreicht ist) und der Regenwahrscheinlichkeit
+// (Regenzusatz). Bei Regen gilt das Zwiebelprinzip:
+// - Kopf und Hals wie in der Stufe; Hände ebenso, außer die Stufe nennt
+//   "Hände bei Regen" (gilt, sobald ein Regenzusatz greift).
+// - Oberkörper, Beine, Füße: Kommt Regenzeug dazu, das noch nicht in der
+//   Kleidung der Stufe steht, wird es angehängt. Besteht der Bereich dabei aus
+//   mehreren Teilen, gilt die Kleidung der nächstwärmeren Stufe (eine Schicht
+//   weniger); bei einem Teil und in der wärmsten Stufe bleibt er.
+// - Regenzeug für Kopf, Hals oder Hände wird nur angehängt.
 function kleidungFuer(gefuehlt, wahrscheinlichkeit, k = daten.einstellungen.wetter.kleidung) {
-  let i = k.stufen.findIndex(s => s.ab !== null && gefuehlt >= s.ab + s.korrektur);
+  let i = k.stufen.findIndex(s => s.ab !== null && gefuehlt >= s.ab);
   if (i < 0) i = k.stufen.length - 1;
-  const regen = wahrscheinlichkeit === null ? [] : k.regen.filter(r => wahrscheinlichkeit >= r.ab).map(r => r.text);
-  return { index: i, stufe: k.stufen[i], regen, text: k.stufen[i].text + (regen.length ? " + " + regen.join(", ") : "") };
+  const stufe = k.stufen[i], waermer = i > 0 ? k.stufen[i - 1] : null;
+  const zusaetze = wahrscheinlichkeit === null ? [] : k.regen.filter(r => wahrscheinlichkeit >= r.ab);
+  const mitRegen = zusaetze.length > 0;
+  const bereiche = {}, regenBereiche = [];
+  BEREICH_SCHLUESSEL.forEach(b => {
+    let eigen = stufe.bereiche[b], geaendert = false;
+    if (b === "haende" && mitRegen && stufe.haendeBeiRegen) { eigen = stufe.haendeBeiRegen; geaendert = eigen !== stufe.bereiche[b]; }
+    const neu = [...new Set(zusaetze.flatMap(r => teileVon(r.bereiche[b])))].filter(t => !enthaelt(eigen, t));
+    let text = eigen;
+    if (neu.length) {
+      const basis = ZWIEBEL_BEREICHE.includes(b) && waermer && teileVon(eigen).length > 1 ? waermer.bereiche[b] : eigen;
+      text = teileVon(basis).concat(neu.filter(t => !enthaelt(basis, t))).join(", ");
+      geaendert = true;
+    }
+    bereiche[b] = text;
+    if (geaendert) regenBereiche.push(b);
+  });
+  return { index: i, stufe, mitRegen, bereiche, regenBereiche, text: empfehlungText(bereiche) };
 }
 // Hinweis, wenn die Rückfahrt andere Kleidung braucht als die Hinfahrt, z. B.
-// "Morgens: Handschuhe, Stirnband, Thermojacke; für die Rückfahrt Regenhose einpacken."
+// "Für die Rückfahrt einpacken: Regenhose, Gamaschen; nicht mehr nötig: Schal."
 function kleidungsHinweis(hin, rueck) {
   if (!hin || !rueck) return null;
-  const einpacken = (rueck.index > hin.index ? [rueck.stufe.text] : []).concat(rueck.regen.filter(r => !hin.regen.includes(r)));
+  const dazu = new Set(), weg = new Set();
+  BEREICH_SCHLUESSEL.forEach(b => {
+    const h = hin.bereiche[b], r = rueck.bereiche[b];
+    teileVon(r).filter(t => !enthaelt(h, t)).forEach(t => dazu.add(t));
+    teileVon(h).filter(t => !enthaelt(r, t)).forEach(t => weg.add(t));
+  });
   const teile = [];
-  if (rueck.index < hin.index) teile.push("reicht " + rueck.stufe.text);
-  if (einpacken.length) teile.push(einpacken.join(", ") + " einpacken");
-  return teile.length ? "Morgens: " + hin.text + "; für die Rückfahrt " + teile.join(" und ") + "." : null;
+  if (dazu.size) teile.push("einpacken: " + [...dazu].join(", "));
+  if (weg.size) teile.push("nicht mehr nötig: " + [...weg].join(", "));
+  return teile.length ? "Für die Rückfahrt " + teile.join("; ") + "." : null;
 }
 
 // ---------- Wind relativ zur Strecke ----------
@@ -1956,15 +2170,49 @@ function kursZwischen(a, b) {
   const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lon - a.lon));
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
-// Mittlerer Wind (Richtung, aus der er weht) zerlegt in Gegen- und Seitenanteil zur Fahrtrichtung "kurs"
-function windZurStrecke(proben, kurs) {
+// Entfernung (km, Luftlinie auf der Kugel) zwischen zwei Orten
+function entfernungKm(a, b) {
+  const r = x => x * Math.PI / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lon - a.lon) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// Mittlerer Wind (Richtung, aus der er weht) zerlegt in Gegen- und Seitenanteil
+// zur Fahrtrichtung "kurs" (Seite positiv = von rechts); null ohne Werte
+function windAnteile(proben, kurs) {
   if (!proben.length) return null;
   let gegen = 0, seite = 0, staerke = 0;
   proben.forEach(p => { const d = (p.r - kurs) * Math.PI / 180; gegen += p.v * Math.cos(d); seite += p.v * Math.sin(d); staerke += p.v; });
-  gegen /= proben.length; seite /= proben.length; staerke /= proben.length;
-  if (staerke < WIND_SCHWACH) return { art: "schwach", text: "schwacher Wind (" + kmhText(staerke) + ")" };
-  if (Math.abs(gegen) >= Math.abs(seite)) return gegen > 0 ? { art: "gegen", text: "Gegenwind " + kmhText(gegen) } : { art: "ruecken", text: "Rückenwind " + kmhText(-gegen) };
-  return seite > 0 ? { art: "rechts", text: "Seitenwind von rechts " + kmhText(seite) } : { art: "links", text: "Seitenwind von links " + kmhText(-seite) };
+  return { gegen: gegen / proben.length, seite: seite / proben.length, seiteBetrag: Math.abs(seite / proben.length), staerke: staerke / proben.length };
+}
+// Text zu den Anteilen: Gegen- oder Rückenwind, wenn er überwiegt, sonst
+// Seitenwind; "wechselnd", wenn er auf den Teilstrecken von beiden Seiten kommt
+function windText(w) {
+  if (w.staerke < WIND_SCHWACH) return { art: "schwach", text: "schwacher Wind (" + kmhText(w.staerke) + ")" };
+  if (Math.abs(w.gegen) >= w.seiteBetrag) return w.gegen > 0 ? { art: "gegen", text: "Gegenwind " + kmhText(w.gegen) } : { art: "ruecken", text: "Rückenwind " + kmhText(-w.gegen) };
+  if (Math.abs(w.seite) < w.seiteBetrag / 2) return { art: "wechselnd", text: "Seitenwind wechselnd " + kmhText(w.seiteBetrag) };
+  return w.seite > 0 ? { art: "rechts", text: "Seitenwind von rechts " + kmhText(w.seiteBetrag) } : { art: "links", text: "Seitenwind von links " + kmhText(w.seiteBetrag) };
+}
+// Wind relativ zu einer Fahrtrichtung
+function windZurStrecke(proben, kurs) {
+  const w = windAnteile(proben, kurs);
+  return w && windText(w);
+}
+// Wind auf der Strecke: je Teilstrecke mit ihrer eigenen Fahrtrichtung und dem
+// Wind an ihren beiden Enden, nach Länge gewichtet; nur Teilstrecken, die für
+// den Wind zählen. Die Rückfahrt in umgekehrter Richtung und Reihenfolge.
+// "teile" nennt das Ergebnis je Teilstrecke. Zählt keine: Wind mit Himmelsrichtung.
+function windAufStrecke(windJeOrt, strecken, rueck) {
+  const reihe = rueck ? [...strecken].reverse() : strecken;
+  const teile = reihe.map(t => {
+    const anteile = t.wind && t.laenge > 0 ? windAnteile((windJeOrt[t.a] || []).concat(windJeOrt[t.b] || []), rueck ? t.kursRueck : t.kursHin) : null;
+    return { titel: teilstreckeTitel(t, rueck), zaehlt: t.wind, laenge: t.laenge, anteile, text: anteile ? windText(anteile).text : null };
+  });
+  const mit = teile.filter(x => x.anteile);
+  if (!mit.length) return windAllgemein(windJeOrt.flat());
+  const gesamt = mit.reduce((x, t) => x + t.laenge, 0);
+  const summe = feld => mit.reduce((x, t) => x + t.anteile[feld] * t.laenge / gesamt, 0);
+  return Object.assign(windText({ gegen: summe("gegen"), seite: summe("seite"), seiteBetrag: summe("seiteBetrag"), staerke: summe("staerke") }),
+    { teile: teile.length > 1 ? teile : null });
 }
 const HIMMELSRICHTUNGEN = ["Nord", "Nordost", "Ost", "Südost", "Süd", "Südwest", "West", "Nordwest"];
 // Ohne Strecke (z. B. nur Wohnort): mittlerer Wind mit Himmelsrichtung
@@ -2044,19 +2292,32 @@ function tagesWerte(orteDaten, von, bis) {
   const orte = orteDaten.map(d => ortWerte(d, von, bis));
   if (orte.some(o => !o.temperatur.length)) return null;
   const alle = feld => orte.flatMap(o => o[feld]).map(p => p.v);
+  const gefuehlt = alle("gefuehlt"), wind = orte.flatMap(o => o.wind).map(p => p.v);
   return {
     tmin: Math.min(...alle("temperatur")), tmax: Math.max(...alle("temperatur")),
+    gefuehltMin: gefuehlt.length ? Math.min(...gefuehlt) : null, gefuehltMax: gefuehlt.length ? Math.max(...gefuehlt) : null,
     niederschlag: Math.round(Math.max(...orte.map(o => summeVon(o.niederschlag))) * 10) / 10,
     regenWahrscheinlichkeit: alle("wahrscheinlichkeit").length ? Math.max(...alle("wahrscheinlichkeit")) : null,
+    wind: wind.length ? Math.max(...wind) : null,
     boeen: alle("boeen").length ? Math.max(...alle("boeen")) : 0,
     gewitter: alle("code").some(c => GEWITTER_CODES.includes(c))
   };
 }
-function tagesAnsicht(orteDaten, warnungen, datum, h) {
-  const von = zeitpunktAm(datum, 0), bis = zeitpunktAm(plusTage(datum, 1), 0);
-  return { datum, titel: tagTitel(datum, h), werte: orteDaten ? tagesWerte(orteDaten, von, bis) : null, warnungen: warnungen.filter(wn => warnungImZeitraum(wn, von, bis)) };
+// Tagesverlauf in 3-Stunden-Blöcken von 06 bis 24 Uhr (Blöcke ohne Vorhersage entfallen)
+function tagesVerlauf(orteDaten, datum) {
+  const bloecke = [];
+  for (let stunde = 6; stunde < 24; stunde += 3) {
+    const werte = tagesWerte(orteDaten, zeitpunktAm(datum, stunde * 60), zeitpunktAm(datum, (stunde + 3) * 60));
+    if (werte) bloecke.push({ von: stunde, bis: stunde + 3, werte });
+  }
+  return bloecke;
 }
-function fahrtAnsicht(art, name, kurs, tag, orteDaten, warnungen, jetzt, w) {
+function tagesAnsicht(orteDaten, warnungen, datum, h, mitVerlauf = false) {
+  const von = zeitpunktAm(datum, 0), bis = zeitpunktAm(plusTage(datum, 1), 0);
+  return { datum, titel: tagTitel(datum, h), werte: orteDaten ? tagesWerte(orteDaten, von, bis) : null,
+    verlauf: orteDaten && mitVerlauf ? tagesVerlauf(orteDaten, datum) : [], warnungen: warnungen.filter(wn => warnungImZeitraum(wn, von, bis)) };
+}
+function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w) {
   const f = w[art];
   const von = zeitpunktAm(tag.datum, minutenAus(f.von)), bis = zeitpunktAm(tag.datum, minutenAus(f.bis));
   const a = { art, name, fahrt: f, von, bis, vorbei: tag.heute && jetzt >= bis, bewertung: null, kleidung: null, wind: null, abfahrt: null };
@@ -2064,7 +2325,7 @@ function fahrtAnsicht(art, name, kurs, tag, orteDaten, warnungen, jetzt, w) {
   a.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
   if (!a.bewertung) return a;
   a.kleidung = kleidungFuer(a.bewertung.werte.gefuehlt, a.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
-  a.wind = kurs === null ? windAllgemein(a.bewertung.werte.windProben) : windZurStrecke(a.bewertung.werte.windProben, kurs);
+  a.wind = strecken ? windAufStrecke(a.bewertung.werte.windJeOrt, strecken, art === "rueckfahrt") : windAllgemein(a.bewertung.werte.windProben);
   if (!a.vorbei) a.abfahrt = abfahrtsfenster(orteDaten, warnungen, tag.datum, f, w.ampel, tag.heute ? jetzt : null);
   return a;
 }
@@ -2081,7 +2342,7 @@ function wetterAnsicht(jetzt = Date.now()) {
     vorhersage: quellenStand(v, wetterStatus.fehlerVorhersage, jetzt),
     warnungen: Object.assign(quellenStand(wa, wetterStatus.fehlerWarnungen, jetzt), wa ? {
       quelle: wa.quelle, dwdFehler: wa.dwdFehler || null,
-      gebiete: wa.orte.map((o, i) => ({ rolle: orte[i].rolle, name: orte[i].ort.name, abgedeckt: o.abgedeckt, gebiet: o.gebiet }))
+      gebiete: wa.orte.map((o, i) => ({ rolle: orte[i].rolle, titel: orte[i].titel, name: orte[i].ort.name, abgedeckt: o.abgedeckt, gebiet: o.gebiet }))
     } : {})
   };
   const orteDaten = v ? v.orte : null;
@@ -2096,14 +2357,17 @@ function wetterAnsicht(jetzt = Date.now()) {
   const tagWarnungen = tagesAnsicht(null, warnungen, a.tag.datum, h).warnungen;
   a.warnungen = tagWarnungen;
   if (!a.tag.fahrtag) {
-    // Kein Fahrtag: kurze Übersicht am ersten Ort (Wohnort)
-    a.uebersicht = tagesAnsicht(orteDaten && [orteDaten[0]], warnungen, a.tag.datum, h);
+    // Kein Fahrtag (oder der Fahrtag erst übermorgen und später): Wetter am ersten Ort (Wohnort) mit Tagesverlauf
+    a.uebersicht = tagesAnsicht(orteDaten && [orteDaten[0]], warnungen, a.tag.datum, h, true);
+    a.empfehlungAb = empfehlungAbText(a.tag, h, w);
     return a;
   }
-  const strecke = w.wohnort && w.arbeitsort && ortSchluessel(w.wohnort) !== ortSchluessel(w.arbeitsort);
+  // Wind je Teilstrecke; ohne Strecke (z. B. nur Wohnort) mit Himmelsrichtung
+  const strecken = teilstrecken(w);
+  const mitStrecke = strecken.some(t => t.laenge > 0) ? strecken : null;
   a.fahrten = [
-    fahrtAnsicht("hinfahrt", "Hinfahrt", strecke ? kursZwischen(w.wohnort, w.arbeitsort) : null, a.tag, orteDaten, warnungen, jetzt, w),
-    fahrtAnsicht("rueckfahrt", "Rückfahrt", strecke ? kursZwischen(w.arbeitsort, w.wohnort) : null, a.tag, orteDaten, warnungen, jetzt, w)
+    fahrtAnsicht("hinfahrt", "Hinfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w),
+    fahrtAnsicht("rueckfahrt", "Rückfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w)
   ];
   const [hin, rueck] = a.fahrten;
   a.kleidungsHinweis = !hin.vorbei ? kleidungsHinweis(hin.kleidung, rueck.kleidung) : null;
@@ -2114,8 +2378,8 @@ function wetterAnsicht(jetzt = Date.now()) {
 
 // Bekommt der Eintrag Wetter? Nur Tages-Einträge mit Merkmal "Arbeitsweg" und mehr als 0 km
 function mitWetter(e) { return e.typ === "tag" && e.arbeitsweg && e.km > 0; }
-// Wohn- und Arbeitsort (die Orte der Fahrten zur Arbeit)
-function arbeitswegOrte(w = daten.einstellungen.wetter) { return ["wohnort", "arbeitsort"].filter(r => w[r]).map(r => w[r]); }
+// Wohnort, Wegpunkte und Arbeitsort (die Orte der Fahrten zur Arbeit)
+function arbeitswegOrte(w = daten.einstellungen.wetter) { return streckenOrte(w).map(x => x.ort); }
 // Hin- und Rückfahrt am Tag "datum" aus Vorhersage- oder Rückblickdaten. Die
 // Ampel kommt nur aus den Wetterwerten, ohne amtliche Warnungen (die gibt es
 // im Rückblick nicht). null, wenn keine der Fahrten abgedeckt ist.
@@ -2127,8 +2391,9 @@ function fahrtenWetter(orteDaten, datum, quelle, stand) {
     if (!b) return null;
     const v = b.werte;
     const wind = v.windProben.length ? v.windProben.reduce((x, p) => x + p.v, 0) / v.windProben.length : 0;
+    const kl = kleidungFuer(v.gefuehlt, v.regenWahrscheinlichkeit, w.kleidung);
     return { temperatur: r1(v.temperatur), gefuehlt: r1(v.gefuehlt), niederschlag: v.niederschlag, regenWahrscheinlichkeit: v.regenWahrscheinlichkeit,
-      wind: r1(wind), boeen: r1(v.boeen), ampel: b.farbe, kleidung: kleidungFuer(v.gefuehlt, v.regenWahrscheinlichkeit, w.kleidung).stufe.id, rueckmeldung: null };
+      wind: r1(wind), boeen: r1(v.boeen), ampel: b.farbe, kleidung: kl.stufe.id, empfehlung: Object.assign({}, kl.bereiche), regenkleidung: kl.mitRegen, rueckmeldung: null };
   };
   const hin = fahrt(w.hinfahrt), rueck = fahrt(w.rueckfahrt);
   return hin || rueck ? { quelle, stand: new Date(stand).toISOString(), hin, rueck } : null;
@@ -2392,13 +2657,13 @@ function bildUebersicht() {
 }
 
 // Eingestellte Fahrtage der letzten 14 Tage (und ab der eingestellten Uhrzeit
-// heute) ohne Eintrag, je mit "Nachtragen" und "Keine Fahrt"
+// heute) ohne Eintrag, je mit "Nachtragen" und "Keine Fahrt". Die Überschrift
+// nennt nur die Anzahl, die Tage stehen in den Zeilen (jeder Tag nur einmal).
 function lueckenHinweis(h, minuten) {
   const tage = fehlendeFahrtage(h, minuten);
   if (!tage.length) return "";
   const kurz = d => d === h ? "heute" : wochentag(d) + " " + kurzDatum(d);
-  return '<div class="hinweis info"><strong>' + (tage.length === 1 ? "1 Fahrtag" : tage.length + " Fahrtage") + ' ohne Eintrag:</strong> ' +
-    tage.map(kurz).join(", ") +
+  return '<div class="hinweis info"><strong>' + (tage.length === 1 ? "1 Fahrtag" : tage.length + " Fahrtage") + ' ohne Eintrag</strong>' +
     tage.map(d => '<div class="luecke"><span>' + kurz(d) + '</span>' +
       '<button type="button" data-action="nachtragen" data-datum="' + d + '">Nachtragen</button>' +
       '<button type="button" data-action="keine-fahrt" data-datum="' + d + '">Keine Fahrt</button></div>').join("") +
@@ -2572,10 +2837,13 @@ function eintragWetterHtml(e) {
   const fahrt = (name, art) => {
     const f = w[art];
     if (!f) return '<div class="eintrag-wetter"><strong>' + name + '</strong> <span class="klein">ohne Wetter</span></div>';
+    const rueckmeldung = !f.kleidung ? ""
+      : rueckmeldungAn() ? '<div class="klein">Wie war die Kleidung?</div>' + rueckmeldungKnoepfe(e, art, f, true)
+      : f.rueckmeldung ? '<div class="klein">Rückmeldung: ' + RUECKMELDUNG_TEXT[f.rueckmeldung] + '</div>' : "";
     return '<div class="eintrag-wetter"><div><strong>' + name + '</strong> ' + ampelHtml(f.ampel) + FARBWORT[f.ampel] + '</div>' +
       '<div class="klein">' + gradText(f.temperatur) + ' (gefühlt ' + gradText(f.gefuehlt) + ') · Regen ' +
       (f.regenWahrscheinlichkeit === null ? "" : f.regenWahrscheinlichkeit + ' %, ') + zahl1.format(f.niederschlag) + ' mm · Wind ' + kmhText(f.wind) + ' · Böen ' + kmhText(f.boeen) + '</div>' +
-      (f.kleidung ? '<div>👕 ' + esc(stufeText(f.kleidung)) + '</div><div class="klein">Wie war die Kleidung?</div>' + rueckmeldungKnoepfe(e, art, f, true) : "") + '</div>';
+      (f.kleidung ? '<div>👕 ' + esc(fahrtKleidungText(f)) + '</div>' : "") + rueckmeldung + '</div>';
   };
   return '<h3 style="margin-top:16px">Wetter</h3>' + fahrt("Hinfahrt", "hin") + fahrt("Rückfahrt", "rueck") +
     '<p class="klein">' + (w.quelle === "rueckblick" ? "Aus dem Rückblick" : "Aus der Vorhersage") + ' (Open-Meteo), Stand ' + esc(zeitpunktText(w.stand) || "–") +
@@ -2736,8 +3004,23 @@ function werteText(w) {
     (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm · Böen bis " + kmhText(w.boeen);
 }
 function tageswerteText(t) {
-  return gradText(t.tmin) + " bis " + gradText(t.tmax) + " · Regen " + (t.regenWahrscheinlichkeit === null ? "" : t.regenWahrscheinlichkeit + " %, ") +
-    zahl1.format(t.niederschlag) + " mm · Böen bis " + kmhText(t.boeen) + (t.gewitter ? " · Gewitter möglich" : "");
+  return gradText(t.tmin) + " bis " + gradText(t.tmax) + (t.gefuehltMin === null ? "" : " (gefühlt " + gradText(t.gefuehltMin) + " bis " + gradText(t.gefuehltMax) + ")") +
+    " · Regen " + (t.regenWahrscheinlichkeit === null ? "" : t.regenWahrscheinlichkeit + " %, ") + zahl1.format(t.niederschlag) + " mm · " +
+    (t.wind === null ? "" : "Wind bis " + kmhText(t.wind) + ", ") + "Böen bis " + kmhText(t.boeen) + (t.gewitter ? " · Gewitter möglich" : "");
+}
+// Tagesverlauf als Tabelle: je 3 Stunden Temperatur, gefühlt, Regen, Wind und Böen (höchste Werte)
+function verlaufHtml(bloecke) {
+  if (!bloecke.length) return "";
+  const grad = x => minus(zahl0.format(Math.round(x) || 0));
+  const spanne = (a, b) => grad(a) === grad(b) ? grad(a) : grad(a) + "…" + grad(b);
+  return '<table class="tabelle verlauf" aria-label="Tagesverlauf"><thead><tr><th>Uhr</th><th>°C</th><th>gefühlt</th><th>Regen</th><th>Wind / Böen</th></tr></thead><tbody>' +
+    bloecke.map(x => {
+      const w = x.werte;
+      return '<tr><td>' + zweistellig(x.von) + '–' + zweistellig(x.bis) + '</td><td>' + spanne(w.tmin, w.tmax) + '</td>' +
+        '<td>' + (w.gefuehltMin === null ? "–" : spanne(w.gefuehltMin, w.gefuehltMax)) + '</td>' +
+        '<td>' + (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + ' mm</td>' +
+        '<td>' + (w.wind === null ? "–" : zahl0.format(Math.round(w.wind))) + ' / ' + zahl0.format(Math.round(w.boeen)) + '</td></tr>';
+    }).join("") + '</tbody></table><div class="klein">Temperaturen in °C, Wind und Böen in km/h (höchste Werte je 3 Stunden).</div>';
 }
 // "heute 10:00 – 18:00 Uhr", "heute 18:00 – morgen 03:00 Uhr"
 function zeitraumText(wn, jetzt) {
@@ -2775,11 +3058,12 @@ function bildWetter(jetzt = Date.now()) {
     });
     warnungen = [...new Set([...a.tage[0].warnungen, ...a.tage[1].warnungen])];
   } else {
-    html += '<h2 style="margin-top:8px">' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</h2>';
+    html += '<h2 style="margin-top:8px">' + tagUeberschrift(a.tag.datum, a.tag.titel) + (a.tag.fahrtag ? "" : " – kein Fahrtag") + '</h2>';
     if (!a.tag.fahrtag) {
       const u = a.uebersicht;
-      html += '<div class="karte' + alt + '"><div class="klein">Kein Fahrtag – kurze Übersicht für ' + esc(a.orte[0].ort.name) + '</div>' +
-        (u.werte ? '<div>' + tageswerteText(u.werte) + '</div>' : '<div class="klein">Für diesen Tag liegt noch keine Vorhersage vor.</div>') + '</div>';
+      html += '<div class="karte' + alt + '"><div class="klein">Wetter in ' + esc(a.orte[0].ort.name) + '</div>' +
+        (u.werte ? '<div>' + tageswerteText(u.werte) + '</div>' + verlaufHtml(u.verlauf) : '<div class="klein">Für diesen Tag liegt noch keine Vorhersage vor.</div>') + '</div>' +
+        (a.empfehlungAb ? '<div class="hinweis info">🕔 ' + esc(a.empfehlungAb) + ' (Hin- und Rückfahrt mit Ampel, Kleidung und Wind)</div>' : "");
     } else {
       a.fahrten.forEach(f => { html += fahrtKarte(f, alt); });
       if (a.kleidungsHinweis) html += '<div class="hinweis info">👕 ' + esc(a.kleidungsHinweis) + '</div>';
@@ -2822,12 +3106,19 @@ function fahrtKarte(f, alt) {
   html += '<div class="ampelzeile">' + ampelText(b) + '</div>';
   if (f.vorbei) return html + '</div>';
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
-    '<div style="margin-top:6px">👕 ' + esc(f.kleidung.text) + ' <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' +
-    (f.wind ? '<div>🧭 ' + esc(f.wind.text) + '</div>' : "") +
+    '<div style="margin-top:6px">👕 Kleidung <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' + kleidungBereicheHtml(f.kleidung) +
+    (f.wind ? '<div>🧭 ' + esc(f.wind.text) + '</div>' +
+      (f.wind.teile ? '<div class="klein">' + f.wind.teile.map(t => esc(t.titel) + ": " + (t.zaehlt ? t.text || "–" : "zählt nicht")).join(" · ") + '</div>' : "") : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
   return html + '</div>';
 }
 
+// Kleidung je Körperbereich; leere Bereiche entfallen, wegen Regen angepasste sind markiert
+function kleidungBereicheHtml(kl) {
+  return '<dl class="bereiche">' + BEREICHE.filter(([b]) => kl.bereiche[b]).map(([b, name]) => '<dt>' + name + '</dt><dd>' + esc(kl.bereiche[b]) +
+    (kl.regenBereiche.includes(b) ? ' <span title="wegen Regen angepasst">☔</span>' : "") + '</dd>').join("") + '</dl>' +
+    (kl.regenBereiche.length ? '<div class="klein">☔ wegen Regen angepasst: Regenzeug dazu, bei mehreren Teilen eine Schicht weniger (Zwiebelprinzip)</div>' : "");
+}
 // Zeitleiste der Viertelstunden (Farbe der Ampel), die beste Fahrt umrandet, darunter der Satz zur Abfahrt
 function abfahrtHtml(ab, dauer) {
   const erste = ab.felder[0].minuten, letzte = ab.felder[ab.felder.length - 1].minuten + 15;
@@ -2847,7 +3138,7 @@ function warnungenKarte(liste, a, jetzt) {
   liste.forEach(wn => {
     html += '<div class="warnung stufe-' + wn.stufe + '"><div><strong>' + esc(wn.ereignis) + '</strong> <span class="klein">Stufe ' + wn.stufe +
       (wn.art === "gesundheit" ? " · nur zur Info" : "") + '</span></div>' +
-      '<div class="klein">' + esc(zeitraumText(wn, jetzt)) + (a.orte.length > 1 ? " · " + wn.orte.map(r => ORT_TITEL[r]).join(", ") : "") + '</div>' +
+      '<div class="klein">' + esc(zeitraumText(wn, jetzt)) + (a.orte.length > 1 ? " · " + wn.orte.join(", ") : "") + '</div>' +
       (wn.text ? '<div class="klein">' + esc(wn.text) + '</div>' : "") + '</div>';
   });
   gebiete.filter(x => x.abgedeckt === false).forEach(x => {
@@ -2855,7 +3146,7 @@ function warnungenKarte(liste, a, jetzt) {
   });
   // Warngebiete (Gemeinden des DWD); liegen beide Orte im selben, steht es nur einmal da
   const namen = [...new Set(gebiete.filter(x => x.gebiet).map(x => x.gebiet))];
-  const zellen = namen.map(n => esc(n) + (namen.length > 1 ? " (" + gebiete.filter(x => x.gebiet === n).map(x => ORT_TITEL[x.rolle]).join(", ") + ")" : ""));
+  const zellen = namen.map(n => esc(n) + (namen.length > 1 ? " (" + gebiete.filter(x => x.gebiet === n).map(x => x.titel).join(", ") + ")" : ""));
   return html + '<div class="klein" style="margin-top:8px">Quelle: ' + QUELLEN_NAME[q.quelle] + (zellen.length ? " · Warngebiet " + zellen.join(", ") : "") +
     ' · Stand: ' + standText(q.stand, jetzt) + '</div></div>';
 }
@@ -2883,7 +3174,8 @@ function wetterKachel(jetzt) {
     inhalt = '<div><strong>🌦️ ' + esc(a.orte[0].ort.name) + ', heute</strong></div><div class="klein">' + (t.werte ? tageswerteText(t.werte) : "noch keine Vorhersage") + '</div>';
   } else if (!a.tag.fahrtag) {
     const u = a.uebersicht;
-    inhalt = '<div><strong>🌦️ ' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</strong> · kein Fahrtag</div><div class="klein">' + (u.werte ? tageswerteText(u.werte) : "noch keine Vorhersage") + '</div>';
+    inhalt = '<div><strong>🌦️ ' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</strong> · kein Fahrtag</div><div class="klein">' + (u.werte ? tageswerteText(u.werte) : "noch keine Vorhersage") + '</div>' +
+      (a.empfehlungAb ? '<div class="klein">🕔 ' + esc(a.empfehlungAb) + '</div>' : "");
   } else {
     const offen = a.fahrten.filter(f => !f.vorbei);
     inhalt = '<div><strong>🌦️ ' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</strong></div><div class="kachel-ampeln">' +
@@ -2911,20 +3203,36 @@ function wetterEinstellungen() {
       '<div class="klein">' + (o ? esc(o.name) + " · " + koordinatenText(o) : "nicht festgelegt") + '</div></div>' +
       '<span class="klein" style="padding-right:16px">›</span></button></div>';
   };
+  // Wegpunkte zwischen Wohn- und Arbeitsort, mit ▲/▼ für die Reihenfolge
+  const wegpunktZeile = (o, i) => '<div class="zeile"><button type="button" class="inhalt" data-action="ort-bearbeiten" data-rolle="wegpunkt" data-i="' + i + '">' +
+    '<div class="text"><div>' + wegpunktTitel(i) + '</div><div class="klein">' + esc(o.name) + " · " + koordinatenText(o) + '</div></div></button>' +
+    '<div class="pfeile"><button type="button" class="symbol" data-action="wegpunkt-hoch" data-i="' + i + '" aria-label="Nach oben"' + (i === 0 ? " disabled" : "") + '>▲</button>' +
+    '<button type="button" class="symbol" data-action="wegpunkt-runter" data-i="' + i + '" aria-label="Nach unten"' + (i === w.wegpunkte.length - 1 ? " disabled" : "") + '>▼</button></div></div>';
+  const strecken = teilstrecken(w);
+  const teilstreckenHtml = strecken.length ? '<h3 style="margin-top:16px">Teilstrecken für den Wind</h3><div class="karte">' + strecken.map((t, i) =>
+    '<label class="haken"><input type="checkbox" data-change="teilstrecke-wind" data-i="' + i + '"' + (t.wind ? " checked" : "") + '>' +
+    '<span>' + esc(teilstreckeTitel(t, false)) + '<br><span class="klein">' + zahl1.format(Math.round(t.laenge * 10) / 10) + ' km Luftlinie nach ' +
+    HIMMELSRICHTUNGEN[Math.round(t.kursHin / 45) % 8] + ' · ' + (t.wind ? "zählt für den Wind" : "zählt nicht für den Wind") + '</span></span></label>').join("") +
+    '<div class="feldhinweis">Der Wind wird je Teilstrecke mit ihrer Fahrtrichtung berechnet und nach Länge gewichtet; die Rückfahrt in umgekehrter Richtung. ' +
+    'Nimm z. B. eine Strecke durch ein Wohngebiet heraus.</div></div>' : "";
   const fahrtZeile = (art, titel) => {
     const f = w[art];
     return '<div class="zeile"><button type="button" class="inhalt" data-action="fahrt-bearbeiten" data-art="' + art + '"><div class="text"><div>' + titel + ' ' + f.von + '–' + f.bis + '</div>' +
       '<div class="klein">' + (f.abfahrt ? "übliche Abfahrt " + f.abfahrt : "keine übliche Abfahrt") + " · Dauer " + f.dauer + " min</div></div>" +
       '<span class="klein" style="padding-right:16px">›</span></button></div>';
   };
-  return '<h2>Wetter</h2><div class="liste">' + ["wohnort", "arbeitsort", "weitererOrt"].map(ortZeile).join("") + '</div>' +
+  return '<h2>Wetter</h2><div class="liste">' + ortZeile("wohnort") + w.wegpunkte.map(wegpunktZeile).join("") + ortZeile("arbeitsort") + '</div>' +
+    '<div class="knopfreihe"><button type="button" data-action="wegpunkt-neu"' + (w.wegpunkte.length >= MAX_WEGPUNKTE ? " disabled" : "") + '>+ Wegpunkt</button></div>' +
+    '<div class="feldhinweis">Bis zu ' + MAX_WEGPUNKTE + ' Wegpunkte zwischen Wohn- und Arbeitsort, in Fahrtrichtung der Hinfahrt. Sie zählen für Wind, Temperatur, Regen und Warnungen, ' +
+    'sobald Wohn- und Arbeitsort festgelegt sind.</div>' + teilstreckenHtml +
+    '<div class="liste" style="margin-top:12px">' + ortZeile("weitererOrt") + '</div>' +
     (w.weitererOrt ? '<label class="haken"><input type="checkbox" data-change="weiterer-ort-aktiv"' + (w.weitererOrt.aktiv ? " checked" : "") + '>' +
       '<span>Weiteren Ort zeigen (aktiv)<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter dort, ohne Hin- und Rückfahrt.</span></span></label>' : "") +
     '<div class="liste" style="margin-top:12px">' + fahrtZeile("hinfahrt", "Hinfahrt") + fahrtZeile("rueckfahrt", "Rückfahrt") + '</div>' +
     '<div class="liste" style="margin-top:12px">' + regelZeile("kleidung-bearbeiten", "Kleidung", kleidungKurztext(w.kleidung)) +
     regelZeile("ampel-bearbeiten", "Ampel-Grenzen", ampelKurztext(w.ampel)) + '</div>' +
     '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Nach dem Ende der Rückfahrt zeigt der Reiter Wetter den nächsten Fahrtag. ' +
-    'Koordinaten werden auf 3 Nachkommastellen gerundet (ca. 100 m) und nur so an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) gesendet. ' +
+    'Koordinaten (auch die der Wegpunkte) werden auf 3 Nachkommastellen gerundet (ca. 100 m) und nur so an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) gesendet. ' +
     'Für die Ortssuche geht nur der eingegebene Name an Open-Meteo.</p>';
 }
 
@@ -2933,8 +3241,9 @@ function regelZeile(aktion, titel, text) {
     '<div class="klein">' + esc(text) + '</div></div><span class="klein" style="padding-right:16px">›</span></button></div>';
 }
 function kleidungKurztext(k) {
+  const std = standardKleidung();
   return k.stufen.length + " Stufen · Regenzusatz " + (k.regen.length ? "ab " + k.regen.map(r => r.ab + " %").join(" / ") : "keiner") +
-    (k.stufen.some(s => s.korrektur) ? " · durch Rückmeldungen angepasst" : "") + (gleicherInhalt(k, standardKleidung()) ? " · Standard" : "");
+    " · Rückmeldung " + (k.rueckmeldung ? "an" : "aus") + (gleicherInhalt([k.stufen, k.regen], [std.stufen, std.regen]) ? " · Standard" : "");
 }
 function ampelKurztext(g) {
   return "Böen " + zahlFeld(g.gelbBoeen) + " / " + zahlFeld(g.rotBoeen) + " km/h · Niederschlag " + zahlFeld(g.gelbNiederschlag) + " / " + zahlFeld(g.rotStarkregen) +
@@ -2942,13 +3251,20 @@ function ampelKurztext(g) {
 }
 
 // Zustand des Ort-Formulars; die Koordinaten stehen in den Feldern "Breite" und "Länge"
-let formOrt = null; // { rolle, treffer }
+let formOrt = null; // { rolle, index (nur Wegpunkt; null = neu), treffer }
 
-function ortFormular(rolle) {
-  const o = daten.einstellungen.wetter[rolle];
-  formOrt = { rolle, treffer: [] };
+// Ort des Formulars: Wohnort, Arbeitsort, weiterer Ort oder ein Wegpunkt
+function ortVon(rolle, index) {
+  const w = daten.einstellungen.wetter;
+  return rolle === "wegpunkt" ? (index === null ? null : w.wegpunkte[index] || null) : w[rolle];
+}
+function ortFormular(rolle, index = null) {
+  const o = ortVon(rolle, index);
+  formOrt = { rolle, index, treffer: [] };
   fensterOeffnen(
-    '<h2>' + ORT_TITEL[rolle] + '</h2>' +
+    '<h2>' + (rolle === "wegpunkt" ? (index === null ? "Neuer Wegpunkt" : wegpunktTitel(index)) : ORT_TITEL[rolle]) + '</h2>' +
+    (rolle === "wegpunkt" ? '<p class="klein" style="margin-top:0">Ein Punkt auf deinem Weg zwischen Wohn- und Arbeitsort. Ein neuer Wegpunkt kommt ans Ende, direkt vor den Arbeitsort; ' +
+      'die Reihenfolge änderst du in den Einstellungen mit ▲/▼.</p>' : "") +
     '<label for="o-suche">Ort suchen</label>' +
     '<div class="suchzeile"><input type="search" id="o-suche" enterkeyhint="search" autocomplete="off" placeholder="Name des Orts" data-enter="ort-suchen">' +
     '<button type="button" data-action="ort-suchen">Suchen</button></div>' +
@@ -2966,7 +3282,7 @@ function ortFormular(rolle) {
     'Für die Suche geht nur der eingegebene Name an Open-Meteo.</div>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="ort-speichern">Speichern</button></div>' +
-    (o ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="ort-entfernen">Ort entfernen</button></div>' : "")
+    (o ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="ort-entfernen">' + (rolle === "wegpunkt" ? "Wegpunkt entfernen" : "Ort entfernen") + '</button></div>' : "")
   );
 }
 // Koordinate für ein Eingabefeld: "51,123"
@@ -3027,15 +3343,47 @@ function ortSpeichern() {
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { alert("Die Breite muss zwischen −90 und 90 liegen, die Länge zwischen −180 und 180."); return; }
   if (!name) { alert("Bitte einen Namen für den Ort eingeben."); return; }
   const ort = { name, lat: koordinateRunden(lat), lon: koordinateRunden(lon) };
-  if (formOrt.rolle === "weitererOrt") ort.aktiv = document.getElementById("o-aktiv").checked;
-  daten.einstellungen.wetter[formOrt.rolle] = ort;
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Ort gespeichert"); wetterBeiBedarf(); }
+  const w = daten.einstellungen.wetter;
+  if (formOrt.rolle === "wegpunkt") {
+    if (formOrt.index !== null) w.wegpunkte[formOrt.index] = ort;
+    else {
+      if (w.wegpunkte.length >= MAX_WEGPUNKTE) { alert("Es sind höchstens " + MAX_WEGPUNKTE + " Wegpunkte möglich."); return; }
+      // Neuer Wegpunkt vor dem Arbeitsort: Die letzte Teilstrecke wird geteilt, beide Teile zählen wie bisher
+      w.wegpunkte.push(ort);
+      w.windTeilstrecken.splice(w.windTeilstrecken.length - 1, 0, w.windTeilstrecken[w.windTeilstrecken.length - 1]);
+    }
+  } else {
+    if (formOrt.rolle === "weitererOrt") ort.aktiv = document.getElementById("o-aktiv").checked;
+    w[formOrt.rolle] = ort;
+  }
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung(formOrt.rolle === "wegpunkt" ? "Wegpunkt gespeichert" : "Ort gespeichert"); wetterBeiBedarf(); }
 }
 async function ortEntfernen() {
-  const rolle = formOrt.rolle;
-  if (!await frage(ORT_TITEL[rolle] + " „" + esc(daten.einstellungen.wetter[rolle].name) + "“ wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
-  daten.einstellungen.wetter[rolle] = null;
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Ort entfernt"); wetterBeiBedarf(); }
+  const { rolle, index } = formOrt;
+  const w = daten.einstellungen.wetter, o = ortVon(rolle, index);
+  if (!o) return;
+  const titel = rolle === "wegpunkt" ? wegpunktTitel(index) : ORT_TITEL[rolle];
+  if (!await frage(titel + " „" + esc(o.name) + "“ wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
+  if (rolle === "wegpunkt") {
+    // Die beiden Teilstrecken am Wegpunkt werden eine; sie zählt, wenn eine der beiden zählte
+    w.wegpunkte.splice(index, 1);
+    w.windTeilstrecken.splice(index, 2, w.windTeilstrecken[index] || w.windTeilstrecken[index + 1]);
+  } else w[rolle] = null;
+  if (speichern()) { fensterSchliessen(); zeichnen(); meldung(rolle === "wegpunkt" ? "Wegpunkt entfernt" : "Ort entfernt"); wetterBeiBedarf(); }
+}
+// Reihenfolge der Wegpunkte; die Schalter der Teilstrecken bleiben an ihrer Stelle
+function wegpunktVerschieben(i, richtung) {
+  const wp = daten.einstellungen.wetter.wegpunkte, j = i + richtung;
+  if (j < 0 || j >= wp.length) return;
+  [wp[i], wp[j]] = [wp[j], wp[i]];
+  if (speichern()) { zeichnen(); wetterBeiBedarf(); }
+}
+// Teilstrecke zählt für den Wind (Schalter in den Einstellungen, sofort gespeichert)
+function teilstreckeWind(i, an) {
+  const t = daten.einstellungen.wetter.windTeilstrecken;
+  if (!(i >= 0 && i < t.length)) return;
+  t[i] = an;
+  if (speichern()) { zeichnen(); meldung(an ? "Teilstrecke zählt für den Wind" : "Teilstrecke zählt nicht für den Wind"); }
 }
 // Weiterer Ort an/aus (Einstellungen und Reiter Wetter)
 function weitererOrtAktiv(aktiv) {
@@ -3127,153 +3475,195 @@ async function ampelStandard() {
 
 // ---------- Kleidungsregeln (Einstellungen → Wetter) ----------
 
-// Arbeitskopie des Formulars; Hinzufügen und Entfernen zeichnen es neu
-let formKleidung = null;
-// "+2" bzw. "−1"
-function vorzeichen(n) { return (n > 0 ? "+" : "−") + zahlFeld(Math.abs(n)); }
-// Bereich einer Stufe mit Verschiebung: "ab 20 °C", "7–11 °C", "unter −2 °C"
+// Bereich einer Stufe: "ab 20 °C", "7–11 °C", "unter −6 °C"
 function stufeBereich(k, i) {
   const s = k.stufen[i], oben = k.stufen[i - 1];
-  const grenze = x => zahlFeld(x.ab + x.korrektur);
-  if (s.ab === null) return "unter " + minus(grenze(oben)) + " °C";
-  return oben ? minus(grenze(s)) + "–" + minus(grenze(oben)) + " °C" : "ab " + minus(grenze(s)) + " °C";
+  const grenze = x => minus(zahlFeld(x.ab));
+  if (s.ab === null) return "unter " + grenze(oben) + " °C";
+  return oben ? grenze(s) + "–" + grenze(oben) + " °C" : "ab " + grenze(s) + " °C";
 }
+// Kurztext je Bereich für die Liste: "Oberkörper T-Shirt · Beine kurze Hose"
+function bereicheKurz(bereiche) {
+  return BEREICHE.filter(([b]) => bereiche[b]).map(([b, name]) => name + " " + bereiche[b]).join(" · ");
+}
+// Eingabefelder der sechs Bereiche (in den Einstellungen immer alle)
+function bereichFelder(praefix, bereiche) {
+  return BEREICHE.map(([b, name]) => '<label for="' + praefix + '-' + b + '">' + name + '</label>' +
+    '<input type="text" id="' + praefix + '-' + b + '" autocomplete="off" placeholder="leer = nichts" value="' + esc(bereiche[b]) + '">').join("");
+}
+function bereicheLesen(praefix) {
+  return Object.fromEntries(BEREICH_SCHLUESSEL.map(b => [b, teileVon(wert(praefix + "-" + b)).join(", ")]));
+}
+
+// Übersicht der Kleidungsregeln: Schalter für die Rückmeldung, Stufen mit
+// Auswertung der Rückmeldungen, Regenzusatz. Jede Stufe und jeder Regenzusatz
+// hat ein eigenes Formular; Änderungen werden dort sofort gespeichert.
 function kleidungFormular() {
-  formKleidung = JSON.parse(JSON.stringify(daten.einstellungen.wetter.kleidung));
-  kleidungFormularZeichnen();
-}
-function kleidungFormularZeichnen() {
-  const k = formKleidung, n = k.stufen.length;
-  const stufen = k.stufen.map((s, i) => {
-    const letzte = i === n - 1;
-    return '<div class="regel-zeile">' +
-      '<div class="regel-kopf">' + (letzte ? '<span>darunter</span>'
-        : '<label for="k-ab-' + i + '">ab</label><input type="text" id="k-ab-' + i + '" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '"><span>°C</span>') +
-      (s.korrektur ? '<span class="klein">' + vorzeichen(s.korrektur) + ' °C aus Rückmeldungen, gilt ab ' + minus(zahlFeld(s.ab + s.korrektur)) + ' °C</span>' : "") +
-      (n > 2 ? '<button type="button" class="symbol" data-action="kleidung-stufe-weg" data-i="' + i + '" aria-label="Stufe entfernen">✕</button>' : "") + '</div>' +
-      '<textarea id="k-text-' + i + '" class="kurztext" rows="2" aria-label="Kleidung ' + (letzte ? "darunter" : "ab " + zahlFeld(s.ab) + " °C") + '">' + esc(s.text) + '</textarea>' +
-      '</div>';
-  }).join("");
-  const regen = k.regen.map((r, i) => '<div class="regel-zeile"><div class="regel-kopf">' +
-    '<label for="k-rab-' + i + '">ab</label><input type="text" id="k-rab-' + i + '" class="kurzfeld" inputmode="numeric" autocomplete="off" value="' + zahlFeld(r.ab) + '"><span>%</span>' +
-    '<button type="button" class="symbol" data-action="kleidung-regen-weg" data-i="' + i + '" aria-label="Regenzusatz entfernen">✕</button></div>' +
-    '<input type="text" id="k-rtext-' + i + '" aria-label="Regenkleidung ab ' + zahlFeld(r.ab) + ' %" value="' + esc(r.text) + '"></div>').join("");
+  const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten();
+  const frueher = Object.keys(aus).filter(id => !k.stufen.some(s => s.id === id)).reduce((x, id) => x + aus[id].anzahl, 0);
+  const zeile = (aktion, i, titel, unten) => '<div class="zeile"><button type="button" class="inhalt" data-action="' + aktion + '" data-i="' + i + '">' +
+    '<div class="text"><div>' + titel + '</div>' + unten.map(u => '<div class="klein umbrechen">' + u + '</div>').join("") + '</div>' +
+    '<span class="klein" style="padding-right:16px">›</span></button></div>';
   fensterOeffnen(
-    '<h2>Kleidung</h2><p class="klein" style="margin-top:0">Nach der niedrigsten gefühlten Temperatur der Fahrt, von warm nach kalt. ' +
-    'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Rückmeldungen nach der Fahrt verschieben die Grenzen um je 1 °C (höchstens ±5 °C).</p>' +
-    stufen + '<div class="knopfreihe"><button type="button" data-action="kleidung-stufe-neu">+ Stufe</button></div>' +
-    '<h3 style="margin-top:16px">Regenzusatz</h3><p class="klein" style="margin-top:0">Ab dieser Regenwahrscheinlichkeit kommt die Kleidung dazu.</p>' +
-    regen + '<div class="knopfreihe"><button type="button" data-action="kleidung-regen-neu">+ Regenzusatz</button></div>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
-    '<button type="button" class="primaer" data-action="kleidung-speichern">Speichern</button></div>' +
-    (daten.einstellungen.wetter.kleidung.stufen.some(s => s.korrektur)
-      ? '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-rueckmeldungen-weg">Rückmeldungen zurücksetzen</button></div>' : "") +
+    '<h2>Kleidung</h2>' +
+    '<label class="haken"><input type="checkbox" id="k-rueckmeldung" data-change="kleidung-rueckmeldung"' + (k.rueckmeldung ? " checked" : "") + '>' +
+    '<span>Rückmeldung zur Kleidung<br><span class="klein">Karte „Wie war die Kleidung?“ im Reiter Wetter und die Knöpfe in den Einträgen. ' +
+    'Ausgeschaltet bleiben gegebene Rückmeldungen und die Auswertung erhalten.</span></span></label>' +
+    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach der niedrigsten gefühlten Temperatur der Fahrt, von warm nach kalt. ' +
+    'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
+    '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
+      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen: " + auswertungText(aus[s.id])])).join("") + '</div>' +
+    (frueher ? '<p class="klein">' + (frueher === 1 ? "1 Rückmeldung" : frueher + " Rückmeldungen") + ' zu früheren Stufen (gibt es nicht mehr, werden nicht zugeordnet).</p>' : "") +
+    '<div class="knopfreihe"><button type="button" data-action="kleidung-stufe-neu">+ Stufe</button></div>' +
+    '<h3 style="margin-top:16px">Regenzusatz</h3><p class="klein" style="margin-top:0">Ab dieser Regenwahrscheinlichkeit kommt das Regenzeug in seinem Bereich dazu. ' +
+    'Zwiebelprinzip: In Oberkörper, Beinen und Füßen gilt dann bei mehreren Teilen die Kleidung der nächstwärmeren Stufe (eine Schicht weniger); ' +
+    'steht das Regenzeug schon in der Stufe, bleibt der Bereich, wie er ist. Kopf, Hals und Hände bleiben wie in der Stufe („Hände bei Regen“ je Stufe).</p>' +
+    (k.regen.length ? '<div class="liste">' + k.regen.map((r, i) => zeile("kleidung-regen", i, "ab " + zahlFeld(r.ab) + " %", [esc(bereicheKurz(r.bereiche))])).join("") + '</div>'
+      : '<div class="liste"><div class="leer">Kein Regenzusatz.</div></div>') +
+    '<div class="knopfreihe"><button type="button" data-action="kleidung-regen-neu">+ Regenzusatz</button></div>' +
+    '<div class="knopfreihe"><button type="button" class="primaer" data-action="fenster-zu">Fertig</button></div>' +
     '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>'
   );
 }
-// Eingaben in die Arbeitskopie übernehmen (vor dem Neuzeichnen und Speichern)
-function kleidungFormularLesen() {
-  const k = formKleidung;
-  k.stufen.forEach((s, i) => { if (i < k.stufen.length - 1) s.ab = zahlLesen(wert("k-ab-" + i)); s.text = wert("k-text-" + i); });
-  k.regen.forEach((r, i) => { r.ab = zahlLesen(wert("k-rab-" + i)); r.text = wert("k-rtext-" + i); });
+// Schalter "Rückmeldung zur Kleidung" (sofort gespeichert; Rückmeldungen und Auswertung bleiben)
+function kleidungRueckmeldungSchalten(an) {
+  daten.einstellungen.wetter.kleidung.rueckmeldung = an;
+  if (speichern()) { zeichnen(); meldung(an ? "Rückmeldung zur Kleidung an" : "Rückmeldung zur Kleidung aus – deine Rückmeldungen bleiben gespeichert"); }
 }
-function kleidungStufeNeu() {
-  kleidungFormularLesen();
-  const st = formKleidung.stufen, davor = st[st.length - 2];
-  st.splice(st.length - 1, 0, { id: "s" + neueId(), ab: davor.ab === null ? 0 : davor.ab - 3, korrektur: 0, text: "" });
-  kleidungFormularZeichnen();
+function rueckmeldungAn() { return daten.einstellungen.wetter.kleidung.rueckmeldung; }
+
+// Formular einer Stufe (i = Nummer in der Liste; null = neue Stufe)
+function kleidungStufeFormular(i) {
+  const k = daten.einstellungen.wetter.kleidung, n = k.stufen.length;
+  const neu = i === null, letzte = !neu && i === n - 1;
+  const vorschlag = k.stufen[n - 2].ab - 3;
+  const s = neu ? { ab: vorschlag, bereiche: bereicheAus(), haendeBeiRegen: null } : k.stufen[i];
+  const z = neu ? null : rueckmeldungenAuswerten()[s.id];
+  fensterOeffnen(
+    '<h2>' + (neu ? "Neue Stufe" : "Stufe " + stufeBereich(k, i)) + '</h2>' +
+    (letzte ? '<p class="klein" style="margin-top:0">Die letzte Stufe gilt unterhalb der vorigen (' + stufeBereich(k, i) + ').</p>'
+      : '<label for="ks-ab">Ab gefühlter Temperatur (°C)</label><input type="text" id="ks-ab" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '">' +
+        '<div class="feldhinweis">Ein Grenzwert gehört zu dieser Stufe; die Stufen werden nach ihrer Grenze sortiert.</div>') +
+    bereichFelder("ks", s.bereiche) +
+    '<label for="ks-haende-regen">Hände bei Regen (optional)</label>' +
+    '<input type="text" id="ks-haende-regen" autocomplete="off" placeholder="leer = wie bei Hände" value="' + esc(s.haendeBeiRegen || "") + '">' +
+    '<div class="feldhinweis">Gilt statt „Hände“, sobald ein Regenzusatz greift, z. B. regenfeste Handschuhe. Mehrere Teile mit Komma trennen.</div>' +
+    (z ? '<p class="klein">Rückmeldungen: ' + auswertungText(z) + '</p>' : "") +
+    '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="kleidung-stufe-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +
+    (!neu && n > 2 ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="kleidung-stufe-weg" data-i="' + i + '">Stufe entfernen</button></div>' : "")
+  );
 }
-function kleidungStufeWeg(i) {
-  kleidungFormularLesen();
-  const st = formKleidung.stufen;
-  if (st.length <= 2) return;
-  st.splice(i, 1);
-  // Die neue letzte Stufe gilt "darunter"
-  Object.assign(st[st.length - 1], { ab: null, korrektur: 0 });
-  kleidungFormularZeichnen();
+function kleidungStufeSpeichern(iText) {
+  const k = daten.einstellungen.wetter.kleidung, n = k.stufen.length;
+  const i = iText === "" ? null : Number(iText), letzte = i !== null && i === n - 1;
+  const ab = letzte ? null : zahlLesen(wert("ks-ab"));
+  if (!letzte && ab === null) { alert("Bitte die gefühlte Temperatur eingeben, ab der die Stufe gilt, z. B. 7 oder −2."); return; }
+  const bereiche = bereicheLesen("ks");
+  if (!BEREICH_SCHLUESSEL.some(b => bereiche[b])) { alert("Bitte mindestens einen Bereich ausfüllen (Kopf, Hals, Hände, Oberkörper, Beine oder Füße)."); return; }
+  const andere = k.stufen.filter((s, j) => j !== i);
+  if (!letzte && andere.some(s => s.ab === ab)) { alert("Es gibt schon eine Stufe ab " + minus(zahlFeld(ab)) + " °C."); return; }
+  const stufe = { id: i === null ? "s" + neueId() : k.stufen[i].id, ab, bereiche, haendeBeiRegen: teileVon(wert("ks-haende-regen")).join(", ") || null };
+  // Nach der Grenze sortieren; die Stufe "darunter" bleibt die letzte
+  const darunter = letzte ? stufe : andere.find(s => s.ab === null);
+  const stufen = andere.filter(s => s.ab !== null).concat(letzte ? [] : [stufe]).sort((a, b) => b.ab - a.ab).concat(darunter);
+  if (!kleidungPruefen({ stufen, regen: k.regen, rueckmeldung: k.rueckmeldung })) return;
+  k.stufen = stufen;
+  if (speichern()) { kleidungFormular(); zeichnen(); meldung(i === null ? "Stufe hinzugefügt" : "Stufe gespeichert"); }
 }
-function kleidungRegenNeu() {
-  kleidungFormularLesen();
-  const r = formKleidung.regen;
-  r.push({ ab: r.length ? Math.min(100, r[r.length - 1].ab + 10) : 40, text: "" });
-  kleidungFormularZeichnen();
+async function kleidungStufeWeg(i) {
+  const k = daten.einstellungen.wetter.kleidung;
+  if (k.stufen.length <= 2 || !k.stufen[i]) return;
+  const letzte = i === k.stufen.length - 1;
+  const text = "Stufe „" + esc(stufeBereich(k, i)) + "“ entfernen?" +
+    (letzte ? " Die Stufe " + esc(stufeBereich(k, i - 1)) + " gilt dann darunter." : "");
+  if (!await frage(text, "Entfernen", "Abbrechen", true)) return;
+  mitRueckgaengig(() => {
+    const st = daten.einstellungen.wetter.kleidung.stufen;
+    st.splice(i, 1);
+    st[st.length - 1].ab = null;
+  }, "Stufe entfernt", () => kleidungFormular());
 }
-function kleidungRegenWeg(i) {
-  kleidungFormularLesen();
-  formKleidung.regen.splice(i, 1);
-  kleidungFormularZeichnen();
+
+// Formular eines Regenzusatzes (i = Nummer; null = neu)
+function kleidungRegenFormular(i) {
+  const k = daten.einstellungen.wetter.kleidung, neu = i === null;
+  const r = neu ? { ab: k.regen.length ? Math.min(100, k.regen[k.regen.length - 1].ab + 10) : 40, bereiche: bereicheAus() } : k.regen[i];
+  fensterOeffnen(
+    '<h2>' + (neu ? "Neuer Regenzusatz" : "Regenzusatz ab " + zahlFeld(r.ab) + " %") + '</h2>' +
+    '<label for="kr-ab">Ab Regenwahrscheinlichkeit (%)</label><input type="text" id="kr-ab" class="kurzfeld" inputmode="numeric" autocomplete="off" value="' + zahlFeld(r.ab) + '">' +
+    '<div class="feldhinweis">Das Regenzeug kommt in seinem Bereich dazu (siehe Zwiebelprinzip in der Übersicht).</div>' +
+    bereichFelder("kr", r.bereiche) +
+    '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="kleidung-regen-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +
+    (neu ? "" : '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="kleidung-regen-weg" data-i="' + i + '">Regenzusatz entfernen</button></div>')
+  );
 }
-function kleidungSpeichern() {
-  kleidungFormularLesen();
-  const k = formKleidung, n = k.stufen.length;
-  if (k.stufen.some((s, i) => i < n - 1 && s.ab === null)) { alert("Bitte bei jeder Stufe außer der letzten die Temperatur eingeben, ab der sie gilt, z. B. 7 oder −2."); return; }
-  if (k.stufen.some(s => !s.text.trim())) { alert("Bitte für jede Stufe die Kleidung eingeben."); return; }
-  if (k.regen.some(r => r.ab === null || r.ab < 0 || r.ab > 100)) { alert("Bitte beim Regenzusatz eine Regenwahrscheinlichkeit von 0 bis 100 % eingeben."); return; }
-  if (k.regen.some(r => !r.text.trim())) { alert("Bitte beim Regenzusatz die Kleidung eingeben."); return; }
-  const neu = {
-    stufen: k.stufen.map((s, i) => ({ id: s.id, ab: i === n - 1 ? null : s.ab, korrektur: i === n - 1 ? 0 : s.korrektur, text: s.text.trim() })),
-    regen: k.regen.map(r => ({ ab: r.ab, text: r.text.trim() }))
-  };
-  // Dieselben Regeln wie beim Einlesen einer Sicherung
-  try { wetterPruefen(Object.assign({}, daten.einstellungen.wetter, { kleidung: neu }), msg => { throw new Error(msg); }); }
-  catch (e) { alert("Bitte prüfen: " + e.message.replace(/^Wetter, Kleidung(: |, )/, "")); return; }
-  daten.einstellungen.wetter.kleidung = neu;
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Kleidungsregeln gespeichert"); }
+function kleidungRegenSpeichern(iText) {
+  const k = daten.einstellungen.wetter.kleidung, i = iText === "" ? null : Number(iText);
+  const ab = zahlLesen(wert("kr-ab"));
+  if (ab === null || ab < 0 || ab > 100) { alert("Bitte eine Regenwahrscheinlichkeit von 0 bis 100 % eingeben."); return; }
+  const bereiche = bereicheLesen("kr");
+  if (!BEREICH_SCHLUESSEL.some(b => bereiche[b])) { alert("Bitte das Regenzeug in mindestens einem Bereich eintragen, z. B. Oberkörper „Regenjacke“."); return; }
+  const andere = k.regen.filter((r, j) => j !== i);
+  if (andere.some(r => r.ab === ab)) { alert("Es gibt schon einen Regenzusatz ab " + zahlFeld(ab) + " %. Trage das Regenzeug dort ein."); return; }
+  const regen = andere.concat({ ab, bereiche }).sort((a, b) => a.ab - b.ab);
+  if (!kleidungPruefen({ stufen: k.stufen, regen, rueckmeldung: k.rueckmeldung })) return;
+  k.regen = regen;
+  if (speichern()) { kleidungFormular(); zeichnen(); meldung(i === null ? "Regenzusatz hinzugefügt" : "Regenzusatz gespeichert"); }
+}
+async function kleidungRegenWeg(i) {
+  const k = daten.einstellungen.wetter.kleidung;
+  if (!k.regen[i]) return;
+  if (!await frage("Regenzusatz ab " + zahlFeld(k.regen[i].ab) + " % entfernen?", "Entfernen", "Abbrechen", true)) return;
+  mitRueckgaengig(() => { daten.einstellungen.wetter.kleidung.regen.splice(i, 1); }, "Regenzusatz entfernt", () => kleidungFormular());
+}
+// Dieselben Regeln wie beim Einlesen einer Sicherung
+function kleidungPruefen(neu) {
+  try { wetterPruefen(Object.assign({}, daten.einstellungen.wetter, { kleidung: neu }), msg => { throw new Error(msg); }); return true; }
+  catch (e) { alert("Bitte prüfen: " + e.message.replace(/^Wetter, Kleidung(: |, )/, "")); return false; }
 }
 async function kleidungStandard() {
-  if (!await frage("Kleidungsregeln auf die Standardwerte zurücksetzen? Deine Stufen, Texte und die Verschiebungen aus Rückmeldungen gehen dabei verloren.", "Zurücksetzen", "Abbrechen")) return;
-  mitRueckgaengig(() => { daten.einstellungen.wetter.kleidung = standardKleidung(); }, "Kleidungsregeln zurückgesetzt");
-}
-async function kleidungRueckmeldungenWeg() {
-  if (!await frage("Die Verschiebungen aus Rückmeldungen zurücksetzen? Deine Grenzen und Texte bleiben.", "Zurücksetzen", "Abbrechen")) return;
-  mitRueckgaengig(() => { daten.einstellungen.wetter.kleidung.stufen.forEach(s => { s.korrektur = 0; }); }, "Verschiebungen aus Rückmeldungen zurückgesetzt");
+  if (!await frage("Kleidungsregeln (Stufen und Regenzusatz) auf die Standardwerte zurücksetzen? Deine Rückmeldungen bleiben gespeichert.", "Zurücksetzen", "Abbrechen")) return;
+  mitRueckgaengig(() => {
+    const k = daten.einstellungen.wetter.kleidung, std = standardKleidung();
+    Object.assign(k, { stufen: std.stufen, regen: std.regen });
+  }, "Kleidungsregeln zurückgesetzt", () => kleidungFormular());
 }
 
 // ---------- Rückmeldung nach einer Fahrt ----------
 
-const RUECKMELDUNG_SCHRITT = { "zu-warm": -1, "passte": 0, "zu-kalt": 1 };
 const RUECKMELDUNG_TEXT = { "zu-warm": "zu warm", "passte": "passte", "zu-kalt": "zu kalt" };
-const KORREKTUR_MAX = 5;
-// Verschiebt beide Grenzen der Stufe "id" um "schritt" °C: ihre Untergrenze und
-// die der wärmeren Stufe darüber. "Zu kalt" (+1): wärmere Kleidung gilt schon
-// bei höherer Temperatur. Je Grenze höchstens ±5 °C; ein Schritt, der die
-// Reihenfolge der Grenzen verletzen würde, entfällt. true, wenn etwas verschoben wurde.
-function stufeVerschieben(k, id, schritt) {
-  const i = k.stufen.findIndex(s => s.id === id);
-  if (i < 0 || !schritt) return false;
-  const grenze = s => s.ab + s.korrektur;
-  let verschoben = false;
-  (schritt > 0 ? [i - 1, i] : [i, i - 1]).forEach(j => {
-    const s = k.stufen[j];
-    if (!s || s.ab === null || Math.abs(s.korrektur + schritt) > KORREKTUR_MAX) return;
-    const neu = s.ab + s.korrektur + schritt, oben = k.stufen[j - 1], unten = k.stufen[j + 1];
-    if ((oben && !(neu < grenze(oben))) || (unten && unten.ab !== null && !(neu > grenze(unten)))) return;
-    s.korrektur += schritt;
-    verschoben = true;
-  });
-  return verschoben;
+// Rückmeldungen aus allen Einträgen je Kleidungsstufe (id), getrennt auch die
+// Fahrten mit Regenkleidung: { id: { anzahl, "zu-warm", passte, "zu-kalt", regen: { … } } }
+function rueckmeldungenAuswerten() {
+  const leer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0 });
+  const erg = {};
+  daten.eintraege.forEach(e => e.wetter && ["hin", "rueck"].forEach(art => {
+    const f = e.wetter[art];
+    if (!f || !f.kleidung || !f.rueckmeldung) return;
+    const z = erg[f.kleidung] || (erg[f.kleidung] = Object.assign(leer(), { regen: leer() }));
+    z.anzahl++; z[f.rueckmeldung]++;
+    if (f.regenkleidung) { z.regen.anzahl++; z.regen[f.rueckmeldung]++; }
+  }));
+  return erg;
 }
-// Rückmeldung zu einer Fahrt eines Eintrags (mit "Rückgängig"); ändert sie
-// eine frühere, wird deren Schritt zurückgenommen
+// "3× zu kalt, 1× passte (bei Regen: 1× zu kalt)"
+function auswertungText(z) {
+  if (!z || !z.anzahl) return "noch keine";
+  const teil = x => ["zu-kalt", "passte", "zu-warm"].filter(u => x[u]).map(u => x[u] + "× " + RUECKMELDUNG_TEXT[u]).join(", ");
+  return teil(z) + (z.regen.anzahl ? " (bei Regen: " + teil(z.regen) + ")" : "");
+}
+// Rückmeldung zu einer Fahrt eines Eintrags (mit "Rückgängig"). Sie wird nur
+// gespeichert und ausgewertet; die Grenzen der Stufen bleiben, wie sie sind.
 function rueckmeldungGeben(id, fahrt, urteil, ausDetail) {
   const e = daten.eintraege.find(x => x.id === id);
   const fw = e && e.wetter && e.wetter[fahrt];
-  if (!fw || !(urteil in RUECKMELDUNG_SCHRITT) || fw.rueckmeldung === urteil) return;
-  const k = daten.einstellungen.wetter.kleidung;
-  // Lange Texte an einer Wortgrenze kürzen
-  const kurz = t => t.length > 40 ? t.slice(0, 40).replace(/[\s,]+\S*$/, "") + " …" : t;
-  let text;
-  mitRueckgaengig(() => {
-    const i = k.stufen.findIndex(s => s.id === fw.kleidung);
-    const vorher = i < 0 ? null : stufeBereich(k, i);
-    if (fw.rueckmeldung) stufeVerschieben(k, fw.kleidung, -RUECKMELDUNG_SCHRITT[fw.rueckmeldung]);
-    stufeVerschieben(k, fw.kleidung, RUECKMELDUNG_SCHRITT[urteil]);
-    fw.rueckmeldung = urteil;
-    const nachher = i < 0 ? null : stufeBereich(k, i);
-    text = "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“" + (i < 0 ? " (die Kleidungsstufe gibt es nicht mehr)"
-      : nachher !== vorher ? ": „" + kurz(k.stufen[i].text) + "“ jetzt " + nachher + " (vorher " + vorher + ")"
-      : RUECKMELDUNG_SCHRITT[urteil] ? " (die Grenzen lassen sich nicht weiter verschieben)" : "");
-  }, () => text, ausDetail ? () => { const y = fenster.scrollTop; eintragAnsicht(id); fenster.scrollTop = y; } : null);
+  if (!fw || !(urteil in RUECKMELDUNG_TEXT) || fw.rueckmeldung === urteil) return;
+  mitRueckgaengig(() => { fw.rueckmeldung = urteil; }, () => {
+    const k = daten.einstellungen.wetter.kleidung, i = k.stufen.findIndex(s => s.id === fw.kleidung);
+    return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + (i < 0 ? "" : " · Stufe " + stufeBereich(k, i) + ": " + auswertungText(rueckmeldungenAuswerten()[fw.kleidung]));
+  }, ausDetail ? () => { const y = fenster.scrollTop; eintragAnsicht(id); fenster.scrollTop = y; } : null);
 }
 function rueckmeldungKnoepfe(e, fahrt, fw, ausDetail) {
   return '<div class="rueckmeldung" role="group" aria-label="Kleidung bei der ' + (fahrt === "hin" ? "Hinfahrt" : "Rückfahrt") + '">' +
@@ -3281,12 +3671,19 @@ function rueckmeldungKnoepfe(e, fahrt, fw, ausDetail) {
       (ausDetail ? ' data-detail="1"' : "") + ' aria-pressed="' + (fw.rueckmeldung === u) + '"' + (fw.rueckmeldung === u ? ' class="primaer"' : "") + '>' +
       RUECKMELDUNG_TEXT[u] + '</button>').join("") + '</div>';
 }
+// Kleidung einer Stufe in einer Zeile (für Fahrten ohne festgehaltene Empfehlung)
 function stufeText(id, k = daten.einstellungen.wetter.kleidung) {
   const s = k.stufen.find(x => x.id === id);
-  return s ? s.text : "(Kleidungsstufe gibt es nicht mehr)";
+  return s ? empfehlungText(s.bereiche) : "(Kleidungsstufe gibt es nicht mehr)";
 }
-// Fahrten von heute und den zwei Tagen davor, die vorbei sind und noch keine Rückmeldung haben
+// Die bei einer Fahrt empfohlene Kleidung, wie sie damals empfohlen wurde
+function fahrtKleidungText(fw) {
+  return fw.empfehlung && empfehlungText(fw.empfehlung) ? empfehlungText(fw.empfehlung) : stufeText(fw.kleidung);
+}
+// Fahrten von heute und den zwei Tagen davor, die vorbei sind und noch keine
+// Rückmeldung haben (nur, wenn die Rückmeldung eingeschaltet ist)
 function offeneRueckmeldungen(jetzt) {
+  if (!rueckmeldungAn()) return [];
   const h = isoAusDate(new Date(jetzt)), w = daten.einstellungen.wetter;
   const liste = [];
   daten.eintraege.filter(e => e.wetter && e.datum <= h && e.datum >= plusTage(h, -2))
@@ -3302,9 +3699,9 @@ function rueckmeldungKarte(jetzt) {
   const liste = offeneRueckmeldungen(jetzt);
   if (!liste.length) return "";
   return '<div class="karte" style="margin-top:8px"><h3>Wie war die Kleidung?</h3>' + liste.map(x =>
-    '<div class="klein" style="margin-top:8px">' + tagTitel(x.e.datum, x.h) + ', ' + x.name + ': ' + esc(stufeText(x.fw.kleidung)) + '</div>' +
+    '<div class="klein" style="margin-top:8px">' + tagTitel(x.e.datum, x.h) + ', ' + x.name + ': ' + esc(fahrtKleidungText(x.fw)) + '</div>' +
     rueckmeldungKnoepfe(x.e, x.art, x.fw, false)).join("") +
-    '<div class="feldhinweis">„Zu kalt“ verschiebt die Grenzen dieser Stufe um 1 °C nach oben, „zu warm“ nach unten.</div></div>';
+    '<div class="feldhinweis">Die Auswertung je Stufe steht unter Einstellungen → Wetter → Kleidung. Die Grenzen ändern sich dadurch nicht.</div></div>';
 }
 
 /* ---------- Wartung ---------- */
@@ -3794,12 +4191,12 @@ function wetterStatistik(h) {
     '<button type="button" class="voll" data-action="wetter-nachtragen"' + (offen && !rueckblickLaeuft ? "" : " disabled") + '>' +
     (rueckblickLaeuft ? "Rückblick läuft …" : "Wetter nachtragen …" + (offen ? " (" + offen + ")" : "")) + '</button>' +
     '<p class="klein">Holt für vergangene Fahrten zur Arbeit ohne Wetter oder mit dem Wetter aus der Vorhersage das Wetter aus dem Rückblick von Open-Meteo ' +
-    '(ab 2022, für die aktuellen Wohn- und Arbeitsorte). Vorher fragt die App nach.</p></div>';
+    '(ab 2022, für die aktuellen Wohn- und Arbeitsorte und Wegpunkte). Vorher fragt die App nach.</p></div>';
 }
 
 let rueckblickLaeuft = false;
 // "Wetter nachtragen": Rückblick für vergangene Fahrten zur Arbeit, mit Rückfrage und "Rückgängig".
-// Empfohlene Kleidung und Rückmeldung bleiben (die Verschiebung der Grenzen beruht darauf).
+// Empfohlene Kleidung und Rückmeldung bleiben (die Auswertung der Rückmeldungen beruht darauf).
 async function wetterNachtragen(jetzt = Date.now()) {
   if (rueckblickLaeuft) return;
   const orte = arbeitswegOrte();
@@ -3812,7 +4209,7 @@ async function wetterNachtragen(jetzt = Date.now()) {
   // Datum je Eintrag jetzt merken: wird ein Eintrag während des Abrufs geändert, bleibt er, wie er ist
   const plan = rueckblickAbschnitte(liste).map(ab => ({ von: ab.von, bis: ab.bis, eintraege: ab.eintraege.map(e => ({ id: e.id, datum: e.datum })) }));
   if (!await frage("Für " + (n === 1 ? "1 Fahrtag" : n + " Fahrtage") + " zur Arbeit (" + zeitraum(liste[0].datum, liste[n - 1].datum) + ") " +
-    "das Wetter aus dem Rückblick holen?<br><br>Dazu gehen die gerundeten Koordinaten von Wohn- und Arbeitsort an Open-Meteo. " +
+    "das Wetter aus dem Rückblick holen?<br><br>Dazu gehen die gerundeten Koordinaten von Wohn- und Arbeitsort" + (orte.length > 2 ? " und der Wegpunkte" : "") + " an Open-Meteo. " +
     "Wetter aus der Vorhersage wird ersetzt; empfohlene Kleidung und Rückmeldungen bleiben.", "Wetter nachtragen", "Abbrechen")) return;
   rueckblickLaeuft = true;
   zeichnen();
@@ -3844,7 +4241,7 @@ async function wetterNachtragen(jetzt = Date.now()) {
       ["hin", "rueck"].forEach(art => {
         const alt = e.wetter && e.wetter[art];
         if (alt && !neu[art]) neu[art] = alt;
-        else if (alt && alt.kleidung) Object.assign(neu[art], { kleidung: alt.kleidung, rueckmeldung: alt.rueckmeldung });
+        else if (alt && alt.kleidung) Object.assign(neu[art], { kleidung: alt.kleidung, empfehlung: alt.empfehlung, regenkleidung: alt.regenkleidung, rueckmeldung: alt.rueckmeldung });
       });
       e.wetter = neu;
     });
@@ -4522,7 +4919,10 @@ const AKTIONEN = {
   "statistik-monat": el => { statistikMonat = Number(el.dataset.monat); zeichnen(); },
   "statistik-tabelle": () => { statistikTabelleOffen = !statistikTabelleOffen; zeichnen(); },
 
-  "ort-bearbeiten": el => ortFormular(el.dataset.rolle),
+  "ort-bearbeiten": el => ortFormular(el.dataset.rolle, el.dataset.i === undefined ? null : Number(el.dataset.i)),
+  "wegpunkt-neu": () => ortFormular("wegpunkt", null),
+  "wegpunkt-hoch": el => wegpunktVerschieben(Number(el.dataset.i), -1),
+  "wegpunkt-runter": el => wegpunktVerschieben(Number(el.dataset.i), 1),
   "ort-suchen": () => ortSuchen(),
   "ort-waehlen": el => ortWaehlen(Number(el.dataset.i)),
   "ort-standort": () => ortStandort(),
@@ -4536,13 +4936,15 @@ const AKTIONEN = {
   "ampel-speichern": () => ampelSpeichern(),
   "ampel-standard": () => ampelStandard(),
   "kleidung-bearbeiten": () => kleidungFormular(),
-  "kleidung-stufe-neu": () => kleidungStufeNeu(),
+  "kleidung-stufe": el => kleidungStufeFormular(Number(el.dataset.i)),
+  "kleidung-stufe-neu": () => kleidungStufeFormular(null),
+  "kleidung-stufe-speichern": el => kleidungStufeSpeichern(el.dataset.i),
   "kleidung-stufe-weg": el => kleidungStufeWeg(Number(el.dataset.i)),
-  "kleidung-regen-neu": () => kleidungRegenNeu(),
+  "kleidung-regen": el => kleidungRegenFormular(Number(el.dataset.i)),
+  "kleidung-regen-neu": () => kleidungRegenFormular(null),
+  "kleidung-regen-speichern": el => kleidungRegenSpeichern(el.dataset.i),
   "kleidung-regen-weg": el => kleidungRegenWeg(Number(el.dataset.i)),
-  "kleidung-speichern": () => kleidungSpeichern(),
   "kleidung-standard": () => kleidungStandard(),
-  "kleidung-rueckmeldungen-weg": () => kleidungRueckmeldungenWeg(),
   "rueckmeldung": el => rueckmeldungGeben(el.dataset.id, el.dataset.fahrt, el.dataset.urteil, !!el.dataset.detail),
   "wetter-nachtragen": () => wetterNachtragen(),
 
@@ -4567,6 +4969,8 @@ const AENDERUNGEN = {
   "fahrtag": () => fahrtageGeaendert(),
   "hinweis-heute-ab": el => hinweisHeuteAbGeaendert(el.value),
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),
+  "teilstrecke-wind": el => teilstreckeWind(Number(el.dataset.i), el.checked),
+  "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
