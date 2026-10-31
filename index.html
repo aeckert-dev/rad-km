@@ -258,12 +258,15 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .rueckmeldung { display: flex; gap: 6px; margin: 6px 0 4px; }
 .rueckmeldung button { flex: 1; min-height: 44px; padding: 6px 4px; }
 .eintrag-wetter { border-top: 1px solid var(--linie); padding: 8px 0; }
-/* Kleidung je Körperbereich im Reiter Wetter, Tagesverlauf */
+/* Kleidung je Körperbereich im Reiter Wetter */
 .bereiche { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; }
 .bereiche dt { color: var(--text2); font-size: 15px; }
 .bereiche dd { margin: 0; }
-.tabelle.verlauf { margin-top: 8px; }
-.tabelle.verlauf td:first-child { white-space: nowrap; }
+/* Umschalter "Wohnort / Aktueller Standort" (Wetter außerhalb der Fahrten) */
+.umschalter { display: flex; margin-top: 10px; border: 1px solid var(--linie); border-radius: 12px; overflow: hidden; }
+.umschalter button { flex: 1 1 0; min-height: 44px; border-radius: 0; background: transparent; color: var(--text); font-weight: 500; font-size: 15px; padding: 8px 6px; }
+.umschalter button + button { border-left: 1px solid var(--linie); }
+.umschalter button.aktiv { background: var(--akzent); color: var(--akzent-text); font-weight: 600; }
 input.kurzfeld { max-width: 140px; }
 .verteilung-zeile { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .verteilung-titel { width: 52px; font-size: 15px; }
@@ -1730,6 +1733,13 @@ const GEFRIEREND_CODES = [56, 57, 66, 67];
 const NASS_STUNDEN = 6;
 // Darunter (km/h) gilt der Wind als schwach
 const WIND_SCHWACH = 10;
+// Spontane Runde außerhalb der Fahrten: Abfahrten von jetzt bis so viele Minuten später
+const JETZT_ABFAHRT_MIN = 60;
+// Aktueller Standort: eine Ortung darf so alt sein; neu abgerufen wird das Wetter
+// erst, wenn sich der Standort um mehr als so viele km geändert hat (oder es zu alt ist)
+const STANDORT_ALTER_MS = 5 * MINUTE_MS;
+const STANDORT_NEU_KM = 1;
+const STANDORT_ZEITLIMIT_MS = 15000;
 const WARNSTUFEN = { minor: 1, moderate: 2, severe: 3, extreme: 4 };
 const FARBWORT = { gruen: "grün", gelb: "gelb", rot: "rot" };
 const ORT_TITEL = { wohnort: "Wohnort", arbeitsort: "Arbeitsort", weitererOrt: "Weiterer Ort" };
@@ -1910,10 +1920,12 @@ function wetterSpeicherSchreiben() {
   catch (e) { /* Speicher voll: dann ohne Zwischenspeicher */ }
 }
 
-// Amtliche Warnungen aller Orte: vom DWD, bei einem Fehler von Bright Sky
-async function warnungenLaden(orte) {
+// Amtliche Warnungen aller Orte: vom DWD, bei einem Fehler von Bright Sky.
+// "gebiete" merkt sich je Ort, ob er im Warngebiet liegt (für den aktuellen
+// Standort ein eigener, nicht gespeicherter Speicher).
+async function warnungenLaden(orte, gebiete = wetter.gebiete) {
   try {
-    return { quelle: "dwd", orte: await Promise.all(orte.map(dwdWarnungenOrt)) };
+    return { quelle: "dwd", orte: await Promise.all(orte.map(o => dwdWarnungenOrt(o, gebiete))) };
   } catch (e) {
     try {
       return { quelle: "brightsky", dwdFehler: e.message, orte: await Promise.all(orte.map(brightSkyWarnungenOrt)) };
@@ -1922,18 +1934,18 @@ async function warnungenLaden(orte) {
     }
   }
 }
-async function dwdWarnungenOrt(o) {
+async function dwdWarnungenOrt(o, gebiete = wetter.gebiete) {
   const erg = dwdWarnungenLesen(await jsonAbrufen(dwdUrl("Warnungen_Gemeinden", DWD_FELDER, "THE_GEOM", o)));
   if (erg.abgedeckt) return erg;
   // Keine Warnung: einmal je Ort nachsehen, ob er im Warngebiet des DWD liegt (z. B. Urlaub im Ausland)
   const k = ortSchluessel(o);
-  if (!wetter.gebiete[k]) {
+  if (!gebiete[k]) {
     const g = await jsonAbrufen(dwdUrl("Warngebiete_Gemeinden", ["WARNCELLID", "NAME"], "SHAPE", o));
     if (!Array.isArray(g.features)) throw new Error("unerwartete Antwort");
     const p = g.features.length ? g.features[0].properties || {} : null;
-    wetter.gebiete[k] = { abgedeckt: !!p, gebiet: p && p.NAME ? String(p.NAME) : null };
+    gebiete[k] = { abgedeckt: !!p, gebiet: p && p.NAME ? String(p.NAME) : null };
   }
-  return Object.assign({ warnungen: [] }, wetter.gebiete[k]);
+  return Object.assign({ warnungen: [] }, gebiete[k]);
 }
 async function brightSkyWarnungenOrt(o) {
   try {
@@ -1979,8 +1991,84 @@ function wetterNeuZeichnen() {
   if (!fenster.open && (aktiverTab === "wetter" || aktiverTab === "uebersicht")) zeichnen();
 }
 // Beim Start, beim Wechsel in Übersicht oder Wetter und beim Zurückkehren in die App
-// (im Testmodus nicht: die Tests rufen wetterAktualisieren selbst auf)
-function wetterBeiBedarf() { if (!TESTMODUS) wetterAktualisieren(); }
+// (im Testmodus nicht: die Tests rufen wetterAktualisieren selbst auf). Den Standort
+// nur, wenn die Ansicht "Jetzt" mit dem aktuellen Standort gerade angezeigt wird.
+function wetterBeiBedarf() { if (!TESTMODUS) { wetterAktualisieren(); standortBeiBedarf(); } }
+
+// ---------- Aktueller Standort (Wetter außerhalb der Fahrten) ----------
+
+// Nur im Arbeitsspeicher: weder in den Daten noch im Zwischenspeicher. Die
+// Koordinaten werden sofort auf 3 Nachkommastellen gerundet (so gehen sie an
+// Open-Meteo und den DWD). "abgelehnt": keine Freigabe – dann fragt die App in
+// dieser Sitzung erst beim Umschalten oder bei "Aktualisieren" wieder.
+const standort = {
+  ort: null, zeit: 0, ortung: false, fehler: null, abgelehnt: false,
+  vorhersage: null, warnungen: null, gebiete: {}, laeuft: false, fehlerVorhersage: null, fehlerWarnungen: null
+};
+// Ist gerade die Ansicht "Jetzt" dran (außerhalb der Fahrten, kein weiterer Ort aktiv)?
+function jetztZustand(jetzt = Date.now(), w = daten.einstellungen.wetter) {
+  const orte = wetterOrte(w);
+  return orte.length > 0 && orte[0].rolle !== "weitererOrt" && !wetterTag(jetzt, w).fahrtag;
+}
+// … und wird sie mit dem aktuellen Standort in der Übersicht oder im Reiter Wetter angezeigt?
+function jetztMitStandortSichtbar(jetzt = Date.now()) {
+  return (aktiverTab === "uebersicht" || aktiverTab === "wetter") && daten.einstellungen.wetter.ortAusserhalb === "standort" && jetztZustand(jetzt);
+}
+function standortBeiBedarf(erzwingen = false, jetzt = Date.now()) {
+  return jetztMitStandortSichtbar(jetzt) ? standortBestimmen(erzwingen) : Promise.resolve();
+}
+// Standort über die Geolocation-API bestimmen (das iPhone fragt beim ersten Mal nach
+// der Freigabe) und das Wetter dort laden. Das Promise ist nach Ortung und Laden erfüllt.
+function standortBestimmen(erzwingen = false, jetzt = null) {
+  const zeit = () => jetzt ?? Date.now();
+  if (standort.ortung || (standort.abgelehnt && !erzwingen)) return Promise.resolve();
+  if (!erzwingen && standort.ort && !standort.fehler && zeit() - standort.zeit < STANDORT_ALTER_MS) return standortWetterLaden(false, zeit());
+  const geo = navigator.geolocation;
+  if (!geo) { Object.assign(standort, { fehler: "auf diesem Gerät nicht verfügbar", abgelehnt: false }); wetterNeuZeichnen(); return Promise.resolve(); }
+  standort.ortung = true;
+  wetterNeuZeichnen();
+  return new Promise(fertig => {
+    geo.getCurrentPosition(pos => {
+      const neu = { lat: koordinateSenden(pos.coords.latitude), lon: koordinateSenden(pos.coords.longitude) };
+      // Kaum bewegt: dieselbe Stelle, kein neuer Abruf nötig
+      if (!standort.ort || entfernungKm(standort.ort, neu) > STANDORT_NEU_KM) {
+        Object.assign(standort, { ort: neu, vorhersage: null, warnungen: null, fehlerVorhersage: null, fehlerWarnungen: null });
+      }
+      Object.assign(standort, { ortung: false, fehler: null, abgelehnt: false, zeit: zeit() });
+      standortWetterLaden(erzwingen, zeit()).then(fertig, fertig);
+    }, err => {
+      const code = err && err.code;
+      Object.assign(standort, { ortung: false, fehler: code === 1 ? "nicht freigegeben" : code === 3 ? "Zeitüberschreitung" : "nicht bestimmbar", abgelehnt: code === 1 });
+      wetterNeuZeichnen();
+      fertig();
+    }, { enableHighAccuracy: false, timeout: STANDORT_ZEITLIMIT_MS, maximumAge: STANDORT_ALTER_MS });
+  });
+}
+// Vorhersage und Warnungen am Standort (ein Ort), neu, wenn sie fehlen, zu alt
+// sind oder der letzte Versuch fehlschlug. Der Ortsname kommt aus der Gemeinde des DWD.
+async function standortWetterLaden(erzwingen = false, jetzt = Date.now()) {
+  const o = standort.ort;
+  if (!o || standort.laeuft) return;
+  const schluessel = ortSchluessel(o);
+  const faellig = (teil, fehler, ms) => erzwingen || !!fehler || !teil || teil.schluessel !== schluessel || !(jetzt - teil.stand < ms);
+  const vorhersage = faellig(standort.vorhersage, standort.fehlerVorhersage, VORHERSAGE_NEU_MS);
+  const warnungen = faellig(standort.warnungen, standort.fehlerWarnungen, WARNUNGEN_NEU_MS);
+  if (!vorhersage && !warnungen) { wetterNeuZeichnen(); return; }
+  standort.laeuft = true;
+  wetterNeuZeichnen();
+  await Promise.all([
+    vorhersage && jsonAbrufen(vorhersageUrl([o])).then(a => {
+      standort.vorhersage = { schluessel, stand: jetzt, orte: vorhersageLesen(a, 1) };
+      standort.fehlerVorhersage = null;
+    }).catch(e => { standort.fehlerVorhersage = e.message; }),
+    warnungen && warnungenLaden([o], standort.gebiete).then(w => {
+      standort.warnungen = Object.assign({ schluessel, stand: jetzt }, w);
+      standort.fehlerWarnungen = null;
+    }).catch(e => { standort.fehlerWarnungen = e.message; })
+  ]);
+  standort.laeuft = false;
+  wetterNeuZeichnen();
+}
 
 // ---------- Zeiten ----------
 
@@ -2297,19 +2385,33 @@ function abfahrtKosten(b) {
 // Zeitleiste. Mit üblicher Abfahrt: "Abfahrt 15:45 statt 16:00: …", sonst die
 // beste Abfahrt und die zu meidende Zeit. Heute zählen nur kommende Abfahrten.
 function abfahrtsfenster(orteDaten, warnungen, datum, f, g, jetzt = null) {
-  const von = minutenAus(f.von), bis = minutenAus(f.bis);
+  const von = minutenAus(f.von), bis = minutenAus(f.bis), ab = ueblicheAbfahrt(f);
+  return abfahrtenPruefen(orteDaten, warnungen, datum, g, { erste: von - 30, letzte: bis + 30 - f.dauer, fahrVon: von, fahrBis: bis, dauer: f.dauer,
+    ueblich: ab === null ? null : minutenAus(ab), ueblichJetzt: false, jetzt });
+}
+// Spontane Runde: Abfahrten von der laufenden Viertelstunde ("jetzt", Minuten
+// nach Mitternacht am Tag "datum") bis eine Stunde später, verglichen mit "jetzt",
+// z. B. "Abfahrt 18:30 statt jetzt: trocken, Regen nur bis 18:30"
+function jetztAbfahrtsfenster(orteDaten, warnungen, datum, vonMin, dauer, g) {
+  return abfahrtenPruefen(orteDaten, warnungen, datum, g, { erste: vonMin, letzte: vonMin + JETZT_ABFAHRT_MIN, fahrVon: vonMin, fahrBis: vonMin + dauer, dauer,
+    ueblich: vonMin, ueblichJetzt: true, jetzt: null });
+}
+// Abfahrten "erste" … "letzte" (Minuten nach Mitternacht am Tag "datum") mit der
+// Dauer "dauer"; "fahrVon"/"fahrBis" ist die eigentliche Fahrzeit, "ueblich" die
+// übliche Abfahrt (null = keine). Mit "jetzt" zählen nur kommende Abfahrten.
+function abfahrtenPruefen(orteDaten, warnungen, datum, g, r) {
   const t = m => zeitpunktAm(datum, m);
-  const kommend = m => jetzt === null || t(m) >= jetzt;
-  const bewerten = m => { const b = fahrtBewerten(orteDaten, warnungen, t(m), t(m + f.dauer), g); return b && { minuten: m, bewertung: b, kosten: abfahrtKosten(b) }; };
+  const kommend = m => r.jetzt === null || t(m) >= r.jetzt;
+  const bewerten = m => { const b = fahrtBewerten(orteDaten, warnungen, t(m), t(m + r.dauer), g); return b && { minuten: m, bewertung: b, kosten: abfahrtKosten(b) }; };
   const kandidaten = [];
-  for (let m = von - 30; m <= bis + 30 - f.dauer; m += 15) { if (kommend(m)) { const k = bewerten(m); if (k) kandidaten.push(k); } }
+  for (let m = r.erste; m <= r.letzte; m += 15) { if (kommend(m)) { const k = bewerten(m); if (k) kandidaten.push(k); } }
   if (!kandidaten.length) return null;
   const felder = [];
-  for (let m = von - 30; m < bis + 30; m += 15) {
+  for (let m = r.erste; m < r.letzte + r.dauer; m += 15) {
     const b = fahrtBewerten(orteDaten, warnungen, t(m), t(m + 15), g);
     felder.push({ minuten: m, farbe: b ? b.farbe : null, grund: b && b.gruende.length ? b.gruende[0] : null });
   }
-  const ueblichMin = ueblicheAbfahrt(f) === null ? null : minutenAus(f.abfahrt);
+  const von = r.fahrVon, bis = r.fahrBis, ueblichMin = r.ueblich;
   const ueblich = ueblichMin !== null && kommend(ueblichMin) ? kandidaten.find(k => k.minuten === ueblichMin) || bewerten(ueblichMin) : null;
   const nah = m => Math.abs(m - (ueblichMin ?? von));
   const beste = kandidaten.reduce((x, y) => y.kosten < x.kosten || (y.kosten === x.kosten && nah(y.minuten) < nah(x.minuten)) ? y : x);
@@ -2328,13 +2430,14 @@ function abfahrtsfenster(orteDaten, warnungen, datum, f, g, jetzt = null) {
   let text = null;
   if (ueblich) {
     if (beste.minuten !== ueblich.minuten && beste.kosten < ueblich.kosten) {
-      const ende = beste.minuten + f.dauer;
-      const stoerung = meiden.find(r => r.von < ueblich.minuten + f.dauer && r.bis > ueblich.minuten);
+      const ende = beste.minuten + r.dauer;
+      const stoerung = meiden.find(x => x.von < ueblich.minuten + r.dauer && x.bis > ueblich.minuten);
       const nachher = stoerung && stoerung.grund ? (stoerung.von >= ende ? ", " + stoerung.grund.text + " erst ab " + uhrzeitAus(stoerung.von)
         : stoerung.bis <= beste.minuten ? ", " + stoerung.grund.text + " nur bis " + uhrzeitAus(stoerung.bis) : "") : "";
-      text = "Abfahrt " + uhrzeitAus(beste.minuten) + " statt " + uhrzeitAus(ueblich.minuten) + ": " + zustand(beste) + nachher;
+      text = "Abfahrt " + uhrzeitAus(beste.minuten) + " statt " + (r.ueblichJetzt ? "jetzt" : uhrzeitAus(ueblich.minuten)) + ": " + zustand(beste) + nachher;
     } else if (ueblich.bewertung.farbe !== "gruen") {
-      text = "Keine bessere Abfahrt zwischen " + uhrzeitAus(kandidaten[0].minuten) + " und " + uhrzeitAus(kandidaten[kandidaten.length - 1].minuten) + ".";
+      text = r.ueblichJetzt ? "Keine bessere Abfahrt bis " + uhrzeitAus(kandidaten[kandidaten.length - 1].minuten) + "."
+        : "Keine bessere Abfahrt zwischen " + uhrzeitAus(kandidaten[0].minuten) + " und " + uhrzeitAus(kandidaten[kandidaten.length - 1].minuten) + ".";
     }
   } else {
     text = "Beste Abfahrt " + uhrzeitAus(beste.minuten) + ": " + zustand(beste) +
@@ -2363,19 +2466,9 @@ function tagesWerte(orteDaten, von, bis) {
     gewitter: alle("code").some(c => GEWITTER_CODES.includes(c))
   };
 }
-// Tagesverlauf in 3-Stunden-Blöcken von 06 bis 24 Uhr (Blöcke ohne Vorhersage entfallen)
-function tagesVerlauf(orteDaten, datum) {
-  const bloecke = [];
-  for (let stunde = 6; stunde < 24; stunde += 3) {
-    const werte = tagesWerte(orteDaten, zeitpunktAm(datum, stunde * 60), zeitpunktAm(datum, (stunde + 3) * 60));
-    if (werte) bloecke.push({ von: stunde, bis: stunde + 3, werte });
-  }
-  return bloecke;
-}
-function tagesAnsicht(orteDaten, warnungen, datum, h, mitVerlauf = false) {
+function tagesAnsicht(orteDaten, warnungen, datum, h) {
   const von = zeitpunktAm(datum, 0), bis = zeitpunktAm(plusTage(datum, 1), 0);
-  return { datum, titel: tagTitel(datum, h), werte: orteDaten ? tagesWerte(orteDaten, von, bis) : null,
-    verlauf: orteDaten && mitVerlauf ? tagesVerlauf(orteDaten, datum) : [], warnungen: warnungen.filter(wn => warnungImZeitraum(wn, von, bis)) };
+  return { datum, titel: tagTitel(datum, h), werte: orteDaten ? tagesWerte(orteDaten, von, bis) : null, warnungen: warnungen.filter(wn => warnungImZeitraum(wn, von, bis)) };
 }
 function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w) {
   const f = w[art];
@@ -2417,8 +2510,9 @@ function wetterAnsicht(jetzt = Date.now()) {
   const tagWarnungen = tagesAnsicht(null, warnungen, a.tag.datum, h).warnungen;
   a.warnungen = tagWarnungen;
   if (!a.tag.fahrtag) {
-    // Kein Fahrtag (oder der Fahrtag erst übermorgen und später): Wetter am ersten Ort (Wohnort) mit Tagesverlauf
-    a.uebersicht = tagesAnsicht(orteDaten && [orteDaten[0]], warnungen, a.tag.datum, h, true);
+    // Außerhalb der Fahrten (vom Ende der Rückfahrt am Vortag bis zum Ende der
+    // Rückfahrt am Fahrtag gibt es Hin- und Rückfahrt): eine Fahrt ab jetzt
+    a.jetzt = jetztAnsicht(a, w, v, wa, jetzt, h);
     a.empfehlungAb = empfehlungAbText(a.tag, h, w);
     return a;
   }
@@ -2432,6 +2526,71 @@ function wetterAnsicht(jetzt = Date.now()) {
   const [hin, rueck] = a.fahrten;
   a.kleidungsHinweis = !hin.vorbei ? kleidungsHinweis(hin.kleidung, rueck.kleidung) : null;
   return a;
+}
+
+// Wetter außerhalb der Fahrten ("Jetzt"): eine Fahrt ab der laufenden Viertelstunde
+// mit der Dauer der Hinfahrt, am Wohnort oder am aktuellen Standort (Einstellung
+// "ortAusserhalb"). Ohne Freigabe, Ortung oder Wetter am Standort gilt der Wohnort
+// (ohne Wohnort der erste Ort der Strecke), mit kurzem Hinweis. Die amtlichen
+// Warnungen gelten für den angezeigten Ort, von jetzt bis zum Ende des Tages (bei
+// einer Fahrt über Mitternacht bis zu deren Ende). Setzt a.quellen und a.warnungen.
+function jetztAnsicht(a, w, v, wa, jetzt, h) {
+  const heim = a.orte[0], s = standort;
+  const j = { wahl: w.ortAusserhalb, heimTitel: heim.titel, standort: false, hinweis: null, kurz: null,
+    heute: { datum: h, fahrtag: daten.einstellungen.fahrtage.includes(isoWochentag(h)) } };
+  const sk = s.ort && ortSchluessel(s.ort);
+  const sv = s.vorhersage && s.vorhersage.schluessel === sk ? s.vorhersage : null;
+  const sw = s.warnungen && s.warnungen.schluessel === sk ? s.warnungen : null;
+  let orteDaten, teil;
+  if (w.ortAusserhalb === "standort" && sv && !s.fehler && !s.fehlerVorhersage) {
+    // Ortsname aus der Gemeinde des DWD (Warnzellen-Abfrage); außerhalb Deutschlands oder unbekannt: "Aktueller Standort"
+    const g = sw ? sw.orte[0] : null, gemeinde = g && g.abgedeckt !== false && g.gebiet ? g.gebiet : null;
+    Object.assign(j, { standort: true, ort: { titel: "aktueller Standort", text: gemeinde ? gemeinde + " (aktueller Standort)" : "Aktueller Standort" } });
+    orteDaten = sv.orte;
+    teil = sw;
+    a.quellen = {
+      vorhersage: quellenStand(sv, s.fehlerVorhersage, jetzt),
+      warnungen: Object.assign(quellenStand(sw, s.fehlerWarnungen, jetzt), sw ? {
+        quelle: sw.quelle, dwdFehler: sw.dwdFehler || null, gebiete: [{ rolle: "standort", titel: "aktueller Standort", name: "den aktuellen Standort", abgedeckt: g.abgedeckt, gebiet: g.gebiet }]
+      } : {})
+    };
+  } else {
+    j.ort = { titel: heim.titel, text: heim.ort.name + " (" + heim.titel + ")" };
+    orteDaten = v ? [v.orte[0]] : null;
+    teil = wa;
+    const q = a.quellen.warnungen;
+    if (q.gebiete) a.quellen.warnungen = Object.assign({}, q, { gebiete: q.gebiete.slice(0, 1) });
+    if (w.ortAusserhalb === "standort") {
+      const am = " – angezeigt wird das Wetter am " + heim.titel + ".", bisDahin = " – bis dahin das Wetter am " + heim.titel + ".";
+      const [kurz, lang] = s.ortung ? ["Standort wird bestimmt …", "Standort wird bestimmt …" + bisDahin]
+        : s.fehler ? (s.abgelehnt ? ["Standort nicht freigegeben", "Standort nicht freigegeben" + am] : ["Standort nicht verfügbar", "Standort nicht verfügbar (" + s.fehler + ")" + am])
+        : s.fehlerVorhersage ? ["Wetter am Standort nicht erreichbar", "Wetter am Standort nicht erreichbar (" + s.fehlerVorhersage + ")" + am]
+        : s.laeuft ? ["Wetter am Standort wird geladen …", "Wetter am Standort wird geladen …" + bisDahin]
+        : ["Standort noch nicht bestimmt", "Standort noch nicht bestimmt" + am];
+      Object.assign(j, { kurz, hinweis: lang });
+    }
+  }
+  a.laeuft = wetterStatus.laeuft || (w.ortAusserhalb === "standort" && (s.laeuft || s.ortung));
+  // Nur Warnungen, die noch gelten (die Fahrt beginnt mit der laufenden Viertelstunde)
+  const warnungen = teil ? warnungenZusammen({ orte: [teil.orte[0]] }, [{ titel: j.ort.titel }]).filter(wn => wn.ende === null || wn.ende > jetzt) : [];
+  // Fahrt ab der laufenden Viertelstunde (Minuten nach Mitternacht, Ortszeit), Dauer wie die Hinfahrt
+  const d = new Date(jetzt), dauer = w.hinfahrt.dauer;
+  const vonMin = d.getHours() * 60 + d.getMinutes() - d.getMinutes() % 15;
+  const von = zeitpunktAm(h, vonMin), bis = zeitpunktAm(h, vonMin + dauer);
+  const f = { art: "jetzt", name: "Jetzt", fahrt: { von: uhrzeit(von), bis: uhrzeit(bis), dauer }, von, bis, vorbei: false, bewertung: null, kleidung: null, wind: null, abfahrt: null };
+  if (orteDaten) {
+    f.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
+    if (f.bewertung) {
+      f.kleidung = kleidungFuer(f.bewertung.werte.gefuehlt, f.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
+      // Die Fahrtrichtung ist unbekannt: Wind mit Himmelsrichtung
+      f.wind = windAllgemein(f.bewertung.werte.windProben);
+      f.abfahrt = jetztAbfahrtsfenster(orteDaten, warnungen, h, vonMin, dauer, w.ampel);
+    }
+  }
+  j.fahrt = f;
+  const listeBis = Math.max(zeitpunktAm(plusTage(h, 1), 0), zeitpunktAm(h, vonMin + JETZT_ABFAHRT_MIN + dauer));
+  a.warnungen = warnungen.filter(wn => warnungImZeitraum(wn, jetzt, listeBis));
+  return j;
 }
 
 // ---------- Wetter je Eintrag (nur Arbeitsweg) ----------
@@ -3068,20 +3227,6 @@ function tageswerteText(t) {
     " · Regen " + (t.regenWahrscheinlichkeit === null ? "" : t.regenWahrscheinlichkeit + " %, ") + zahl1.format(t.niederschlag) + " mm · " +
     (t.wind === null ? "" : "Wind bis " + kmhText(t.wind) + ", ") + "Böen bis " + kmhText(t.boeen) + (t.gewitter ? " · Gewitter möglich" : "");
 }
-// Tagesverlauf als Tabelle: je 3 Stunden Temperatur, gefühlt, Regen, Wind und Böen (höchste Werte)
-function verlaufHtml(bloecke) {
-  if (!bloecke.length) return "";
-  const grad = x => minus(zahl0.format(Math.round(x) || 0));
-  const spanne = (a, b) => grad(a) === grad(b) ? grad(a) : grad(a) + "…" + grad(b);
-  return '<table class="tabelle verlauf" aria-label="Tagesverlauf"><thead><tr><th>Uhr</th><th>°C</th><th>gefühlt</th><th>Regen</th><th>Wind / Böen</th></tr></thead><tbody>' +
-    bloecke.map(x => {
-      const w = x.werte;
-      return '<tr><td>' + zweistellig(x.von) + '–' + zweistellig(x.bis) + '</td><td>' + spanne(w.tmin, w.tmax) + '</td>' +
-        '<td>' + (w.gefuehltMin === null ? "–" : spanne(w.gefuehltMin, w.gefuehltMax)) + '</td>' +
-        '<td>' + (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + ' mm</td>' +
-        '<td>' + (w.wind === null ? "–" : zahl0.format(Math.round(w.wind))) + ' / ' + zahl0.format(Math.round(w.boeen)) + '</td></tr>';
-    }).join("") + '</tbody></table><div class="klein">Temperaturen in °C, Wind und Böen in km/h (höchste Werte je 3 Stunden).</div>';
-}
 // "heute 10:00 – 18:00 Uhr", "heute 18:00 – morgen 03:00 Uhr"
 function zeitraumText(wn, jetzt) {
   const h = isoAusDate(new Date(jetzt));
@@ -3118,13 +3263,16 @@ function bildWetter(jetzt = Date.now()) {
     });
     warnungen = [...new Set([...a.tage[0].warnungen, ...a.tage[1].warnungen])];
   } else {
-    html += '<h2 style="margin-top:8px">' + tagUeberschrift(a.tag.datum, a.tag.titel) + (a.tag.fahrtag ? "" : " – kein Fahrtag") + '</h2>';
-    if (!a.tag.fahrtag) {
-      const u = a.uebersicht;
-      html += '<div class="karte' + alt + '"><div class="klein">Wetter in ' + esc(a.orte[0].ort.name) + '</div>' +
-        (u.werte ? '<div>' + tageswerteText(u.werte) + '</div>' + verlaufHtml(u.verlauf) : '<div class="klein">Für diesen Tag liegt noch keine Vorhersage vor.</div>') + '</div>' +
+    if (a.jetzt) {
+      // Außerhalb der Fahrten: heute, eine Fahrt ab jetzt am Wohnort oder am aktuellen Standort
+      const j = a.jetzt;
+      html += '<h2 style="margin-top:8px">' + tagUeberschrift(j.heute.datum, "Heute") + (j.heute.fahrtag ? "" : " – kein Fahrtag") + '</h2>' +
+        '<div class="karte"><div><strong>📍 ' + esc(j.ort.text) + '</strong></div>' + ortAusserhalbUmschalter(j.wahl, j.heimTitel) + '</div>' +
+        (j.hinweis ? '<div class="hinweis warn">' + esc(j.hinweis) + '</div>' : "") +
+        fahrtKarte(j.fahrt, alt) +
         (a.empfehlungAb ? '<div class="hinweis info">🕔 ' + esc(a.empfehlungAb) + ' (Hin- und Rückfahrt mit Ampel, Kleidung und Wind)</div>' : "");
     } else {
+      html += '<h2 style="margin-top:8px">' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</h2>';
       a.fahrten.forEach(f => { html += fahrtKarte(f, alt); });
       if (a.kleidungsHinweis) html += '<div class="hinweis info">👕 ' + esc(a.kleidungsHinweis) + '</div>';
     }
@@ -3156,6 +3304,13 @@ function wetterHinweise(a, jetzt) {
       'Die Warnungen kommen deshalb über <strong>Bright Sky</strong> (Ersatzquelle mit den Daten des DWD).</div>';
   }
   return html;
+}
+
+// Umschalter "Wohnort / Aktueller Standort" für das Wetter außerhalb der Fahrten (ein Tipp speichert die Einstellung)
+function ortAusserhalbUmschalter(wahl, heimTitel = ORT_TITEL.wohnort) {
+  const knopf = (wert, text) => '<button type="button" data-action="ort-ausserhalb" data-wert="' + wert + '" aria-pressed="' + (wahl === wert) + '"' +
+    (wahl === wert ? ' class="aktiv"' : "") + '>' + text + '</button>';
+  return '<div class="umschalter" role="group" aria-label="Wetter außerhalb der Fahrten">' + knopf("wohnort", heimTitel) + knopf("standort", "Aktueller Standort") + '</div>';
 }
 
 function fahrtKarte(f, alt) {
@@ -3198,7 +3353,7 @@ function warnungenKarte(liste, a, jetzt) {
   liste.forEach(wn => {
     html += '<div class="warnung stufe-' + wn.stufe + '"><div><strong>' + esc(wn.ereignis) + '</strong> <span class="klein">Stufe ' + wn.stufe +
       (wn.art === "gesundheit" ? " · nur zur Info" : "") + '</span></div>' +
-      '<div class="klein">' + esc(zeitraumText(wn, jetzt)) + (a.orte.length > 1 ? " · " + wn.orte.join(", ") : "") + '</div>' +
+      '<div class="klein">' + esc(zeitraumText(wn, jetzt)) + (a.orte.length > 1 && !a.jetzt ? " · " + wn.orte.join(", ") : "") + '</div>' +
       (wn.text ? '<div class="klein">' + esc(wn.text) + '</div>' : "") + '</div>';
   });
   gebiete.filter(x => x.abgedeckt === false).forEach(x => {
@@ -3232,9 +3387,12 @@ function wetterKachel(jetzt) {
   } else if (a.weitererOrt) {
     const t = a.tage[0];
     inhalt = '<div><strong>🌦️ ' + esc(a.orte[0].ort.name) + ', heute</strong></div><div class="klein">' + (t.werte ? tageswerteText(t.werte) : "noch keine Vorhersage") + '</div>';
-  } else if (!a.tag.fahrtag) {
-    const u = a.uebersicht;
-    inhalt = '<div><strong>🌦️ ' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</strong> · kein Fahrtag</div><div class="klein">' + (u.werte ? tageswerteText(u.werte) : "noch keine Vorhersage") + '</div>' +
+  } else if (a.jetzt) {
+    // Außerhalb der Fahrten: nur Ort und Ampel für eine Fahrt ab jetzt, keine weiteren Werte
+    const j = a.jetzt, b = j.fahrt.bewertung;
+    inhalt = '<div><strong>🌦️ Jetzt · ' + esc(j.ort.text) + '</strong></div>' +
+      '<div>' + (b ? ampelText(b) : '<span class="klein">' + (a.laeuft ? "Wird geladen …" : "Noch keine Vorhersage") + '</span>') + '</div>' +
+      (j.kurz ? '<div class="klein status-orange">📍 ' + esc(j.kurz) + '</div>' : "") +
       (a.empfehlungAb ? '<div class="klein">🕔 ' + esc(a.empfehlungAb) + '</div>' : "");
   } else {
     const offen = a.fahrten.filter(f => !f.vorbei);
@@ -3288,10 +3446,14 @@ function wetterEinstellungen() {
     '<div class="liste" style="margin-top:12px">' + ortZeile("weitererOrt") + '</div>' +
     (w.weitererOrt ? '<label class="haken"><input type="checkbox" data-change="weiterer-ort-aktiv"' + (w.weitererOrt.aktiv ? " checked" : "") + '>' +
       '<span>Weiteren Ort zeigen (aktiv)<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter dort, ohne Hin- und Rückfahrt.</span></span></label>' : "") +
+    '<h3 style="margin-top:16px">Wetter außerhalb der Fahrten</h3>' + ortAusserhalbUmschalter(w.ortAusserhalb) +
+    '<div class="feldhinweis">Zu allen Zeiten ohne Hin- und Rückfahrt zeigen Übersicht und Reiter Wetter die Ampel für eine Fahrt ab jetzt (Dauer wie die Hinfahrt): ' +
+    'am Wohnort oder am aktuellen Standort des iPhones. Der Standort wird nur bestimmt, während diese Ansicht angezeigt wird; seine Koordinaten gehen auf 3 Nachkommastellen ' +
+    'gerundet an Open-Meteo und den Deutschen Wetterdienst und werden nicht gespeichert. Ohne Freigabe, Ortung oder Netz gilt der Wohnort.</div>' +
     '<div class="liste" style="margin-top:12px">' + fahrtZeile("hinfahrt", "Hinfahrt") + fahrtZeile("rueckfahrt", "Rückfahrt") + '</div>' +
     '<div class="liste" style="margin-top:12px">' + regelZeile("kleidung-bearbeiten", "Kleidung", kleidungKurztext(w.kleidung)) +
     regelZeile("ampel-bearbeiten", "Ampel-Grenzen", ampelKurztext(w.ampel)) + '</div>' +
-    '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Nach dem Ende der Rückfahrt zeigt der Reiter Wetter den nächsten Fahrtag. ' +
+    '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Hin- und Rückfahrt eines Fahrtags zeigt der Reiter Wetter ab dem Ende der Rückfahrt am Vortag. ' +
     'Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) ' +
     'gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
     'Für die Ortssuche geht nur der eingegebene Name an Open-Meteo.</p>';
@@ -3462,6 +3624,20 @@ function teilstreckeWind(i, an) {
   if (!(i >= 0 && i < t.length)) return;
   t[i] = an;
   if (speichern()) { zeichnen(); meldung(an ? "Teilstrecke zählt für den Wind" : "Teilstrecke zählt nicht für den Wind"); }
+}
+// Wetter außerhalb der Fahrten: Wohnort oder aktueller Standort (Reiter Wetter und
+// Einstellungen). Im Reiter Wetter und auf der Übersicht wird der Standort sofort
+// bestimmt (auch erneut, wenn er schon gewählt ist, z. B. nach einer Ablehnung).
+function ortAusserhalbSetzen(wahl) {
+  const w = daten.einstellungen.wetter;
+  if (!ORT_AUSSERHALB.includes(wahl)) return Promise.resolve();
+  if (w.ortAusserhalb !== wahl) {
+    w.ortAusserhalb = wahl;
+    if (!speichern()) return Promise.resolve();
+    meldung(wahl === "standort" ? "Wetter außerhalb der Fahrten: aktueller Standort" : "Wetter außerhalb der Fahrten: Wohnort");
+  }
+  zeichnen();
+  return wahl === "standort" ? standortBeiBedarf(true) : Promise.resolve();
 }
 // Weiterer Ort an/aus (Einstellungen und Reiter Wetter)
 function weitererOrtAktiv(aktiv) {
@@ -5027,7 +5203,8 @@ const AKTIONEN = {
   "weiterer-ort-aus": () => weitererOrtAktiv(false),
   "fahrt-bearbeiten": el => fahrtFormular(el.dataset.art),
   "fahrt-speichern": () => fahrtSpeichern(),
-  "wetter-aktualisieren": () => wetterAktualisieren(true),
+  "wetter-aktualisieren": () => { wetterAktualisieren(true); standortBeiBedarf(true); },
+  "ort-ausserhalb": el => ortAusserhalbSetzen(el.dataset.wert),
   "ampel-bearbeiten": () => ampelFormular(),
   "ampel-speichern": () => ampelSpeichern(),
   "ampel-standard": () => ampelStandard(),

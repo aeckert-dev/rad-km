@@ -3,8 +3,9 @@
 // Spielt in einem echten Browser (Chromium über Playwright) durch, was auf dem
 // iPhone passiert: erster Start, Start ohne Netz, Veröffentlichung einer neuen
 // Version, Hinweis "Neue Version verfügbar", "Neu laden", Wetter mit und ohne
-// Netz – und prüft dabei jedes Mal, dass die Daten im localStorage unverändert
-// bleiben. Die Wetterdienste antworten mit den Aufzeichnungen aus tests/.
+// Netz, die Ansicht "Jetzt" am aktuellen Standort (mit und ohne Netz) – und
+// prüft dabei jedes Mal, dass die Daten im localStorage unverändert bleiben.
+// Die Wetterdienste antworten mit den Aufzeichnungen aus tests/.
 //
 // Aufruf (benötigt Node.js und Playwright):  node tests/offline-update-test.js
 //
@@ -167,7 +168,8 @@ const BEISPIEL = JSON.stringify({
       const u = route.request().url();
       wetterAbrufe.push(u);
       if (!wetterNetz) return route.abort("internetdisconnected");
-      const antwort = u.includes("open-meteo") ? om : u.includes("Warngebiete") ? aufnahme("wetter-dwd-gebiet.json") : aufnahme("wetter-dwd-leer.json");
+      // Ein Ort (aktueller Standort): die Antwort ist ein Objekt statt einer Liste
+      const antwort = u.includes("open-meteo") ? (/latitude=[^&,]+&/.test(u) ? om[0] : om) : u.includes("Warngebiete") ? aufnahme("wetter-dwd-gebiet.json") : aufnahme("wetter-dwd-leer.json");
       return route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(antwort) });
     });
     const MIT_ORTEN = JSON.stringify(Object.assign(JSON.parse(BEISPIEL), { version: 4, einstellungen: { fahrtage: [1, 2, 3, 4, 5, 6, 7], jahresziele: [],
@@ -203,6 +205,44 @@ const BEISPIEL = JSON.stringify({
       wetterText.includes("nicht aktuell") && wetterText.includes("Amtliche Warnungen nicht erreichbar"), wetterText.slice(0, 500));
     pruefe("… die Kachel auf der Übersicht ebenso", await page.evaluate(() => { aktiverTab = "uebersicht"; zeichnen(); return document.querySelector(".wetter-kachel").textContent.includes("Nicht aktuell"); }));
     pruefe("… die Daten der App bleiben unverändert", (await daten()) === d1);
+    await serverStarten(port);
+
+    // 8. Außerhalb der Fahrten am aktuellen Standort (ohne Fahrtage immer „Jetzt“):
+    //    beim Start geortet, Wetter dort geladen, nichts davon gespeichert; ohne Netz
+    //    der Wohnort mit Hinweis. Die Daten der App bleiben unverändert.
+    wetterNetz = true;
+    wetterAbrufe.length = 0;
+    await context.grantPermissions(["geolocation"], { origin: "http://127.0.0.1:" + port });
+    await context.setGeolocation({ latitude: 52.012345, longitude: 8.765432 });
+    const MIT_STANDORT = JSON.stringify(Object.assign(JSON.parse(BEISPIEL), { version: 7, einstellungen: { fahrtage: [], jahresziele: [],
+      wetter: { wohnort: { name: "Musterdorf", lat: 51, lon: 10 }, arbeitsort: { name: "Beispielstadt", lat: 51.1, lon: 10.2 }, ortAusserhalb: "standort" } } }));
+    await page.evaluate(d => { localStorage.setItem("radkm-daten", d); localStorage.removeItem("radkm-wetter"); }, MIT_STANDORT);
+    await page.reload();
+    await page.waitForFunction(() => /\(aktueller Standort\)/.test((document.querySelector(".wetter-kachel") || {}).textContent || ""), null, { timeout: 15000 }).catch(() => {});
+    await nachAntwort();
+    const kachelS = await kachel();
+    const standortAbruf = wetterAbrufe.find(u => u.includes("open-meteo") && /latitude=[^&,]+&/.test(u)) || "";
+    pruefe("Standort beim Start bestimmt (nur in der Ansicht „Jetzt“): Kachel „Jetzt · Gemeinde Musterdorf (aktueller Standort)“ mit Ampel",
+      kachelS.includes("Jetzt · Gemeinde Musterdorf (aktueller Standort)") && /grün|gelb|rot/.test(kachelS), kachelS);
+    pruefe("… an Open-Meteo nur die auf 3 Nachkommastellen gerundeten Koordinaten", standortAbruf.includes("latitude=52.012&longitude=8.765&"), standortAbruf);
+    const gespeichertS = await page.evaluate(() => (localStorage.getItem("radkm-daten") || "") + (localStorage.getItem("radkm-wetter") || ""));
+    // Gesucht werden die gerundeten Koordinaten in jeder Schreibweise (als Schlüssel, als Zahl, mit Komma)
+    const spuren = ["52.012", "52,012", "8.765", "8,765", "52.0123", "8.7654"].filter(x => gespeichertS.includes(x));
+    pruefe("… Koordinaten des Standorts weder in den Daten noch im Wetter-Zwischenspeicher", spuren.length === 0, "gefunden: " + spuren.join(", "));
+    pruefe("… die Daten der App bleiben unverändert", (await daten()) === MIT_STANDORT);
+    wetterNetz = false;
+    await serverStoppen();
+    await page.reload();
+    await page.waitForFunction(() => /Wetter am Standort nicht erreichbar/.test((document.querySelector(".wetter-kachel") || {}).textContent || ""), null, { timeout: 15000 }).catch(() => {});
+    const kachelO = await kachel();
+    pruefe("Ohne Netz: der Wohnort mit dem gespeicherten Wetter und kurzem Hinweis",
+      kachelO.includes("Jetzt · Musterdorf (Wohnort)") && kachelO.includes("Wetter am Standort nicht erreichbar") && /grün|gelb|rot/.test(kachelO), kachelO);
+    await page.click('nav [data-tab="wetter"]');
+    await nachAntwort();
+    const wetterO = await page.textContent("#inhalt");
+    pruefe("… ebenso im Reiter Wetter", wetterO.includes("📍 Musterdorf (Wohnort)") && wetterO.includes("Wetter am Standort nicht erreichbar (keine Verbindung) – angezeigt wird das Wetter am Wohnort."),
+      wetterO.slice(0, 500));
+    pruefe("… die Daten der App bleiben unverändert", (await daten()) === MIT_STANDORT);
     await serverStarten(port);
     pruefe("Keine Fehler in der Seite", seitenFehler.length === 0, seitenFehler.join("; "));
   } catch (e) {
