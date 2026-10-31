@@ -2744,6 +2744,52 @@ async function start() {
         einstText.includes("Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m).")],
       [true, true, true]);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+
+    // -------------------------------------------------------------
+    // 49. „In Karten zeigen“ (W12)
+    // -------------------------------------------------------------
+    abschnitt("49. „In Karten zeigen“ im Formular jedes Orts und Wegpunkts (W12): Apple Karten erst beim Antippen");
+    const ECKE_UND = { name: "Ecke & Brücke", lat: 51.0305, lon: 10.0705 };
+    wetterDaten({ wegpunkte: [ECKE_UND], windTeilstrecken: [true, true], weitererOrt: { name: "Ferienort", lat: -33.8688, lon: -70.6693, aktiv: false } });
+    netz();
+    const kartenLink = () => { const a = w.document.getElementById("o-karte"); return a && [a.tagName, a.getAttribute("href"), a.target, a.rel, a.getAttribute("aria-disabled"), a.textContent]; };
+    const kartenLinks = [["wohnort"], ["arbeitsort"], ["weitererOrt"], ["wegpunkt", 0]].map(([rolle, i]) => { w.ortFormular(rolle, i ?? null); const k = kartenLink(); w.fensterSchliessen(); return k; });
+    gleich("Wohnort, Arbeitsort, weiterer Ort, Wegpunkt: Link zu Apple Karten mit Koordinaten (4 Stellen) und Name als Markierung, in neuem Fenster", kartenLinks, [
+      ["A", "https://maps.apple.com/?ll=51.0000,10.0000&q=Musterdorf", "_blank", "noopener noreferrer", null, "🗺️ In Karten zeigen"],
+      ["A", "https://maps.apple.com/?ll=51.1000,10.2000&q=Beispielstadt", "_blank", "noopener noreferrer", null, "🗺️ In Karten zeigen"],
+      ["A", "https://maps.apple.com/?ll=-33.8688,-70.6693&q=Ferienort", "_blank", "noopener noreferrer", null, "🗺️ In Karten zeigen"],
+      ["A", "https://maps.apple.com/?ll=51.0305,10.0705&q=Ecke%20%26%20Br%C3%BCcke", "_blank", "noopener noreferrer", null, "🗺️ In Karten zeigen"]]);
+    w.ortFormular("arbeitsort");
+    const eingeben = (id, text) => { const el = feld(id); el.value = text; el.dispatchEvent(new w.Event("input", { bubbles: true })); };
+    eingeben("o-lat", "51,123456");
+    eingeben("o-name", "Neue Stelle");
+    gleich("Der Link folgt den Feldern (vor dem Speichern prüfbar, auf 4 Stellen gerundet)", kartenLink()[1], "https://maps.apple.com/?ll=51.1235,10.2000&q=Neue%20Stelle");
+    eingeben("o-lat", "");
+    gleich("Ohne gültige Koordinaten gesperrt (kein Ziel)", [kartenLink()[1], kartenLink()[4]], [null, "true"]);
+    eingeben("o-lat", "91");
+    gleich("Breite über 90: gesperrt", kartenLink()[4], "true");
+    gleich("Gespeichert wird dabei nichts", w.eval("daten.einstellungen.wetter.arbeitsort"), BEISPIELSTADT);
+    w.fensterSchliessen();
+    w.ortFormular("wegpunkt", null);
+    const neuGesperrt = kartenLink()[4];
+    eingeben("o-lat", "51,05"); eingeben("o-lon", "10,1");
+    gleich("Neuer Wegpunkt: erst gesperrt, mit Koordinaten ohne Namen die Bezeichnung „Neuer Wegpunkt“ als Markierung", [neuGesperrt, kartenLink()[1]],
+      ["true", "https://maps.apple.com/?ll=51.0500,10.1000&q=Neuer%20Wegpunkt"]);
+    const hinweisKarte = ohneTags(w.document.getElementById("fensterinhalt").innerHTML);
+    w.fensterSchliessen();
+    netz(["geocoding", fx["wetter-ortssuche"]]);
+    w.ortFormular("wohnort");
+    feld("o-suche").value = "Musterdorf";
+    await w.ortSuchen();
+    w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]')[1].click();
+    gleich("Nach der Wahl eines Suchtreffers zeigt der Link den Treffer", kartenLink()[1], "https://maps.apple.com/?ll=52.3367,11.6644&q=Musterdorf%20am%20See");
+    gleich("Beim Anzeigen und Ändern geht nichts ins Netz (nur die Ortssuche fragt Open-Meteo)", abrufe.map(u => new URL(u).host), ["geocoding-api.open-meteo.com"]);
+    w.fensterSchliessen();
+    wahr("Hinweis im Formular: erst beim Antippen gehen Koordinaten und Name an Apple",
+      hinweisKarte.includes("„In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple."), hinweisKarte);
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    gleich("Nur im Formular: in der Liste der Einstellungen kein Karten-Knopf", w.document.querySelectorAll('#inhalt a[href*="maps.apple.com"], #inhalt #o-karte').length, 0);
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

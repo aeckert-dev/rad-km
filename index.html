@@ -151,7 +151,12 @@ button.voll { width: 100%; }
 button:active { opacity: .7; }
 button:disabled { opacity: .4; }
 .knopfreihe { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.knopfreihe > button { flex: 1 1 auto; }
+.knopfreihe > button, .knopfreihe > .knopf { flex: 1 1 auto; }
+/* Link, der wie eine Schaltfläche aussieht ("In Karten zeigen") */
+a.knopf { display: flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; text-align: center; }
+a.knopf.voll { width: 100%; }
+a.knopf:active { opacity: .7; }
+a.knopf[aria-disabled="true"] { opacity: .4; pointer-events: none; }
 
 /* Vorlagen-Schnellerfassung */
 .schnell { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1704,6 +1709,8 @@ const ORTSSUCHE_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const DWD_URL = "https://maps.dwd.de/geoserver/dwd/ows";
 const BRIGHT_SKY_URL = "https://api.brightsky.dev/alerts";
 const RUECKBLICK_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast";
+// Apple Karten: nur beim Antippen von "In Karten zeigen", keine eingebettete Karte
+const KARTEN_URL = "https://maps.apple.com/";
 // Der Rückblick reicht etwa bis 2022 zurück; abgefragt wird in Abschnitten von höchstens so vielen Tagen
 const RUECKBLICK_AB = "2022-01-01";
 const RUECKBLICK_TAGE = 31;
@@ -1781,6 +1788,11 @@ function dwdUrl(ebene, felder, geometrie, o) {
     "&propertyName=" + felder.join(",") + "&CQL_FILTER=" + encodeURIComponent("CONTAINS(" + geometrie + ",POINT(" + koordinate(o.lat) + " " + koordinate(o.lon) + "))");
 }
 function brightSkyUrl(o) { return BRIGHT_SKY_URL + "?lat=" + koordinate(o.lat) + "&lon=" + koordinate(o.lon); }
+// Apple Karten an dieser Stelle: Koordinaten mit 4 Nachkommastellen, der Name als
+// Beschriftung der Markierung (q gilt als Beschriftung, wenn ll gesetzt ist)
+function kartenUrl(o) {
+  return KARTEN_URL + "?ll=" + koordinateSpeichern(o.lat).toFixed(4) + "," + koordinateSpeichern(o.lon).toFixed(4) + "&q=" + encodeURIComponent(o.name);
+}
 function ortssucheUrl(text) { return ORTSSUCHE_URL + "?name=" + encodeURIComponent(text) + "&count=8&language=de&format=json"; }
 
 // Holt JSON. Wirft einen Fehler mit kurzer Begründung (keine Verbindung, Zeitüberschreitung, Fehler 503 …).
@@ -3309,9 +3321,10 @@ function ortVon(rolle, index) {
 }
 function ortFormular(rolle, index = null) {
   const o = ortVon(rolle, index);
-  formOrt = { rolle, index, treffer: [] };
+  const titel = rolle === "wegpunkt" ? (index === null ? "Neuer Wegpunkt" : wegpunktTitel(index)) : ORT_TITEL[rolle];
+  formOrt = { rolle, index, treffer: [], titel };
   fensterOeffnen(
-    '<h2>' + (rolle === "wegpunkt" ? (index === null ? "Neuer Wegpunkt" : wegpunktTitel(index)) : ORT_TITEL[rolle]) + '</h2>' +
+    '<h2>' + titel + '</h2>' +
     (rolle === "wegpunkt" ? '<p class="klein" style="margin-top:0">Ein Punkt auf deinem Weg zwischen Wohn- und Arbeitsort. Ein neuer Wegpunkt kommt ans Ende, direkt vor den Arbeitsort; ' +
       'die Reihenfolge änderst du in den Einstellungen mit ▲/▼.</p>' : "") +
     '<label for="o-suche">Ort suchen</label>' +
@@ -3321,18 +3334,35 @@ function ortFormular(rolle, index = null) {
     '<div class="knopfreihe"><button type="button" class="voll" data-action="ort-standort">📍 Aktueller Standort</button></div>' +
     '<label for="o-lat">Koordinaten (Breite und Länge in Grad)</label>' +
     // Ohne Zifferntastatur: auf dem iPhone fehlt dort das Minus (Süd und West)
-    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" value="' + (o ? koordinateFeld(o.lat) : "") + '">' +
-    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" value="' + (o ? koordinateFeld(o.lon) : "") + '"></div>' +
+    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" data-input="ort-karte" value="' + (o ? koordinateFeld(o.lat) : "") + '">' +
+    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" data-input="ort-karte" value="' + (o ? koordinateFeld(o.lon) : "") + '"></div>' +
     '<div class="feldhinweis" id="o-gewaehlt">Aus der Suche, vom Standort oder direkt eingeben (Komma oder Punkt, Süd und West mit Minus).</div>' +
-    '<label for="o-name">Name (zur Anzeige)</label><input type="text" id="o-name" value="' + esc(o ? o.name : "") + '">' +
+    // Öffnet Apple Karten mit den Werten in den Feldern (auch vor dem Speichern); vorher geht nichts an Apple
+    '<div class="knopfreihe"><a class="knopf voll" id="o-karte" target="_blank" rel="noopener noreferrer">🗺️ In Karten zeigen</a></div>' +
+    '<label for="o-name">Name (zur Anzeige)</label><input type="text" id="o-name" data-input="ort-karte" value="' + esc(o ? o.name : "") + '">' +
     (rolle === "weitererOrt" ? '<label class="haken"><input type="checkbox" id="o-aktiv"' + (o && o.aktiv ? " checked" : "") + '>' +
       '<span>Aktiv<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter an diesem Ort (ohne Hin- und Rückfahrt).</span></span></label>' : "") +
     '<div class="feldhinweis">Gespeichert werden die Koordinaten mit 4 Nachkommastellen (ca. 10 m); an die Wetterdienste gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
-    'Für die Suche geht nur der eingegebene Name an Open-Meteo.</div>' +
+    'Für die Suche geht nur der eingegebene Name an Open-Meteo. „In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple.</div>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="ort-speichern">Speichern</button></div>' +
     (o ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="ort-entfernen">' + (rolle === "wegpunkt" ? "Wegpunkt entfernen" : "Ort entfernen") + '</button></div>' : "")
   );
+  ortKarteAktualisieren();
+}
+// "In Karten zeigen" folgt den Feldern; ohne gültige Koordinaten ist der Knopf gesperrt.
+// Ohne Namen trägt die Markierung die Bezeichnung des Orts (z. B. "Wohnort").
+function ortKarteAktualisieren() {
+  const a = document.getElementById("o-karte");
+  if (!a || !formOrt) return;
+  const lat = zahlLesen(wert("o-lat")), lon = zahlLesen(wert("o-lon"));
+  if (lat !== null && lon !== null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+    a.href = kartenUrl({ name: wert("o-name").trim() || formOrt.titel, lat, lon });
+    a.removeAttribute("aria-disabled");
+  } else {
+    a.removeAttribute("href");
+    a.setAttribute("aria-disabled", "true");
+  }
 }
 function ortGewaehltAnzeigen(text) {
   const el = document.getElementById("o-gewaehlt");
@@ -3343,6 +3373,7 @@ function ortKoordinatenSetzen(lat, lon, text) {
   document.getElementById("o-lat").value = koordinateFeld(lat);
   document.getElementById("o-lon").value = koordinateFeld(lon);
   ortGewaehltAnzeigen(text);
+  ortKarteAktualisieren();
 }
 async function ortSuchen() {
   const text = wert("o-suche").trim();
@@ -5041,6 +5072,7 @@ const AENDERUNGEN = {
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
+  "ort-karte": () => ortKarteAktualisieren(),
   "protokoll-km": () => protokollKmEingabe(),
   "prognose-datum": () => prognoseAnzeigen()
 };
