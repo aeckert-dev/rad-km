@@ -2237,7 +2237,7 @@ function fahrtBewerten(orteDaten, warnungen, von, bis, g = daten.einstellungen.w
   const farbe = gruende.some(x => x.farbe === "rot") ? "rot" : gruende.length ? "gelb" : "gruen";
   // Rote Gründe zuerst, sonst in der Reihenfolge oben (Warnungen, Gewitter, Glätte, Böen, Regen, …)
   gruende.sort((a, b) => (a.farbe === "rot" ? 0 : 1) - (b.farbe === "rot" ? 0 : 1));
-  // Grün: Böen stehen in der Detailzeile; in der Begründung nur, wenn sie Gelb oder Rot auslösen
+  // Grün: Böen stehen in der Zeile zum Wind; in der Begründung nur, wenn sie Gelb oder Rot auslösen
   const ruhig = werte.niederschlag > 0 ? "kaum Regen" : "trocken";
   return { farbe, gruende, werte, text: FARBWORT[farbe] + ": " + (gruende.length ? gruende.slice(0, 3).map(grundText).join(", ") : ruhig) };
 }
@@ -3238,9 +3238,10 @@ function ampelText(b) {
 }
 // "Heute, Di 27.10." bzw. "Mo 02.11."
 function tagUeberschrift(datum, titel) { return titel === "Heute" || titel === "Morgen" ? titel + ", " + wochentag(datum) + " " + kurzDatum(datum) : titel; }
+// Werte einer Fahrt (ohne Böen, die stehen in der Zeile zum Wind)
 function werteText(w) {
   return gradText(w.temperatur) + " (gefühlt " + gradText(w.gefuehlt) + ") · Regen " +
-    (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm · Böen bis " + kmhText(w.boeen);
+    (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm";
 }
 function tageswerteText(t) {
   return gradText(t.tmin) + " bis " + gradText(t.tmax) + (t.gefuehltMin === null ? "" : " (gefühlt " + gradText(t.gefuehltMin) + " bis " + gradText(t.gefuehltMax) + ")") +
@@ -3456,7 +3457,8 @@ function wetterEinstellungen() {
     '<label class="haken"><input type="checkbox" data-change="teilstrecke-wind" data-i="' + i + '"' + (t.wind ? " checked" : "") + '>' +
     '<span>' + esc(teilstreckeTitel(t, false)) + '<br><span class="klein">' + zahl1.format(Math.round(t.laenge * 10) / 10) + ' km Luftlinie nach ' +
     HIMMELSRICHTUNGEN[Math.round(t.kursHin / 45) % 8] + ' · ' + (t.wind ? "zählt für den Wind" : "zählt nicht für den Wind") + '</span></span></label>').join("") +
-    '<div class="feldhinweis">Der Wind wird je Teilstrecke mit ihrer Fahrtrichtung berechnet und nach Länge gewichtet; die Rückfahrt in umgekehrter Richtung. ' +
+    '<div class="feldhinweis">Der Reiter Wetter zeigt je Teilstrecke, die zählt, eine Zeile mit dem Wind relativ zu ihrer Fahrtrichtung (z. B. Gegenwind); ' +
+    'die Rückfahrt in umgekehrter Reihenfolge und Richtung. ' +
     'Nimm z. B. eine Strecke durch ein Wohngebiet heraus.</div></div>' : "";
   const fahrtZeile = (art, titel) => {
     const f = w[art];
