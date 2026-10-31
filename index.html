@@ -2337,7 +2337,8 @@ const WIND_ABSCHNITTE = [
   [157.5, "schräg von hinten links", "schräg von hinten rechts"],
   [180, "Rückenwind", "Rückenwind"]
 ];
-// Winkel auf 1/1000 Grad gerundet (damit die Grenzen eindeutig sind), 0 ≤ x < 360
+// Winkel auf 1/1000 Grad gerundet (damit die Grenzen trotz Rechenungenauigkeit
+// eindeutig sind), 0 ≤ x < 360
 const winkelRunden = x => (Math.round(x * 1000) / 1000 % 360 + 360) % 360;
 // Mittlerer Wind: Geschwindigkeit (Mittel der Werte) und Richtung, aus der er weht
 // (Grad, 0 = Nord, Mittel der Windvektoren); null ohne Werte
@@ -2345,7 +2346,7 @@ function windMittel(proben) {
   if (!proben.length) return null;
   let x = 0, y = 0, summe = 0;
   proben.forEach(p => { x += p.v * Math.sin(p.r * Math.PI / 180); y += p.v * Math.cos(p.r * Math.PI / 180); summe += p.v; });
-  return { kmh: summe / proben.length, grad: winkelRunden(Math.atan2(x, y) * 180 / Math.PI) };
+  return { kmh: summe / proben.length, grad: (Math.atan2(x, y) * 180 / Math.PI + 360) % 360 };
 }
 // Der angezeigte (gerundete) Wert entscheidet: 0 = windstill, unter WIND_SCHWACH schwach
 function windStaerke(kmh) {
@@ -2386,7 +2387,7 @@ function windJeTeilstrecke(windJeOrt, strecken, rueck) {
 function windAllgemein(proben, boeen) {
   const m = windMittel(proben);
   if (!m) return null;
-  const s = windStaerke(m.kmh), richtung = HIMMELSRICHTUNGEN[Math.round(m.grad / 45) % 8];
+  const s = windStaerke(m.kmh), richtung = HIMMELSRICHTUNGEN[Math.round(winkelRunden(m.grad) / 45) % 8];
   return Object.assign(s, { grad: m.grad, richtung, boeen, teile: [],
     text: (s.windstill ? "Windstill" : "Wind " + kmhText(m.kmh) + " aus " + richtung + (s.schwach ? " (schwach)" : "")) + ", Böen bis " + kmhText(boeen) });
 }
