@@ -1148,9 +1148,9 @@ async function start() {
     gleich("Alle Felder (Orte, Wegpunkte mit Teilstrecken, Fahrzeiten ohne übliche Abfahrt mit Uhrzeit, Wetter außerhalb der Fahrten am Standort, Ampel, Kleidung je Bereich mit „Hände bei Regen“, " +
       "Rückmeldung aus, Hinweis ab 17:30, Wetter je Eintrag mit Empfehlung): Import → Export → Import verlustfrei",
       [v5rund.einstellungen, v5rund.eintraege[0].wetter], [v5.einstellungen, v5.eintraege[0].wetter]);
-    gleich("Koordinaten werden beim Einlesen auf 3 Nachkommastellen gerundet (ca. 100 m)",
+    gleich("Koordinaten werden beim Einlesen auf 4 Nachkommastellen gerundet (ca. 10 m, W11)",
       w.datenEinlesen(JSON.stringify(Object.assign(kopie(v5), { einstellungen: { wetter: { wohnort: { name: " Musterdorf ", lat: 51.123456, lon: 10.987654 } } } }))).einstellungen.wetter.wohnort,
-      { name: "Musterdorf", lat: 51.123, lon: 10.988 });
+      { name: "Musterdorf", lat: 51.1235, lon: 10.9877 });
     gleich("Fehlende Teile der Wetter-Einstellungen bekommen die Standardwerte",
       kopie(w.datenEinlesen(JSON.stringify(Object.assign(kopie(v5), { einstellungen: { wetter: { wohnort: MUSTERDORF, rueckfahrt: { abfahrtAn: false } } } }))).einstellungen.wetter),
       Object.assign(kopie(STD_WETTER), { wohnort: MUSTERDORF, rueckfahrt: { von: "16:00", bis: "17:00", abfahrtAn: false, abfahrt: "16:00", dauer: 60 } }));
@@ -1203,7 +1203,7 @@ async function start() {
     gleich("Wegpunkte gerundet; fehlen die Teilstrecken, zählen alle",
       [kopie(w.datenEinlesen(mitWetter({ wegpunkte: [{ name: " Brücke ", lat: 51.03049, lon: 10.07051 }], windTeilstrecken: undefined })).einstellungen.wetter).wegpunkte,
         kopie(w.datenEinlesen(mitWetter({ wegpunkte: [BRUECKE, ORTSMITTE], windTeilstrecken: undefined })).einstellungen.wetter).windTeilstrecken],
-      [[{ name: "Brücke", lat: 51.03, lon: 10.071 }], [true, true, true]]);
+      [[{ name: "Brücke", lat: 51.0305, lon: 10.0705 }], [true, true, true]]);
     wirft("Wetter je Eintrag: Empfehlung muss ein Objekt sein",
       () => w.datenEinlesen(mitEintragWetter({ hin: Object.assign(kopie(v5.eintraege[0].wetter.hin), { empfehlung: "Jacke" }) })), "„empfehlung“ muss ein Objekt sein");
     wirft("Wetter je Eintrag: regenkleidung muss true oder false sein",
@@ -1268,10 +1268,10 @@ async function start() {
     const testUndAufhebung = dwdMit(["STURMBÖEN", "Moderate", 0, 1, { STATUS: "Test" }], ["GEWITTER", "Minor", 0, 1, { MSGTYPE: "Cancel" }], ["NEBEL", "Minor", 0, 1, { CATEGORY: "Health" }]);
     gleich("DWD: Test- und Aufhebungsmeldungen werden nicht übernommen; Kategorie „Health“ nur zur Info",
       w.dwdWarnungenLesen(testUndAufhebung).warnungen.map(x => [x.ereignis, x.art]), [["NEBEL", "gesundheit"]]);
-    gleichInhalt("Ortssuche: Treffer mit Bundesland und Land, Koordinaten sofort gerundet", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche"])), [
-      { name: "Musterdorf", zusatz: "Beispielland, Deutschland", lat: 51.004, lon: 10.005 },
-      { name: "Musterdorf am See", zusatz: "Beispielland, Deutschland", lat: 52.337, lon: 11.664 },
-      { name: "Musterdorf", zusatz: "Beispielbundesland, Österreich", lat: 47.123, lon: 13.988 }]);
+    gleichInhalt("Ortssuche: Treffer mit Bundesland und Land, Koordinaten sofort auf 4 Nachkommastellen gerundet", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche"])), [
+      { name: "Musterdorf", zusatz: "Beispielland, Deutschland", lat: 51.0043, lon: 10.005 },
+      { name: "Musterdorf am See", zusatz: "Beispielland, Deutschland", lat: 52.3367, lon: 11.6644 },
+      { name: "Musterdorf", zusatz: "Beispielbundesland, Österreich", lat: 47.1235, lon: 13.9877 }]);
     gleich("Ortssuche ohne Treffer (Antwort ohne „results“)", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche-leer"])), []);
     // Die aufgezeichnete Vorhersage selbst auswerten (unabhängig von der Zeitzone nur Plausibles)
     wetterDaten();
@@ -1639,9 +1639,9 @@ async function start() {
     // -------------------------------------------------------------
     // 33. Datenschutz: nur gerundete Koordinaten
     // -------------------------------------------------------------
-    abschnitt("33. Datenschutz: Orte nur gerundet speichern und senden");
+    abschnitt("33. Datenschutz: Orte mit 4 Nachkommastellen speichern, nur auf 3 gerundet senden (W11)");
     wetterDaten({ wohnort: { name: "Musterdorf", lat: 51.004987, lon: 10.004321 } });
-    gleich("Koordinaten beim Einlesen auf 3 Nachkommastellen gerundet", w.eval("daten.einstellungen.wetter.wohnort"), { name: "Musterdorf", lat: 51.005, lon: 10.004 });
+    gleich("Koordinaten beim Einlesen auf 4 Nachkommastellen gerundet", w.eval("daten.einstellungen.wetter.wohnort"), { name: "Musterdorf", lat: 51.005, lon: 10.0043 });
     netz(["open-meteo", ruhig()], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
     wetterLeeren();
     await w.wetterAktualisieren(true, ABEND);
@@ -1665,9 +1665,9 @@ async function start() {
     w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]')[1].click();
     gleich("Treffer gewählt: Name und gerundete Koordinaten in die Felder übernommen",
       ["o-name", "o-lat", "o-lon", "o-gewaehlt"].map(id => { const el = w.document.getElementById(id); return id === "o-gewaehlt" ? el.textContent : el.value; }),
-      ["Musterdorf am See", "52,337", "11,664", "Übernommen aus der Suche: Musterdorf am See, Beispielland, Deutschland."]);
+      ["Musterdorf am See", "52,3367", "11,6644", "Übernommen aus der Suche: Musterdorf am See, Beispielland, Deutschland."]);
     w.ortSpeichern();
-    gleich("Gespeichert wird nur gerundet", w.eval("daten.einstellungen.wetter.wohnort"), { name: "Musterdorf am See", lat: 52.337, lon: 11.664 });
+    gleich("Gespeichert wird auf 4 Nachkommastellen gerundet", w.eval("daten.einstellungen.wetter.wohnort"), { name: "Musterdorf am See", lat: 52.3367, lon: 11.6644 });
     netz(["geocoding", fx["wetter-ortssuche-leer"]]);
     w.ortFormular("arbeitsort");
     w.document.getElementById("o-suche").value = "Nirgendwo";
@@ -1686,8 +1686,8 @@ async function start() {
       w.ortStandort();
       w.document.getElementById("o-aktiv").checked = true;
       w.ortSpeichern();
-      gleich("„Aktueller Standort“ (Standortabfrage durch Platzhalter ersetzt): gerundet, Name vorgeschlagen, aktiv",
-        w.eval("daten.einstellungen.wetter.weitererOrt"), { name: "Aktueller Standort", lat: 51.235, lon: 10.988, aktiv: true });
+      gleich("„Aktueller Standort“ im Formular (Standortabfrage durch Platzhalter ersetzt): auf 4 Nachkommastellen gerundet, Name vorgeschlagen, aktiv",
+        w.eval("daten.einstellungen.wetter.weitererOrt"), { name: "Aktueller Standort", lat: 51.2346, lon: 10.9877, aktiv: true });
       gleich("Weiterer Ort aktiv: nur er wird abgefragt", w.wetterOrte().map(x => x.rolle), ["weitererOrt"]);
     }
 
@@ -1867,9 +1867,10 @@ async function start() {
       () => w.datenEinlesen(v5mit({ wetter: { ampel: Object.assign(kopie(STD_WETTER.ampel), { gelbBoeen: 60 }) } })), "gelbBoeen muss kleiner als rotBoeen");
     wirft("Ampel: Gelb ab Niederschlag nicht unter Starkregen wird abgelehnt",
       () => w.datenEinlesen(v5mit({ wetter: { ampel: Object.assign(kopie(STD_WETTER.ampel), { gelbNiederschlag: 5 }) } })), "gelbNiederschlag muss kleiner als rotStarkregen");
-    gleich("Koordinaten mit mehr Stellen beim Import auf 3 Nachkommastellen gerundet (auch negativ)",
-      kopie(w.datenEinlesen(v5mit({ wetter: { weitererOrt: { name: "Ferienort", lat: -33.86882, lon: -70.66931, aktiv: false } } })).einstellungen.wetter.weitererOrt),
-      { name: "Ferienort", lat: -33.869, lon: -70.669, aktiv: false });
+    gleich("Koordinaten mit mehr Stellen beim Import auf 4 Nachkommastellen gerundet (auch negativ); vorhandene mit 3 Stellen bleiben",
+      [kopie(w.datenEinlesen(v5mit({ wetter: { weitererOrt: { name: "Ferienort", lat: -33.86882, lon: -70.66931, aktiv: false } } })).einstellungen.wetter.weitererOrt),
+        kopie(w.datenEinlesen(v5mit({ wetter: { wohnort: { name: "Musterdorf", lat: 51.005, lon: 10.004 } } })).einstellungen.wetter.wohnort)],
+      [{ name: "Ferienort", lat: -33.8688, lon: -70.6693, aktiv: false }, { name: "Musterdorf", lat: 51.005, lon: 10.004 }]);
 
     // -------------------------------------------------------------
     // 35a. Umwandlung Version 5 → 7 (Release 4c)
@@ -2027,24 +2028,26 @@ async function start() {
     // -------------------------------------------------------------
     // 37. Koordinaten direkt eingeben
     // -------------------------------------------------------------
-    abschnitt("37. Ort: Koordinaten direkt eingeben (gerundet auf 3 Nachkommastellen)");
+    abschnitt("37. Ort: Koordinaten direkt eingeben (gerundet auf 4 Nachkommastellen, W11)");
     wetterDaten();
     w.ortFormular("arbeitsort");
-    gleich("Formular zeigt die gespeicherten Koordinaten (Komma, 3 Stellen) und den Hinweis zur Rundung",
-      [feld("o-lat").value, feld("o-lon").value, ohneTags(w.document.getElementById("fensterinhalt").innerHTML).includes("auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m)")],
-      ["51,100", "10,200", true]);
-    feld("o-lat").value = " 51,12345 ";
-    feld("o-lon").value = "10.98765";
+    const ortHinweis = ohneTags(w.document.getElementById("fensterinhalt").innerHTML);
+    gleich("Formular zeigt die gespeicherten Koordinaten (Komma, 4 Stellen), Beispiele mit 4 Stellen und den Hinweis zur Rundung",
+      [feld("o-lat").value, feld("o-lon").value, feld("o-lat").placeholder, feld("o-lon").placeholder,
+        ortHinweis.includes("Gespeichert werden die Koordinaten mit 4 Nachkommastellen (ca. 10 m); an die Wetterdienste gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m).")],
+      ["51,1000", "10,2000", "Breite, z. B. 51,1234", "Länge, z. B. 10,4567", true]);
+    feld("o-lat").value = " 51,123456 ";
+    feld("o-lon").value = "10.987654";
     feld("o-name").value = "Beispielstadt Nord";
     w.ortSpeichern();
-    gleich("Komma oder Punkt; gespeichert wird gerundet", [kopie(w.eval("daten.einstellungen.wetter.arbeitsort")), toast()[0], w.eval("fenster.open")],
-      [{ name: "Beispielstadt Nord", lat: 51.123, lon: 10.988 }, "Ort gespeichert", false]);
+    gleich("Komma oder Punkt; gespeichert wird auf 4 Nachkommastellen gerundet", [kopie(w.eval("daten.einstellungen.wetter.arbeitsort")), toast()[0], w.eval("fenster.open")],
+      [{ name: "Beispielstadt Nord", lat: 51.1235, lon: 10.9877 }, "Ort gespeichert", false]);
     w.ortFormular("weitererOrt");
     feld("o-lat").value = "−33,86882";
     feld("o-lon").value = "-70,66931";
     feld("o-name").value = "Ferienort";
     w.ortSpeichern();
-    gleich("Negative Koordinaten (auch mit echtem Minuszeichen)", kopie(w.eval("daten.einstellungen.wetter.weitererOrt")), { name: "Ferienort", lat: -33.869, lon: -70.669, aktiv: false });
+    gleich("Negative Koordinaten (auch mit echtem Minuszeichen)", kopie(w.eval("daten.einstellungen.wetter.weitererOrt")), { name: "Ferienort", lat: -33.8688, lon: -70.6693, aktiv: false });
     const ungueltig = (lat, lon, name = "x") => {
       alerts.length = 0;
       w.ortFormular("wohnort");
@@ -2550,21 +2553,21 @@ async function start() {
     gleich("Ohne Wegpunkte: Wohnort, Arbeitsort, „+ Wegpunkt“, eine Teilstrecke zählt für den Wind", [streckeListe().slice(0, 2),
       !!w.document.querySelector('#inhalt [data-action="wegpunkt-neu"]:not([disabled])'),
       [...w.document.querySelectorAll('#inhalt [data-change="teilstrecke-wind"]')].map(x => [x.checked, ohneTags(x.parentElement.innerHTML)])],
-      [["Wohnort Musterdorf · 51,000 / 10,000 ›", "Arbeitsort Beispielstadt · 51,100 / 10,200 ›"], true,
+      [["Wohnort Musterdorf · 51,0000 / 10,0000 ›", "Arbeitsort Beispielstadt · 51,1000 / 10,2000 ›"], true,
         [[true, "Musterdorf → Beispielstadt 17,9 km Luftlinie nach Nordost · zählt für den Wind"]]]);
     w.document.querySelector('#inhalt [data-action="wegpunkt-neu"]').click();
     gleich("„+ Wegpunkt“: Formular wie bei den Orten (Suche, Standort, Koordinaten)", [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML),
       !!feld("o-suche"), !!w.document.querySelector('#fensterinhalt [data-action="ort-standort"]'), !!feld("o-lat"), !!w.document.querySelector('#fensterinhalt [data-action="ort-entfernen"]')],
       ["Neuer Wegpunkt", true, true, true, false]);
-    feld("o-lat").value = "51,0004";
-    feld("o-lon").value = "10,2004";
+    feld("o-lat").value = "51,00004";
+    feld("o-lon").value = "10,20004";
     feld("o-name").value = "Ecke";
     w.ortSpeichern();
-    gleich("Wegpunkt mit Koordinaten gespeichert (gerundet auf 3 Nachkommastellen); die letzte Teilstrecke wird geteilt",
+    gleich("Wegpunkt mit Koordinaten gespeichert (gerundet auf 4 Nachkommastellen); die letzte Teilstrecke wird geteilt",
       [wpJetzt(), toast()[0], JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.wegpunkte], [[[ECKE], [true, true]], "Wegpunkt gespeichert", [ECKE]]);
     gleich("Einstellungen: Wohnort, Wegpunkt 1, Arbeitsort; zwei Teilstrecken mit Länge und Richtung", [streckeListe().slice(0, 3),
       [...w.document.querySelectorAll('#inhalt [data-change="teilstrecke-wind"]')].map(x => ohneTags(x.parentElement.innerHTML))],
-      [["Wohnort Musterdorf · 51,000 / 10,000 ›", "Wegpunkt 1 Ecke · 51,000 / 10,200", "Arbeitsort Beispielstadt · 51,100 / 10,200 ›"],
+      [["Wohnort Musterdorf · 51,0000 / 10,0000 ›", "Wegpunkt 1 Ecke · 51,0000 / 10,2000", "Arbeitsort Beispielstadt · 51,1000 / 10,2000 ›"],
         ["Musterdorf → Ecke 14 km Luftlinie nach Ost · zählt für den Wind", "Ecke → Beispielstadt 11,1 km Luftlinie nach Nord · zählt für den Wind"]]);
     w.document.querySelector('#inhalt [data-change="teilstrecke-wind"][data-i="0"]').click();
     gleich("Teilstrecke für den Wind ausschalten: sofort gespeichert", [wpJetzt()[1], JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.windTeilstrecken, toast()[0]],
@@ -2576,7 +2579,7 @@ async function start() {
     w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]')[1].click();
     w.ortSpeichern();
     gleich("Zweiter Wegpunkt aus der Ortssuche (nur der Name geht an Open-Meteo), kommt vor den Arbeitsort; die Schalter bleiben",
-      [wpJetzt(), abrufe], [[[ECKE, { name: "Musterdorf am See", lat: 52.337, lon: 11.664 }], [false, true, true]],
+      [wpJetzt(), abrufe], [[[ECKE, { name: "Musterdorf am See", lat: 52.3367, lon: 11.6644 }], [false, true, true]],
         ["https://geocoding-api.open-meteo.com/v1/search?name=Musterdorf&count=8&language=de&format=json"]]);
     w.document.querySelector('#inhalt [data-action="wegpunkt-hoch"][data-i="1"]').click();
     gleich("▲/▼: Reihenfolge der Wegpunkte; die Schalter der Teilstrecken bleiben an ihrer Stelle", [wpJetzt()[0].map(o => o.name), wpJetzt()[1],
@@ -2595,7 +2598,7 @@ async function start() {
     w.ortFormular("wegpunkt", 0);
     gleich("Wegpunkt bearbeiten: Formular mit Name und Koordinaten, „Wegpunkt entfernen“",
       [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), feld("o-name").value, feld("o-lat").value, ohneTags(w.document.querySelector('#fensterinhalt [data-action="ort-entfernen"]').innerHTML)],
-      ["Wegpunkt 1", "Musterdorf am See", "52,337", "Wegpunkt entfernen"]);
+      ["Wegpunkt 1", "Musterdorf am See", "52,3367", "Wegpunkt entfernen"]);
     frageAntwort = true;
     await w.ortEntfernen();
     gleich("Wegpunkt entfernen: die beiden Teilstrecken werden eine (zählt, wenn eine zählte)", [wpJetzt(), toast()[0]], [[[ECKE, { name: "Brücke", lat: 51.05, lon: 10.1 }], [true, true, true]], "Wegpunkt entfernt"]);
@@ -2701,6 +2704,46 @@ async function start() {
     w.setTimeout = echtesSetTimeout;
     gleich("Mit „Rückgängig“ 12 s, andere Meldungen kurz (1,8 s)", zeiten, [12000, 1800]);
     w.meldungAus();
+
+    // =============================================================
+    // Release 4d
+    // =============================================================
+    // -------------------------------------------------------------
+    // 48. Koordinaten mit 4 Nachkommastellen (W11)
+    // -------------------------------------------------------------
+    abschnitt("48. Koordinaten mit 4 Nachkommastellen speichern (W11), an die Wetterdienste weiter auf 3 gerundet");
+    const GENAU_W = { name: "Musterdorf", lat: 51.0004, lon: 10.0004 }, GENAU_A = { name: "Beispielstadt", lat: 51.1236, lon: 10.2004 };
+    const GENAU_WP = { name: "Ecke", lat: 51.0009, lon: 10.0004 };
+    wetterDaten({ wohnort: GENAU_W, arbeitsort: GENAU_A, wegpunkte: [GENAU_WP], windTeilstrecken: [true, true] });
+    gleich("Gespeichert mit 4 Nachkommastellen", [w.eval("daten.einstellungen.wetter.wohnort"), w.eval("daten.einstellungen.wetter.wegpunkte[0]")], [GENAU_W, GENAU_WP]);
+    const nur3 = urls => urls.flatMap(u => {
+      const d = decodeURIComponent(u);
+      return [...d.matchAll(/(?:latitude|longitude|lat|lon)=([-\d.,]+)/g)].flatMap(m => m[1].split(","))
+        .concat([...d.matchAll(/POINT\(([-\d. ]+)\)/g)].flatMap(m => m[1].split(" ")));
+    });
+    const om3 = ruhig();
+    om3.splice(1, 0, kopie(om3[0])); // Vorhersage für Wohnort, Wegpunkt und Arbeitsort
+    netz(["open-meteo", om3], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
+    wetterLeeren();
+    await w.wetterAktualisieren(true, ABEND);
+    gleich("Vorhersage und Warnungen (DWD): nur auf 3 Nachkommastellen gerundet",
+      [nur3(abrufe).every(z => /^-?\d+\.\d{3}$/.test(z)), [...new Set(nur3(abrufe))].sort()], [true, ["10.000", "10.200", "51.000", "51.001", "51.124"]]);
+    gleich("Schlüssel des Zwischenspeichers aus den gesendeten Werten (3 Stellen); für Orte mit 3 Stellen wie bisher",
+      [w.eval("wetter.vorhersage.schluessel"), w.ortSchluessel({ lat: 51, lon: 10 }), w.ortSchluessel({ lat: 51.005, lon: 10.004 })],
+      ["51.000,10.000;51.001,10.000;51.124,10.200", "51.000,10.000", "51.005,10.004"]);
+    gleich("Rückblick und Bright Sky ebenfalls mit 3 Stellen",
+      [nur3([w.rueckblickUrl(w.arbeitswegOrte(), "2026-10-12", "2026-10-23"), w.brightSkyUrl(GENAU_A)]).every(z => /^-?\d+\.\d{3}$/.test(z)),
+        w.brightSkyUrl(GENAU_A).split("?")[1]], [true, "lat=51.124&lon=10.200"]);
+    const genau = w.teilstrecken();
+    gleich("Teilstrecken mit den genauen Werten: Wohnort → Ecke unterscheidet sich nur in der 4. Stelle der Breite (ca. 56 m nach Nord)",
+      [Math.round(genau[0].laenge * 1000), Math.round(genau[0].kursHin), Math.round(genau[1].laenge * 10) / 10], [56, 0, 19.5]);
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    const einstText = ohneTags(w.document.getElementById("inhalt").innerHTML);
+    gleich("Einstellungen: Koordinaten mit 4 Stellen und der Hinweis zur Rundung",
+      [einstText.includes("Wohnort Musterdorf · 51,0004 / 10,0004"), einstText.includes("Wegpunkt 1 Ecke · 51,0009 / 10,0004"),
+        einstText.includes("Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m).")],
+      [true, true, true]);
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

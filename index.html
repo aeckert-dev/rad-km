@@ -517,9 +517,12 @@ function kmLesen(text) {
   return runden(Number(s));
 }
 
-// Koordinaten auf 3 Nachkommastellen runden (ca. 100 m). Nur so werden Orte
-// gespeichert und an die Wetterdienste gesendet.
-function koordinateRunden(x) { return Math.round(x * 1000) / 1000; }
+// Koordinaten der Orte und Wegpunkte werden mit 4 Nachkommastellen (ca. 10 m)
+// gespeichert; Teilstrecken (Länge, Richtung, Wind) rechnen damit.
+function koordinateSpeichern(x) { return Math.round(x * 10000) / 10000; }
+// An die Wetterdienste (Vorhersage, Rückblick, Warnungen) gehen sie nur auf 3
+// Nachkommastellen gerundet (ca. 100 m).
+function koordinateSenden(x) { return Math.round(x * 1000) / 1000; }
 // Uhrzeit im Format "HH:MM"
 function istUhrzeit(t) { return typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t); }
 function minutenAus(t) { return Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)); }
@@ -827,7 +830,7 @@ const istObjekt = v => !!v && typeof v === "object" && !Array.isArray(v);
 const istEndlich = v => typeof v === "number" && Number.isFinite(v);
 
 // Prüft die Wetter-Einstellungen (ab Version 4) und gibt eine bereinigte Kopie
-// zurück. Fehlende Teile bekommen die Standardwerte; Koordinaten werden auf 3
+// zurück. Fehlende Teile bekommen die Standardwerte; Koordinaten werden auf 4
 // Nachkommastellen gerundet.
 function wetterPruefen(w, fehler) {
   const std = standardWetter();
@@ -839,7 +842,7 @@ function wetterPruefen(w, fehler) {
     if (typeof o.name !== "string" || !o.name.trim()) fehler(wo + ": Name fehlt.");
     if (!(istEndlich(o.lat) && Math.abs(o.lat) <= 90)) fehler(wo + ": lat muss eine Zahl von -90 bis 90 sein.");
     if (!(istEndlich(o.lon) && Math.abs(o.lon) <= 180)) fehler(wo + ": lon muss eine Zahl von -180 bis 180 sein.");
-    return { name: o.name.trim(), lat: koordinateRunden(o.lat), lon: koordinateRunden(o.lon) };
+    return { name: o.name.trim(), lat: koordinateSpeichern(o.lat), lon: koordinateSpeichern(o.lon) };
   };
   const ort = (feld, name) => {
     const o = w[feld], wo = "Wetter, " + name;
@@ -1691,7 +1694,7 @@ function gruppieren(eintraege, stichtag) {
    Vorhersage von Open-Meteo (Modell ICON des Deutschen Wetterdienstes, in
    Deutschland im 15-Minuten-Raster). Amtliche Warnungen vom GeoServer des
    DWD, bei dessen Ausfall über Bright Sky (dieselben Warnungen des DWD).
-   Gesendet werden nur die gerundeten Koordinaten. Die geladenen Daten
+   Gesendet werden nur die auf 3 Nachkommastellen gerundeten Koordinaten. Die geladenen Daten
    liegen in einem eigenen Zwischenspeicher; der Abruf verändert die Daten
    der App nie. Zeitpunkte sind Millisekunden, Fahrzeiten gelten in Ortszeit.
    ===================================================================== */
@@ -1756,11 +1759,14 @@ function teilstrecken(w = daten.einstellungen.wetter) {
 }
 // "Wohnort → Brücke"
 function teilstreckeTitel(t, rueck) { return rueck ? t.bis.ort.name + " → " + t.von.ort.name : t.von.ort.name + " → " + t.bis.ort.name; }
-// Koordinate für Adressen: immer gerundet, "51.100"
-function koordinate(x) { return koordinateRunden(x).toFixed(3); }
+// Koordinate für die Adressen der Wetterdienste: immer auf 3 Stellen gerundet, "51.100".
+// Auch die Schlüssel des Zwischenspeichers nutzen sie.
+function koordinate(x) { return koordinateSenden(x).toFixed(3); }
 function ortSchluessel(o) { return koordinate(o.lat) + "," + koordinate(o.lon); }
-// Anzeige: "51,100 / 10,200"
-function koordinatenText(o) { return koordinate(o.lat).replace(".", ",") + " / " + koordinate(o.lon).replace(".", ","); }
+// Anzeige und Eingabefeld mit 4 Stellen: "51,1000"
+function koordinateFeld(x) { return koordinateSpeichern(x).toFixed(4).replace(".", ","); }
+// Anzeige: "51,1000 / 10,2000"
+function koordinatenText(o) { return koordinateFeld(o.lat) + " / " + koordinateFeld(o.lon); }
 
 function wetterParameter(orte) {
   return "?latitude=" + orte.map(o => koordinate(o.lat)).join(",") + "&longitude=" + orte.map(o => koordinate(o.lon)).join(",") +
@@ -1863,11 +1869,11 @@ function brightSkyLesen(antwort) {
         beginn: a.onset, ende: a.expires, titel: a.headline_de, text: a.description_de }))
   };
 }
-// Ortssuche → Treffer, Koordinaten sofort gerundet
+// Ortssuche → Treffer, Koordinaten sofort auf 4 Nachkommastellen gerundet
 function ortsTrefferLesen(antwort) {
   return (antwort && Array.isArray(antwort.results) ? antwort.results : [])
     .filter(r => r && r.name && istEndlich(r.latitude) && istEndlich(r.longitude))
-    .map(r => ({ name: String(r.name), zusatz: [r.admin1, r.country].filter(Boolean).join(", "), lat: koordinateRunden(r.latitude), lon: koordinateRunden(r.longitude) }));
+    .map(r => ({ name: String(r.name), zusatz: [r.admin1, r.country].filter(Boolean).join(", "), lat: koordinateSpeichern(r.latitude), lon: koordinateSpeichern(r.longitude) }));
 }
 
 // ---------- Laden und Zwischenspeicher ----------
@@ -3274,7 +3280,8 @@ function wetterEinstellungen() {
     '<div class="liste" style="margin-top:12px">' + regelZeile("kleidung-bearbeiten", "Kleidung", kleidungKurztext(w.kleidung)) +
     regelZeile("ampel-bearbeiten", "Ampel-Grenzen", ampelKurztext(w.ampel)) + '</div>' +
     '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Nach dem Ende der Rückfahrt zeigt der Reiter Wetter den nächsten Fahrtag. ' +
-    'Koordinaten (auch die der Wegpunkte) werden auf 3 Nachkommastellen gerundet (ca. 100 m) und nur so an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) gesendet. ' +
+    'Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) ' +
+    'gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
     'Für die Ortssuche geht nur der eingegebene Name an Open-Meteo.</p>';
 }
 
@@ -3314,26 +3321,24 @@ function ortFormular(rolle, index = null) {
     '<div class="knopfreihe"><button type="button" class="voll" data-action="ort-standort">📍 Aktueller Standort</button></div>' +
     '<label for="o-lat">Koordinaten (Breite und Länge in Grad)</label>' +
     // Ohne Zifferntastatur: auf dem iPhone fehlt dort das Minus (Süd und West)
-    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,123" aria-label="Breite" value="' + (o ? koordinateFeld(o.lat) : "") + '">' +
-    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,456" aria-label="Länge" value="' + (o ? koordinateFeld(o.lon) : "") + '"></div>' +
+    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" value="' + (o ? koordinateFeld(o.lat) : "") + '">' +
+    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" value="' + (o ? koordinateFeld(o.lon) : "") + '"></div>' +
     '<div class="feldhinweis" id="o-gewaehlt">Aus der Suche, vom Standort oder direkt eingeben (Komma oder Punkt, Süd und West mit Minus).</div>' +
     '<label for="o-name">Name (zur Anzeige)</label><input type="text" id="o-name" value="' + esc(o ? o.name : "") + '">' +
     (rolle === "weitererOrt" ? '<label class="haken"><input type="checkbox" id="o-aktiv"' + (o && o.aktiv ? " checked" : "") + '>' +
       '<span>Aktiv<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter an diesem Ort (ohne Hin- und Rückfahrt).</span></span></label>' : "") +
-    '<div class="feldhinweis">Gespeichert und an die Wetterdienste gesendet werden nur die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m). ' +
+    '<div class="feldhinweis">Gespeichert werden die Koordinaten mit 4 Nachkommastellen (ca. 10 m); an die Wetterdienste gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
     'Für die Suche geht nur der eingegebene Name an Open-Meteo.</div>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="ort-speichern">Speichern</button></div>' +
     (o ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="ort-entfernen">' + (rolle === "wegpunkt" ? "Wegpunkt entfernen" : "Ort entfernen") + '</button></div>' : "")
   );
 }
-// Koordinate für ein Eingabefeld: "51,123"
-function koordinateFeld(x) { return koordinate(x).replace(".", ","); }
 function ortGewaehltAnzeigen(text) {
   const el = document.getElementById("o-gewaehlt");
   if (el) el.textContent = text;
 }
-// Koordinaten in die Felder übernehmen (gerundet)
+// Koordinaten in die Felder übernehmen (auf 4 Nachkommastellen gerundet)
 function ortKoordinatenSetzen(lat, lon, text) {
   document.getElementById("o-lat").value = koordinateFeld(lat);
   document.getElementById("o-lon").value = koordinateFeld(lon);
@@ -3373,7 +3378,7 @@ function ortStandort() {
     if (!formOrt || !document.getElementById("o-name")) return;
     const name = document.getElementById("o-name");
     if (!name.value.trim()) name.value = "Aktueller Standort";
-    ortKoordinatenSetzen(pos.coords.latitude, pos.coords.longitude, "Übernommen vom aktuellen Standort (gerundet).");
+    ortKoordinatenSetzen(pos.coords.latitude, pos.coords.longitude, "Übernommen vom aktuellen Standort (auf 4 Nachkommastellen gerundet).");
   }, err => {
     ortGewaehltAnzeigen("Standort nicht verfügbar" + (err && err.code === 1 ? " (Zugriff nicht erlaubt)." : "."));
   }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
@@ -3381,10 +3386,10 @@ function ortStandort() {
 function ortSpeichern() {
   const name = wert("o-name").trim();
   const lat = zahlLesen(wert("o-lat")), lon = zahlLesen(wert("o-lon"));
-  if (lat === null || lon === null) { alert("Bitte einen Ort suchen und auswählen, den aktuellen Standort verwenden oder Breite und Länge eingeben, z. B. 51,123 und 10,456."); return; }
+  if (lat === null || lon === null) { alert("Bitte einen Ort suchen und auswählen, den aktuellen Standort verwenden oder Breite und Länge eingeben, z. B. 51,1234 und 10,4567."); return; }
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { alert("Die Breite muss zwischen −90 und 90 liegen, die Länge zwischen −180 und 180."); return; }
   if (!name) { alert("Bitte einen Namen für den Ort eingeben."); return; }
-  const ort = { name, lat: koordinateRunden(lat), lon: koordinateRunden(lon) };
+  const ort = { name, lat: koordinateSpeichern(lat), lon: koordinateSpeichern(lon) };
   const w = daten.einstellungen.wetter;
   if (formOrt.rolle === "wegpunkt") {
     if (formOrt.index !== null) w.wegpunkte[formOrt.index] = ort;
