@@ -1,0 +1,71 @@
+{
+  "version": 6,
+  "kurzinfo": { "zeitpunkt": "2026-10-31T18:00:00.000Z", "appVersion": "4c", "eintraege": 5,
+                "kmSumme": 52.7, "kmStand": 1253.2, "wartungen": 1, "maengel": 1 },
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5,
+               "rahmennummer": "TST 0006", "beschreibung": "Grün, 28 Zoll\nNabenschaltung" },
+  "einstellungen": {
+    "fahrtage": [1, 3, 5],
+    "jahresziele": [{ "jahr": 2026, "km": 4200 }],
+    "hinweisHeuteAb": null,
+    "wetter": {
+      "wohnort": { "name": "Musterdorf", "lat": 51.0, "lon": 10.0 },
+      "arbeitsort": { "name": "Beispielstadt", "lat": 51.1, "lon": 10.2 },
+      "weitererOrt": { "name": "Ferienort", "lat": 54.0, "lon": 9.0, "aktiv": false },
+      "wegpunkte": [{ "name": "Brücke", "lat": 51.034, "lon": 10.067 }, { "name": "Ortsmitte", "lat": 51.061, "lon": 10.133 }],
+      "windTeilstrecken": [true, false, true],
+      "hinfahrt": { "von": "06:15", "bis": "07:15", "abfahrt": "06:30", "dauer": 50 },
+      "rueckfahrt": { "von": "16:30", "bis": "17:30", "abfahrt": null, "dauer": 55 },
+      "ampel": { "rotBoeen": 55, "rotStarkregen": 5, "rotWarnstufe": 2, "gelbRegenWahrscheinlichkeit": 50,
+                 "gelbNiederschlag": 0.5, "gelbBoeen": 40, "gelbTemperatur": 0, "glaetteTemperatur": 1 },
+      "kleidung": {
+        "stufen": [
+          { "id": "warm", "ab": 16, "bereiche": { "kopf": "", "hals": "", "haende": "", "oberkoerper": "T-Shirt", "beine": "kurze Hose", "fuesse": "Socken" },
+            "haendeBeiRegen": null },
+          { "id": "mild", "ab": 8, "bereiche": { "kopf": "", "hals": "", "haende": "dünne Handschuhe", "oberkoerper": "T-Shirt, Pullover", "beine": "Hose", "fuesse": "Socken" },
+            "haendeBeiRegen": "Regenhandschuhe" },
+          { "id": "kalt", "ab": null, "bereiche": { "kopf": "Mütze", "hals": "Schal", "haende": "Winterhandschuhe", "oberkoerper": "T-Shirt, Pullover, Jacke", "beine": "Hose", "fuesse": "warme Socken" },
+            "haendeBeiRegen": null }
+        ],
+        "regen": [{ "ab": 45, "bereiche": { "kopf": "", "hals": "", "haende": "", "oberkoerper": "Regenjacke", "beine": "", "fuesse": "" } }],
+        "rueckmeldung": false
+      }
+    }
+  },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2, "arbeitsweg": true },
+    { "id": "v-einkauf", "name": "Einkauf", "km": 3.5, "arbeitsweg": false }
+  ],
+  "eintraege": [
+    { "id": "e-woche1", "datum": "2025-03-03", "km": 10, "vorlage": null, "notiz": "aus Excel", "typ": "woche", "arbeitsweg": false, "wetter": null },
+    { "id": "e-tag1", "datum": "2026-10-26", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true,
+      "wetter": { "quelle": "vorhersage", "stand": "2026-10-26T04:50:00.000Z",
+        "hin": { "temperatur": 6.5, "gefuehlt": 4.5, "niederschlag": 0, "regenWahrscheinlichkeit": 10, "wind": 12, "boeen": 25, "ampel": "gruen",
+                 "kleidung": "kalt", "empfehlung": { "kopf": "Mütze", "hals": "Schal", "haende": "Winterhandschuhe", "oberkoerper": "T-Shirt, Pullover, Jacke",
+                 "beine": "Hose", "fuesse": "warme Socken" }, "regenkleidung": false, "rueckmeldung": "passte" },
+        "rueck": { "temperatur": 9, "gefuehlt": 8.5, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18, "boeen": 42, "ampel": "gelb",
+                   "kleidung": "mild", "empfehlung": { "kopf": "", "hals": "", "haende": "Regenhandschuhe", "oberkoerper": "T-Shirt, Regenjacke",
+                   "beine": "Hose", "fuesse": "Socken" }, "regenkleidung": true, "rueckmeldung": "zu-kalt" } } },
+    { "id": "e-tag2", "datum": "2026-10-28", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "Gegenwind", "typ": "tag", "arbeitsweg": true,
+      "wetter": { "quelle": "rueckblick", "stand": "2026-10-31T17:00:00.000Z",
+        "hin": { "temperatur": 3.5, "gefuehlt": 0.5, "niederschlag": 0, "regenWahrscheinlichkeit": null, "wind": 22, "boeen": 48, "ampel": "gelb",
+                 "kleidung": "kalt", "empfehlung": null, "regenkleidung": false, "rueckmeldung": null },
+        "rueck": null } },
+    { "id": "e-null", "datum": "2026-10-30", "km": 0, "vorlage": null, "notiz": "krank", "typ": "tag", "arbeitsweg": false, "wetter": null },
+    { "id": "e-tag3", "datum": "2026-10-31", "km": 14.3, "vorlage": null, "notiz": "Ausflug 🚲 <b>&</b> „Zitat“", "typ": "tag", "arbeitsweg": false, "wetter": null }
+  ],
+  "wartungsarten": [
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "kette", "name": "Kette", "intervallMonate": 24, "intervallKm": 3000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false }
+  ],
+  "wartungsprotokoll": [
+    { "id": "p-1", "datum": "2025-10-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1230, "kmManuell": true, "notiz": "Bremsen eingestellt" }
+  ],
+  "termine": [{ "wartungsartId": "kette", "datum": "2026-11-20", "werkstatt": "Beispiel-Werkstatt" }],
+  "maengel": [
+    { "id": "m-1", "datum": "2026-10-29", "beschreibung": "Klingel klemmt", "status": "offen", "erledigtAm": null, "protokollId": null }
+  ]
+}
