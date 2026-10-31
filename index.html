@@ -239,6 +239,8 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .ampel.gelb, .slot.gelb { background: var(--ampel-gelb); }
 .ampel.rot, .slot.rot { background: var(--ampel-rot); }
 .ampelzeile { margin: 4px 0 2px; }
+/* Wind je Teilstrecke unter der Zeile 🧭, eingerückt */
+.wind-teile { padding-left: 1.6em; }
 /* Nicht aktuelle oder vergangene Daten zurückgenommen */
 .veraltet .ampel, .veraltet .slot { opacity: .45; }
 .veraltet > :not(h3) { color: var(--text2); }
@@ -405,7 +407,7 @@ const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzt
 // Zuletzt geladene Wetterdaten (Zwischenspeicher, kein Teil der Daten und der Sicherung)
 const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "4d";
+const APP_VERSION = "4e";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
 const DATEN_VERSION = 7;
@@ -2235,7 +2237,7 @@ function fahrtBewerten(orteDaten, warnungen, von, bis, g = daten.einstellungen.w
   const farbe = gruende.some(x => x.farbe === "rot") ? "rot" : gruende.length ? "gelb" : "gruen";
   // Rote Gründe zuerst, sonst in der Reihenfolge oben (Warnungen, Gewitter, Glätte, Böen, Regen, …)
   gruende.sort((a, b) => (a.farbe === "rot" ? 0 : 1) - (b.farbe === "rot" ? 0 : 1));
-  // Grün: Böen stehen in der Detailzeile; in der Begründung nur, wenn sie Gelb oder Rot auslösen
+  // Grün: Böen stehen in der Zeile zum Wind; in der Begründung nur, wenn sie Gelb oder Rot auslösen
   const ruhig = werte.niederschlag > 0 ? "kaum Regen" : "trocken";
   return { farbe, gruende, werte, text: FARBWORT[farbe] + ": " + (gruende.length ? gruende.slice(0, 3).map(grundText).join(", ") : ruhig) };
 }
@@ -2324,54 +2326,70 @@ function entfernungKm(a, b) {
   const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lon - a.lon) / 2) ** 2;
   return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
-// Mittlerer Wind (Richtung, aus der er weht) zerlegt in Gegen- und Seitenanteil
-// zur Fahrtrichtung "kurs" (Seite positiv = von rechts); null ohne Werte
-function windAnteile(proben, kurs) {
-  if (!proben.length) return null;
-  let gegen = 0, seite = 0, staerke = 0;
-  proben.forEach(p => { const d = (p.r - kurs) * Math.PI / 180; gegen += p.v * Math.cos(d); seite += p.v * Math.sin(d); staerke += p.v; });
-  return { gegen: gegen / proben.length, seite: seite / proben.length, seiteBetrag: Math.abs(seite / proben.length), staerke: staerke / proben.length };
-}
-// Text zu den Anteilen: Gegen- oder Rückenwind, wenn er überwiegt, sonst
-// Seitenwind; "wechselnd", wenn er auf den Teilstrecken von beiden Seiten kommt
-function windText(w) {
-  if (w.staerke < WIND_SCHWACH) return { art: "schwach", text: "schwacher Wind (" + kmhText(w.staerke) + ")" };
-  if (Math.abs(w.gegen) >= w.seiteBetrag) return w.gegen > 0 ? { art: "gegen", text: "Gegenwind " + kmhText(w.gegen) } : { art: "ruecken", text: "Rückenwind " + kmhText(-w.gegen) };
-  if (Math.abs(w.seite) < w.seiteBetrag / 2) return { art: "wechselnd", text: "Seitenwind wechselnd " + kmhText(w.seiteBetrag) };
-  return w.seite > 0 ? { art: "rechts", text: "Seitenwind von rechts " + kmhText(w.seiteBetrag) } : { art: "links", text: "Seitenwind von links " + kmhText(w.seiteBetrag) };
-}
-// Wind relativ zu einer Fahrtrichtung
-function windZurStrecke(proben, kurs) {
-  const w = windAnteile(proben, kurs);
-  return w && windText(w);
-}
-// Wind auf der Strecke: je Teilstrecke mit ihrer eigenen Fahrtrichtung und dem
-// Wind an ihren beiden Enden, nach Länge gewichtet; nur Teilstrecken, die für
-// den Wind zählen. Die Rückfahrt in umgekehrter Richtung und Reihenfolge.
-// "teile" nennt das Ergebnis je Teilstrecke. Zählt keine: Wind mit Himmelsrichtung.
-function windAufStrecke(windJeOrt, strecken, rueck) {
-  const reihe = rueck ? [...strecken].reverse() : strecken;
-  const teile = reihe.map(t => {
-    const anteile = t.wind && t.laenge > 0 ? windAnteile((windJeOrt[t.a] || []).concat(windJeOrt[t.b] || []), rueck ? t.kursRueck : t.kursHin) : null;
-    return { titel: teilstreckeTitel(t, rueck), zaehlt: t.wind, laenge: t.laenge, anteile, text: anteile ? windText(anteile).text : null };
-  });
-  const mit = teile.filter(x => x.anteile);
-  if (!mit.length) return windAllgemein(windJeOrt.flat());
-  const gesamt = mit.reduce((x, t) => x + t.laenge, 0);
-  const summe = feld => mit.reduce((x, t) => x + t.anteile[feld] * t.laenge / gesamt, 0);
-  return Object.assign(windText({ gegen: summe("gegen"), seite: summe("seite"), seiteBetrag: summe("seiteBetrag"), staerke: summe("staerke") }),
-    { teile: teile.length > 1 ? teile : null });
-}
 const HIMMELSRICHTUNGEN = ["Nord", "Nordost", "Ost", "Südost", "Süd", "Südwest", "West", "Nordwest"];
-// Ohne Strecke (z. B. nur Wohnort): mittlerer Wind mit Himmelsrichtung
-function windAllgemein(proben) {
+// Relative Richtung des Winds zur Fahrtrichtung in acht Abschnitten zu je 45°:
+// [Grenze (Grad), Name von links, Name von rechts]. Ein Winkel genau auf einer
+// Grenze zählt zum Abschnitt weiter vorn (dem ungünstigeren).
+const WIND_ABSCHNITTE = [
+  [22.5, "Gegenwind", "Gegenwind"],
+  [67.5, "schräg von vorn links", "schräg von vorn rechts"],
+  [112.5, "von links", "von rechts"],
+  [157.5, "schräg von hinten links", "schräg von hinten rechts"],
+  [180, "Rückenwind", "Rückenwind"]
+];
+// Winkel auf 1/1000 Grad gerundet (damit die Grenzen trotz Rechenungenauigkeit
+// eindeutig sind), 0 ≤ x < 360
+const winkelRunden = x => (Math.round(x * 1000) / 1000 % 360 + 360) % 360;
+// Mittlerer Wind: Geschwindigkeit (Mittel der Werte) und Richtung, aus der er weht
+// (Grad, 0 = Nord, Mittel der Windvektoren); null ohne Werte
+function windMittel(proben) {
   if (!proben.length) return null;
-  let x = 0, y = 0, staerke = 0;
-  proben.forEach(p => { x += p.v * Math.sin(p.r * Math.PI / 180); y += p.v * Math.cos(p.r * Math.PI / 180); staerke += p.v; });
-  staerke /= proben.length;
-  if (staerke < WIND_SCHWACH) return { art: "schwach", text: "schwacher Wind (" + kmhText(staerke) + ")" };
-  const r = (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
-  return { art: "allgemein", text: "Wind " + kmhText(staerke) + " aus " + HIMMELSRICHTUNGEN[Math.round(r / 45) % 8] };
+  let x = 0, y = 0, summe = 0;
+  proben.forEach(p => { x += p.v * Math.sin(p.r * Math.PI / 180); y += p.v * Math.cos(p.r * Math.PI / 180); summe += p.v; });
+  return { kmh: summe / proben.length, grad: (Math.atan2(x, y) * 180 / Math.PI + 360) % 360 };
+}
+// Der angezeigte (gerundete) Wert entscheidet: 0 = windstill, unter WIND_SCHWACH schwach
+function windStaerke(kmh) {
+  const gerundet = Math.round(kmh);
+  return { kmh: gerundet, windstill: gerundet === 0, schwach: gerundet > 0 && gerundet < WIND_SCHWACH };
+}
+// Abschnitt zum Winkel zwischen Windrichtung (aus der er weht) und Fahrtrichtung;
+// positiv = von rechts
+function windAbschnitt(winkel) {
+  let d = winkelRunden(winkel);
+  if (d > 180) d -= 360;
+  const [, links, rechts] = WIND_ABSCHNITTE.find(([grenze]) => Math.abs(d) <= grenze);
+  return d > 0 ? rechts : links;
+}
+// Wind relativ zu einer Fahrtrichtung "kurs": "Gegenwind 14 km/h", "von links
+// 4 km/h (schwach)", "windstill"; null ohne Werte
+function windRelativ(proben, kurs) {
+  const m = windMittel(proben);
+  if (!m) return null;
+  const s = windStaerke(m.kmh), abschnitt = s.windstill ? null : windAbschnitt(m.grad - kurs);
+  return Object.assign(s, { abschnitt, text: s.windstill ? "windstill" : abschnitt + " " + kmhText(m.kmh) + (s.schwach ? " (schwach)" : "") });
+}
+// Wind je Teilstrecke, die für den Wind zählt: mit ihrer eigenen Fahrtrichtung
+// und dem Wind an ihren beiden Enden. Die Rückfahrt in umgekehrter Richtung und
+// Reihenfolge. Teilstrecken, die nicht zählen, ohne Länge (keine Richtung) oder
+// ohne Winddaten entfallen.
+function windJeTeilstrecke(windJeOrt, strecken, rueck) {
+  const reihe = rueck ? [...strecken].reverse() : strecken;
+  return reihe.filter(t => t.wind && t.laenge > 0).map(t => {
+    const r = windRelativ((windJeOrt[t.a] || []).concat(windJeOrt[t.b] || []), rueck ? t.kursRueck : t.kursHin);
+    return r && Object.assign({ titel: teilstreckeTitel(t, rueck) }, r);
+  }).filter(Boolean);
+}
+// Erste Zeile des Winds: mittlerer Wind mit Himmelsrichtung, aus der er kommt,
+// und Böen, z. B. "Wind 15 km/h aus Südwest, Böen bis 36 km/h", "Wind 4 km/h aus
+// Südwest (schwach), Böen bis 12 km/h", "Windstill, Böen bis 5 km/h". "teile"
+// (Wind je Teilstrecke) setzt die Fahrt dazu. null ohne Werte.
+function windAllgemein(proben, boeen) {
+  const m = windMittel(proben);
+  if (!m) return null;
+  const s = windStaerke(m.kmh), richtung = HIMMELSRICHTUNGEN[Math.round(winkelRunden(m.grad) / 45) % 8];
+  return Object.assign(s, { grad: m.grad, richtung, boeen, teile: [],
+    text: (s.windstill ? "Windstill" : "Wind " + kmhText(m.kmh) + " aus " + richtung + (s.schwach ? " (schwach)" : "")) + ", Böen bis " + kmhText(boeen) });
 }
 
 // ---------- Bestes Abfahrtsfenster ----------
@@ -2478,7 +2496,10 @@ function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w) 
   a.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
   if (!a.bewertung) return a;
   a.kleidung = kleidungFuer(a.bewertung.werte.gefuehlt, a.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
-  a.wind = strecken ? windAufStrecke(a.bewertung.werte.windJeOrt, strecken, art === "rueckfahrt") : windAllgemein(a.bewertung.werte.windProben);
+  // Wind: erste Zeile mit Himmelsrichtung und Böen, darunter je Teilstrecke, die zählt
+  const wv = a.bewertung.werte;
+  a.wind = windAllgemein(wv.windProben, wv.boeen);
+  if (a.wind && strecken) a.wind.teile = windJeTeilstrecke(wv.windJeOrt, strecken, art === "rueckfahrt");
   if (!a.vorbei) a.abfahrt = abfahrtsfenster(orteDaten, warnungen, tag.datum, f, w.ampel, tag.heute ? jetzt : null);
   return a;
 }
@@ -2516,7 +2537,7 @@ function wetterAnsicht(jetzt = Date.now()) {
     a.empfehlungAb = empfehlungAbText(a.tag, h, w);
     return a;
   }
-  // Wind je Teilstrecke; ohne Strecke (z. B. nur Wohnort) mit Himmelsrichtung
+  // Wind je Teilstrecke; ohne Strecke (z. B. nur Wohnort) nur mit Himmelsrichtung
   const strecken = teilstrecken(w);
   const mitStrecke = strecken.some(t => t.laenge > 0) ? strecken : null;
   a.fahrten = [
@@ -2582,8 +2603,8 @@ function jetztAnsicht(a, w, v, wa, jetzt, h) {
     f.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
     if (f.bewertung) {
       f.kleidung = kleidungFuer(f.bewertung.werte.gefuehlt, f.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
-      // Die Fahrtrichtung ist unbekannt: Wind mit Himmelsrichtung
-      f.wind = windAllgemein(f.bewertung.werte.windProben);
+      // Die Fahrtrichtung ist unbekannt: nur die erste Zeile (Wind mit Himmelsrichtung und Böen)
+      f.wind = windAllgemein(f.bewertung.werte.windProben, f.bewertung.werte.boeen);
       f.abfahrt = jetztAbfahrtsfenster(orteDaten, warnungen, h, vonMin, dauer, w.ampel);
     }
   }
@@ -3218,9 +3239,10 @@ function ampelText(b) {
 }
 // "Heute, Di 27.10." bzw. "Mo 02.11."
 function tagUeberschrift(datum, titel) { return titel === "Heute" || titel === "Morgen" ? titel + ", " + wochentag(datum) + " " + kurzDatum(datum) : titel; }
+// Werte einer Fahrt (ohne Böen, die stehen in der Zeile zum Wind)
 function werteText(w) {
   return gradText(w.temperatur) + " (gefühlt " + gradText(w.gefuehlt) + ") · Regen " +
-    (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm · Böen bis " + kmhText(w.boeen);
+    (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm";
 }
 function tageswerteText(t) {
   return gradText(t.tmin) + " bis " + gradText(t.tmax) + (t.gefuehltMin === null ? "" : " (gefühlt " + gradText(t.gefuehltMin) + " bis " + gradText(t.gefuehltMax) + ")") +
@@ -3322,12 +3344,17 @@ function fahrtKarte(f, alt) {
   if (f.vorbei) return html + '</div>';
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
     '<div style="margin-top:6px">👕 Kleidung <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' + kleidungBereicheHtml(f.kleidung) +
-    (f.wind ? '<div>🧭 ' + esc(f.wind.text) + '</div>' +
-      (f.wind.teile ? '<div class="klein">' + f.wind.teile.map(t => esc(t.titel) + ": " + (t.zaehlt ? t.text || "–" : "zählt nicht")).join(" · ") + '</div>' : "") : "") +
+    (f.wind ? windHtml(f.wind) : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
   return html + '</div>';
 }
 
+// Wind: erste Zeile mit Himmelsrichtung und Böen, darunter eingerückt je Teilstrecke,
+// die zählt, eine Zeile mit der Richtung relativ zur Fahrtrichtung
+function windHtml(wind) {
+  return '<div>🧭 ' + esc(wind.text) + '</div>' +
+    (wind.teile.length ? '<div class="wind-teile">' + wind.teile.map(t => '<div>' + esc(t.titel) + ': ' + esc(t.text) + '</div>').join("") + '</div>' : "");
+}
 // Kleidung je Körperbereich; leere Bereiche entfallen, wegen Regen angepasste sind markiert
 function kleidungBereicheHtml(kl) {
   return '<dl class="bereiche">' + BEREICHE.filter(([b]) => kl.bereiche[b]).map(([b, name]) => '<dt>' + name + '</dt><dd>' + esc(kl.bereiche[b]) +
@@ -3431,7 +3458,8 @@ function wetterEinstellungen() {
     '<label class="haken"><input type="checkbox" data-change="teilstrecke-wind" data-i="' + i + '"' + (t.wind ? " checked" : "") + '>' +
     '<span>' + esc(teilstreckeTitel(t, false)) + '<br><span class="klein">' + zahl1.format(Math.round(t.laenge * 10) / 10) + ' km Luftlinie nach ' +
     HIMMELSRICHTUNGEN[Math.round(t.kursHin / 45) % 8] + ' · ' + (t.wind ? "zählt für den Wind" : "zählt nicht für den Wind") + '</span></span></label>').join("") +
-    '<div class="feldhinweis">Der Wind wird je Teilstrecke mit ihrer Fahrtrichtung berechnet und nach Länge gewichtet; die Rückfahrt in umgekehrter Richtung. ' +
+    '<div class="feldhinweis">Der Reiter Wetter zeigt je Teilstrecke, die zählt, eine Zeile mit dem Wind relativ zu ihrer Fahrtrichtung (z. B. Gegenwind); ' +
+    'die Rückfahrt in umgekehrter Reihenfolge und Richtung. ' +
     'Nimm z. B. eine Strecke durch ein Wohngebiet heraus.</div></div>' : "";
   const fahrtZeile = (art, titel) => {
     const f = w[art];

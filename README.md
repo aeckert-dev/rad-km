@@ -6,7 +6,8 @@ ist für das iPhone optimiert.
 
 - Kilometer pro Tag erfassen, mit Vorlagen in zwei Klicks
 - Wetter für den Arbeitsweg: Ampel, Kleidung je Körperbereich, amtliche Warnungen
-  des DWD, beste Abfahrtszeit und Wind je Hin- und Rückfahrt, ab dem Vorabend für
+  des DWD, beste Abfahrtszeit und Wind je Hin- und Rückfahrt (mit
+  Himmelsrichtung und Böen, je Teilstrecke relativ zur Fahrtrichtung), ab dem Vorabend für
   den nächsten Fahrtag; zu allen übrigen Zeiten die Ampel für eine spontane Runde
   ab jetzt, am Wohnort oder am aktuellen Standort
 - Bis zu 3 Wegpunkte: Wind je Teilstrecke, Temperatur, Regen und Warnungen auch
@@ -334,9 +335,10 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Die Karte **„Jetzt“**, z. B. „Jetzt 10:00–11:00“: Die Fahrt beginnt mit der
     laufenden Viertelstunde (10:07 → 10:00) und dauert so lange wie die
     Hinfahrt (Standard 60 Minuten). Sie zeigt wie eine Fahrt am Fahrtag Ampel mit
-    Begründung, Werte (Temperatur, gefühlt, Regen, Böen), Kleidung nach dem
-    Zwiebelprinzip, Wind mit Himmelsrichtung (z. B. „Wind 20 km/h aus West“, da
-    die Richtung der Fahrt unbekannt ist) und, wenn nötig, das beste
+    Begründung, Werte (Temperatur, gefühlt, Regen), Kleidung nach dem
+    Zwiebelprinzip, die erste Zeile zum Wind mit Himmelsrichtung und Böen (z. B.
+    „🧭 Wind 20 km/h aus West, Böen bis 35 km/h“; Zeilen je Teilstrecke gibt es
+    nicht, da die Richtung der Fahrt unbekannt ist) und, wenn nötig, das beste
     Abfahrtsfenster.
   - Darunter der Hinweis, ab wann es die Empfehlung gibt, z. B. **„Empfehlung
     für Mo 02.11. ab So 17:00“** (am Vortag selbst „ab heute 17:00“), dann die
@@ -363,8 +365,8 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Koordinaten und Name des Standorts werden nicht gespeichert (siehe „Was geht
     beim Wetter ins Netz?“).
 - **Je Fahrt:** Ampel mit kurzer Begründung, die Werte (niedrigste Temperatur
-  und gefühlte Temperatur, Regenwahrscheinlichkeit und Niederschlag, Böen),
-  Kleidung, Wind und, wenn nötig, das beste Abfahrtsfenster.
+  und gefühlte Temperatur, Regenwahrscheinlichkeit und Niederschlag),
+  Kleidung, Wind mit Böen und, wenn nötig, das beste Abfahrtsfenster.
 - **Ampel:** Geprüft wird die Fahrzeit an Wohnort, Wegpunkten und Arbeitsort;
   es zählt der ungünstigste Wert. Die Grenzen (Standardwerte in der Tabelle) lassen sich
   unter **Einstellungen → Wetter → Ampel-Grenzen** ändern.
@@ -380,7 +382,7 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     den Gründen aus der Vorhersage.
   - Bei Grün steht nur „trocken“ bzw. „kaum Regen“. Böen erscheinen in der
     Ampelzeile nur, wenn sie die Ampel gelb oder rot machen; sonst stehen sie
-    nur bei den Werten.
+    nur in der Zeile zum Wind.
   - Niederschlag in mm/h ist die Menge einer Viertelstunde mal 4.
   - Eine Wahrscheinlichkeit für Gewitter liefert das Vorhersagemodell nicht;
     „hohe Wahrscheinlichkeit“ heißt hier: Das Modell sagt Gewitter vorher.
@@ -514,21 +516,51 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - In der Ansicht „Jetzt“: Abfahrten von jetzt bis eine Stunde später, z. B.
     „Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00“ oder „Keine
     bessere Abfahrt bis 11:00.“
-- **Wind relativ zur Strecke:** je Teilstrecke aus ihrer Richtung (Luftlinie,
-  ohne Wegpunkte von Wohn- zu Arbeitsort) und dem mittleren Wind der Fahrzeit an
-  ihren beiden Enden, nach der Länge der Teilstrecken gewichtet; nur
-  Teilstrecken, die für den Wind zählen. Ergebnis z. B. „Gegenwind 20 km/h“,
-  „Rückenwind 15 km/h“, „Seitenwind von links 20 km/h“, „Seitenwind wechselnd
-  15 km/h“ (wenn er auf den Teilstrecken von beiden Seiten kommt) oder
-  „schwacher Wind“ (unter 10 km/h).
-  - Gegen- bzw. Rückenwind ist der gewichtete Mittelwert, beim Seitenwind zählt
-    die Stärke; überwiegt der Gegen- oder Rückenwind, wird er genannt.
-  - Mit mehreren Teilstrecken steht klein darunter das Ergebnis je
-    Teilstrecke, z. B. „Musterdorf → Ecke: zählt nicht · Ecke → Beispielstadt:
-    Gegenwind 20 km/h“.
-  - Die Rückfahrt rechnet in umgekehrter Richtung und Reihenfolge.
-  - Nur zur Info, nicht in der Ampel. Ohne Arbeitsort, wenn keine Teilstrecke
-    zählt, und in der Ansicht „Jetzt“: Wind mit Himmelsrichtung.
+- **Wind:** In jeder Fahrt-Karte (Hin- und Rückfahrt, „Jetzt“) steht zuerst
+  eine Zeile mit dem mittleren Wind der Fahrzeit, der Himmelsrichtung, aus der er
+  kommt, und den Böen (Höchstwert), z. B. **„🧭 Wind 15 km/h aus Südwest, Böen
+  bis 36 km/h“**. Sie gilt für alle Orte der Strecke (Wohnort, Wegpunkte,
+  Arbeitsort), in der Ansicht „Jetzt“ für den angezeigten Ort.
+  - **Je Teilstrecke** steht am Fahrtag darunter, eingerückt, eine eigene Zeile
+    mit der Richtung relativ zur Fahrtrichtung und der Stärke, z. B.
+    „Musterdorf → Ecke: schräg von hinten rechts 16 km/h“. Grundlage sind die
+    Richtung der Teilstrecke (Luftlinie, ohne Wegpunkte von Wohn- zu
+    Arbeitsort) und der mittlere Wind der Fahrzeit an ihren beiden Enden. Die
+    Stärke ist die volle mittlere Windgeschwindigkeit dort (nicht nur der Anteil
+    in Fahrtrichtung). Auch ohne Wegpunkte gibt es eine solche Zeile
+    („Musterdorf → Beispielstadt: Gegenwind 20 km/h“).
+  - **Acht Abschnitte** zu je 45°: Gegenwind, schräg von vorn links, schräg von
+    vorn rechts, von links, von rechts, schräg von hinten links, schräg von
+    hinten rechts, Rückenwind. Gegenwind reicht bis 22,5° beiderseits der
+    Fahrtrichtung, schräg von vorn bis 67,5°, von links/rechts bis 112,5°,
+    schräg von hinten bis 157,5°, darüber Rückenwind. Ein Wind genau auf einer
+    Grenze zählt zum Abschnitt weiter vorn (dem ungünstigeren), z. B. 22,5° als
+    Gegenwind.
+  - Teilstrecken, die nicht für den Wind zählen, werden nicht erwähnt. Zählt
+    keine, ohne Arbeitsort und in der Ansicht „Jetzt“ (Richtung der Fahrt
+    unbekannt) steht nur die erste Zeile.
+  - Die Rückfahrt zeigt die Teilstrecken in umgekehrter Reihenfolge und
+    Richtung, z. B. „Beispielstadt → Ecke: schräg von vorn rechts 14 km/h“.
+  - **Schwacher Wind** (unter 10 km/h) mit Richtung und dem Zusatz
+    „(schwach)“: „🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h“ und
+    „Ecke → Beispielstadt: Gegenwind 4 km/h (schwach)“. Es entscheidet der
+    angezeigte, gerundete Wert (9 km/h ist schwach, 10 km/h nicht). Bei
+    gerundet 0 km/h steht **„Windstill“** ohne Richtung, je Teilstrecke
+    „windstill“.
+  - Beispiel mit dem Wegpunkt „Ecke“ (erst nach Ost, dann nach Nord) bei
+    Südwestwind:
+
+    ```
+    Hinfahrt:  🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h
+                  Musterdorf → Ecke: schräg von hinten rechts 16 km/h
+                  Ecke → Beispielstadt: schräg von hinten links 14 km/h
+    Rückfahrt: 🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h
+                  Beispielstadt → Ecke: schräg von vorn rechts 14 km/h
+                  Ecke → Musterdorf: schräg von vorn links 16 km/h
+    ```
+  - Nur zur Info, nicht in der Ampel. Die Kachel in der Übersicht zeigt keinen
+    Wind (nur Ampeln und den wichtigsten Grund, z. B. Böen). Bei vergangenen
+    Fahrten steht nur die Ampel.
 - **Laden und Stand:** Die App lädt beim Start, beim Wechsel in Übersicht oder
   Wetter und beim Zurückkehren in die App neu, wenn die Vorhersage älter als 15
   Minuten oder die Warnungen älter als 10 Minuten sind; sonst mit
@@ -1190,7 +1222,7 @@ damit nichts verloren geht.
   Rückmeldung ohne Verschiebung mit Auswertung je Stufe und dem Schalter, die
   Umwandlung 5 → 6, die Empfehlung erst am Vorabend (auch am Tag der
   Zeitumstellung; der Tagesverlauf von 4c entfällt seit 4d), Wegpunkte (Formular, Reihenfolge, Teilstrecken, Wind
-  nach Länge gewichtet, Werte und Warnungen am Wegpunkt, Rückblick), den
+  je Teilstrecke (seit 4e eine Zeile je Teilstrecke statt nach Länge gewichtet), Werte und Warnungen am Wegpunkt, Rückblick), den
   Hinweis auf fehlende Einträge ohne doppelte Tage und die 12 Sekunden für
   „Rückgängig“,
 - Release 4d: Datenversion 7 (Umwandlung 6 → 7 mit `tests/daten-v6.json`,
@@ -1206,7 +1238,16 @@ damit nichts verloren geht.
   Platzhalter ersetzt: Name aus der DWD-Gemeinde, Ausland, keine Freigabe,
   Zeitüberschreitung, kein Netz, gerundete Koordinaten, nichts gespeichert,
   Ortung nur in der angezeigten Ansicht, Umschalten im Reiter und in den
-  Einstellungen).
+  Einstellungen),
+- Release 4e: die Windrichtung im Reiter Wetter (erste Zeile mit
+  Himmelsrichtung und Böen, darunter je Teilstrecke): die acht Abschnitte an
+  allen Grenzen (knapp davor, genau darauf, knapp dahinter, beide Seiten, über
+  Nord hinweg, mit einer echten Fahrtrichtung), das Mittel mehrerer Werte,
+  schwacher Wind mit Richtung, die Rundung 9/10 km/h, „Windstill“, die Karten
+  mit und ohne Wegpunkte, eine ausgeschlossene Teilstrecke, die Rückfahrt, die
+  vergangene Fahrt, die Karte „Jetzt“ (nur die erste Zeile), Böen nicht doppelt,
+  die Kachel und die Hinweise unverändert (dieselben Texte wie in 4d), Daten
+  unverändert und den Hinweis in den Einstellungen.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.

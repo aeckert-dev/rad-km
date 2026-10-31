@@ -1437,21 +1437,24 @@ async function start() {
     // -------------------------------------------------------------
     // 29. Wind relativ zur Strecke
     // -------------------------------------------------------------
-    abschnitt("29. Wind relativ zur Strecke (nur Info)");
+    abschnitt("29. Wind relativ zur Strecke (nur Info; seit 4e je Teilstrecke in acht Abschnitten)");
     const kurs = w.kursZwischen(MUSTERDORF, BEISPIELSTADT), kursZurueck = w.kursZwischen(BEISPIELSTADT, MUSTERDORF);
     wahr("Richtung Musterdorf → Beispielstadt: Nordost (ca. 51°), zurück Südwest", kurs > 48 && kurs < 55 && Math.abs(kursZurueck - kurs - 180) < 1, kurs + " / " + kursZurueck);
     const proben = (v, r) => Array(4).fill({ v, r });
-    gleich("Gegenwind, Rückenwind, Seitenwind von rechts und von links, schräg von vorn, schwacher Wind", [
-      w.windZurStrecke(proben(20, kurs), kurs).text, w.windZurStrecke(proben(20, kurs + 180), kurs).text, w.windZurStrecke(proben(20, kurs + 90), kurs).text,
-      w.windZurStrecke(proben(20, kurs - 90), kurs).text, w.windZurStrecke(proben(20, kurs + 40), kurs).text, w.windZurStrecke(proben(8, kurs), kurs).text
-    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "Seitenwind von rechts 20 km/h", "Seitenwind von links 20 km/h", "Gegenwind 15 km/h", "schwacher Wind (8 km/h)"]);
+    gleich("Gegenwind, Rückenwind, von rechts und von links, schräg von vorn rechts (volle Stärke), schwacher Wind mit Richtung", [
+      w.windRelativ(proben(20, kurs), kurs).text, w.windRelativ(proben(20, kurs + 180), kurs).text, w.windRelativ(proben(20, kurs + 90), kurs).text,
+      w.windRelativ(proben(20, kurs - 90), kurs).text, w.windRelativ(proben(20, kurs + 40), kurs).text, w.windRelativ(proben(8, kurs), kurs).text
+    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "von rechts 20 km/h", "von links 20 km/h", "schräg von vorn rechts 20 km/h", "Gegenwind 8 km/h (schwach)"]);
     om = aendern(aendern(ruhig(), "wind_speed_10m", D, "05:00", "18:00", 20), "wind_direction_10m", D, "05:00", "18:00", 50);
     ans = await laden(om);
-    gleich("Wind aus Nordost: hin Gegenwind, zurück Rückenwind; die Ampel bleibt grün", ans.fahrten.map(f => [f.wind.text, f.bewertung.farbe]),
-      [["Gegenwind 20 km/h", "gruen"], ["Rückenwind 20 km/h", "gruen"]]);
+    gleich("Wind aus Nordost: hin Gegenwind, zurück Rückenwind; die Ampel bleibt grün",
+      ans.fahrten.map(f => [f.wind.text, f.wind.teile.map(t => t.titel + ": " + t.text), f.bewertung.farbe]),
+      [["Wind 20 km/h aus Nordost, Böen bis 15 km/h", ["Musterdorf → Beispielstadt: Gegenwind 20 km/h"], "gruen"],
+        ["Wind 20 km/h aus Nordost, Böen bis 15 km/h", ["Beispielstadt → Musterdorf: Rückenwind 20 km/h"], "gruen"]]);
     wetterDaten({ arbeitsort: null });
     ans = await laden([om[0]]);
-    gleich("Ohne Arbeitsort: Wind mit Himmelsrichtung", ans.fahrten.map(f => f.wind.text), ["Wind 20 km/h aus Nordost", "Wind 20 km/h aus Nordost"]);
+    gleich("Ohne Arbeitsort: nur Wind mit Himmelsrichtung und Böen, keine Teilstrecke", ans.fahrten.map(f => [f.wind.text, f.wind.teile]),
+      [["Wind 20 km/h aus Nordost, Böen bis 15 km/h", []], ["Wind 20 km/h aus Nordost, Böen bis 15 km/h", []]]);
 
     // -------------------------------------------------------------
     // 30. Umschalten heute / nächster Fahrtag
@@ -1754,7 +1757,8 @@ async function start() {
     seite = ohneTags(ablageR.innerHTML);
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
-        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm · Böen bis 15 km/h", "👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken", "🧭 schwacher Wind (5 km/h)",
+        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
+        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt: schräg von hinten rechts 5 km/h (schwach)",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
       [ablageR.querySelectorAll(".zeitleiste .slot").length, ablageR.querySelectorAll(".zeitleiste .slot.rot").length, ablageR.querySelectorAll(".zeitleiste .slot.beste").length,
@@ -1797,7 +1801,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 4d, Datenversion 7", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["4d", 7]);
+    gleich("App-Version 4e, Datenversion 7 (unverändert)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["4e", 7]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -2517,11 +2521,12 @@ async function start() {
     ablageB.innerHTML = w.bildWetter(ABEND);
     const rueckKarte = () => ohneTags([...ablageB.querySelectorAll(".karte")].find(k => ohneTags(k.innerHTML).includes("Rückfahrt 16:00–17:00")).innerHTML);
     let rk = rueckKarte();
-    gleich("Grün: Böen nur bei den Werten, nicht in der Ampelzeile", [rk.includes("grün: trocken"), (rk.match(/Böen/g) || []).length, rk.includes("Böen bis 15 km/h")], [true, 1, true]);
+    gleich("Grün: Böen nur einmal (seit 4e in der Zeile zum Wind), nicht in der Ampelzeile", [rk.includes("grün: trocken"), (rk.match(/Böen/g) || []).length, rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h")], [true, 1, true]);
     await laden(aendern(ruhig(), "wind_gusts_10m", D, "16:15", "16:30", 45));
     ablageB.innerHTML = w.bildWetter(ABEND);
     rk = rueckKarte();
-    wahr("Gelb wegen Böen: Böen als Grund in der Ampelzeile", rk.includes("gelb: Böen 45 km/h ab 16:15") && rk.includes("Böen bis 45 km/h"), rk);
+    wahr("Gelb wegen Böen: Böen als Grund in der Ampelzeile und in der Zeile zum Wind, nicht bei den Werten",
+      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
 
@@ -2596,26 +2601,29 @@ async function start() {
     // -------------------------------------------------------------
     // 46. Wegpunkte: Wind je Teilstrecke, Wetter an den Wegpunkten
     // -------------------------------------------------------------
-    abschnitt("46. Wegpunkte (W8): Wind je Teilstrecke nach Länge gewichtet, Rückfahrt umgekehrt; Temperatur, Regen und Warnungen an den Wegpunkten");
+    abschnitt("46. Wegpunkte (W8): Wind je Teilstrecke (seit 4e je eine Zeile statt nach Länge gewichtet), Rückfahrt umgekehrt; Temperatur, Regen und Warnungen an den Wegpunkten");
     const strecken = w.teilstrecken(wetterEinst({ wegpunkte: [ECKE], windTeilstrecken: [true, true] }));
     gleich("Teilstrecken: Länge (Luftlinie) und Richtung hin und zurück", strecken.map(t => [Math.round(t.laenge * 10) / 10, Math.round(t.kursHin), Math.round(t.kursRueck), t.a, t.b]),
       [[14, 90, 270, 0, 1], [11.1, 0, 180, 1, 2]]);
     const nordwind = [[{ v: 20, r: 0 }], [{ v: 20, r: 0 }], [{ v: 20, r: 0 }]];
-    const windText = (strk, rueckf) => { const x = w.windAufStrecke(nordwind, strk, rueckf); return [x.text, x.teile && x.teile.map(t => t.titel + ": " + (t.zaehlt ? t.text : "zählt nicht"))]; };
-    gleich("Nordwind 20 km/h: hin erst Seitenwind von links (14 km), dann Gegenwind (11,1 km) → gewichtet Seitenwind von links 11 km/h; zurück umgekehrt", [windText(strecken, false), windText(strecken, true)], [
-      ["Seitenwind von links 11 km/h", ["Musterdorf → Ecke: Seitenwind von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
-      ["Seitenwind von rechts 11 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: Seitenwind von rechts 20 km/h"]]]);
+    const windZeilen = (strk, rueckf, jeOrt = nordwind) => w.windJeTeilstrecke(jeOrt, strk, rueckf).map(t => t.titel + ": " + t.text);
+    gleich("Nordwind 20 km/h: hin erst von links, dann Gegenwind; zurück in umgekehrter Reihenfolge und Richtung", [windZeilen(strecken, false), windZeilen(strecken, true)], [
+      ["Musterdorf → Ecke: von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"],
+      ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: von rechts 20 km/h"]]);
     const ohneErste = w.teilstrecken(wetterEinst({ wegpunkte: [ECKE], windTeilstrecken: [false, true] }));
-    gleich("Teilstrecke zählt nicht für den Wind: nur die übrige (hin Gegenwind, zurück Rückenwind)", [windText(ohneErste, false), windText(ohneErste, true)], [
-      ["Gegenwind 20 km/h", ["Musterdorf → Ecke: zählt nicht", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
-      ["Rückenwind 20 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: zählt nicht"]]]);
-    gleich("Keine Teilstrecke zählt: Wind mit Himmelsrichtung",
-      w.windAufStrecke(nordwind, w.teilstrecken(wetterEinst({ wegpunkte: [ECKE], windTeilstrecken: [false, false] })), false).text, "Wind 20 km/h aus Nord");
-    const T2 = (a, b, kurs) => ({ von: { ort: { name: a } }, bis: { ort: { name: b } }, a: 0, b: 1, laenge: 5, kursHin: kurs, kursRueck: (kurs + 180) % 360, wind: true });
-    gleich("Seitenwind auf gleich langen Teilstrecken von beiden Seiten: „Seitenwind wechselnd“",
-      w.windAufStrecke([[{ v: 20, r: 0 }], [{ v: 20, r: 0 }]], [T2("A", "B", 90), Object.assign(T2("B", "C", 270), { a: 0, b: 1 })], false).text, "Seitenwind wechselnd 20 km/h");
-    gleich("Ohne Wegpunkte: wie bisher eine Teilstrecke (Nordost), ohne Angaben je Teilstrecke",
-      (() => { const x = w.windAufStrecke([[{ v: 20, r: 50 }], [{ v: 20, r: 50 }]], w.teilstrecken(wetterEinst()), false); return [x.text, x.teile]; })(), ["Gegenwind 20 km/h", null]);
+    gleich("Teilstrecke zählt nicht für den Wind: wird nicht erwähnt (hin und zurück)", [windZeilen(ohneErste, false), windZeilen(ohneErste, true)], [
+      ["Ecke → Beispielstadt: Gegenwind 20 km/h"], ["Beispielstadt → Ecke: Rückenwind 20 km/h"]]);
+    gleich("Keine Teilstrecke zählt: keine Zeile je Teilstrecke",
+      windZeilen(w.teilstrecken(wetterEinst({ wegpunkte: [ECKE], windTeilstrecken: [false, false] })), false), []);
+    gleich("Stärke je Teilstrecke: volle Windgeschwindigkeit, gemittelt an ihren beiden Enden (6 und 20 → 13, 20 und 30 → 25 km/h)",
+      windZeilen(strecken, false, [[{ v: 6, r: 0 }], [{ v: 20, r: 0 }], [{ v: 30, r: 0 }]]), ["Musterdorf → Ecke: von links 13 km/h", "Ecke → Beispielstadt: Gegenwind 25 km/h"]);
+    const T2 = (a, b, kurs, laenge = 5) => ({ von: { ort: { name: a } }, bis: { ort: { name: b } }, a: 0, b: 1, laenge, kursHin: kurs, kursRueck: (kurs + 180) % 360, wind: true });
+    gleich("Teilstrecke ohne Länge (keine Richtung) oder ohne Winddaten entfällt",
+      [w.windJeTeilstrecke([[{ v: 20, r: 0 }], [{ v: 20, r: 0 }]], [T2("A", "A", 0, 0), T2("A", "B", 0)], false).map(t => t.titel), w.windJeTeilstrecke([[], []], [T2("A", "B", 0)], false)],
+      [["A → B"], []]);
+    gleich("Ohne Wegpunkte: eine Zeile Wohnort → Arbeitsort (Nordost: hin Gegenwind, zurück Rückenwind)",
+      [false, true].map(r => windZeilen(w.teilstrecken(wetterEinst()), r, [[{ v: 20, r: 50 }], [{ v: 20, r: 50 }]])),
+      [["Musterdorf → Beispielstadt: Gegenwind 20 km/h"], ["Beispielstadt → Musterdorf: Rückenwind 20 km/h"]]);
     // Vorhersage für drei Orte: Wohnort, Wegpunkt (Ecke), Arbeitsort
     const drei = om => [om[0], Object.assign(kopie(om[0]), { latitude: 51, longitude: 10.2 }), om[1]];
     wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [true, true] });
@@ -2625,9 +2633,13 @@ async function start() {
       abrufe.filter(u => u.includes("api.open-meteo.com")).map(u => { const q = new URL(u); return [q.searchParams.get("latitude"), q.searchParams.get("longitude")]; }),
       [["51.000,51.000,51.100", "10.000,10.200,10.200"]]);
     gleich("Warnungen: je Ort ein Abruf beim DWD (auch für den Wegpunkt)", abrufe.filter(u => u.includes("Warnungen_Gemeinden")).length, 3);
-    gleich("Reiter Wetter: Wind je Fahrt aus den Teilstrecken", ans.fahrten.map(f => f.wind.text), ["Seitenwind von links 11 km/h", "Seitenwind von rechts 11 km/h"]);
+    gleich("Reiter Wetter: erste Zeile mit Himmelsrichtung und Böen, darunter je Teilstrecke", ans.fahrten.map(f => [f.wind.text, f.wind.teile.map(t => t.titel + ": " + t.text)]), [
+      ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke: von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
+      ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: von rechts 20 km/h"]]]);
     ablageB.innerHTML = w.bildWetter(ABEND);
-    wahr("Reiter Wetter: Wind je Teilstrecke klein darunter", ohneTags(ablageB.innerHTML).includes("🧭 Seitenwind von links 11 km/h Musterdorf → Ecke: Seitenwind von links 20 km/h · Ecke → Beispielstadt: Gegenwind 20 km/h"),
+    wahr("Reiter Wetter: Wind je Teilstrecke als eigene Zeilen unter der Zeile 🧭 (Hin- und Rückfahrt)",
+      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke: von links 20 km/h Ecke → Beispielstadt: Gegenwind 20 km/h") &&
+      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke: Rückenwind 20 km/h Ecke → Musterdorf: von rechts 20 km/h"),
       ohneTags(ablageB.innerHTML));
     om = drei(ruhig());
     aendern(om, "apparent_temperature", D, "06:00", "07:00", 2, 1);
@@ -2807,19 +2819,19 @@ async function start() {
     let jf = ans.jetzt.fahrt;
     gleich("Fahrt ab der laufenden Viertelstunde (10:07 → 10:00–11:00), Dauer wie die Hinfahrt; nur der Wohnort zählt (Gewitter am Arbeitsort nicht)",
       [jf.fahrt, jf.bewertung.farbe, jf.bewertung.text], [{ von: "10:00", bis: "11:00", dauer: 60 }, "gelb", "gelb: 70 % Regen ab 10:30"]);
-    gleich("Kleidung nach Zwiebelprinzip (gefühlt 9 °C, 70 %) und Wind mit Himmelsrichtung (statt Gegen- oder Rückenwind)",
+    gleich("Kleidung nach Zwiebelprinzip (gefühlt 9 °C, 70 %) und Wind mit Himmelsrichtung und Böen (statt Gegen- oder Rückenwind)",
       [jf.kleidung.stufe.id, jf.kleidung.bereiche, jf.kleidung.regenBereiche, jf.wind.text],
       ["stufe4", { kopf: "leichte Mütze", hals: "", haende: "Übergangshandschuhe", oberkoerper: "T-Shirt, warmer Pullover, Regenjacke", beine: "Hose, Regenhose", fuesse: "Socken, Gamaschen" },
-        ["haende", "oberkoerper", "beine", "fuesse"], "Wind 20 km/h aus West"]);
+        ["haende", "oberkoerper", "beine", "fuesse"], "Wind 20 km/h aus West, Böen bis 15 km/h"]);
     gleich("Bestes Abfahrtsfenster ab jetzt: Abfahrten 10:00–11:00, Zeitleiste 10:00–12:00, „Abfahrt 11:00 statt jetzt“",
       [jf.abfahrt.kandidaten.map(x => uhr(x.minuten) + " " + x.bewertung.farbe), jf.abfahrt.felder.map(x => uhr(x.minuten)), jf.abfahrt.zeigen, jf.abfahrt.text],
       [["10:00 gelb", "10:15 gelb", "10:30 gelb", "10:45 gelb", "11:00 gruen"], ["10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45"], true,
         "Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00"]);
     seite = seiteBei(zeit(SA, "10:07"));
-    wahr("Reiter: Karte „Jetzt“ mit Ampel, Werten (Temperatur, gefühlt, Regen, Böen), Kleidung, Wind und Abfahrtsfenster",
-      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm · Böen bis 15 km/h 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
+    wahr("Reiter: Karte „Jetzt“ mit Ampel, Werten (Temperatur, gefühlt, Regen), Kleidung, Wind mit Böen und Abfahrtsfenster",
+      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
         "Hände Übergangshandschuhe ☔ Oberkörper T-Shirt, warmer Pullover, Regenjacke ☔ Beine Hose, Regenhose ☔ Füße Socken, Gamaschen ☔") &&
-        seite.includes("🧭 Wind 20 km/h aus West") && seite.includes("🕒 Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00") &&
+        seite.includes("🧭 Wind 20 km/h aus West, Böen bis 15 km/h 10:00 11:00 12:00 🕒 Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00") &&
         seite.includes("Amtliche Warnungen") && seite.includes("Stand: Vorhersage") && seite.includes("Aktualisieren") && seite.includes("Vorhersage: Open-Meteo.com"), seite);
     gleich("Übersicht: nur Ort und Ampel mit kurzer Begründung, keine weiteren Wetterwerte", ohneTags(w.wetterKachel(zeit(SA, "10:07"))),
       "🌦️ Jetzt · Musterdorf (Wohnort) gelb: 70 % Regen ab 10:30 🕔 Empfehlung für Mo 02.11. ab So 17:00");
@@ -2989,6 +3001,163 @@ async function start() {
     wetterDaten({ weitererOrt: { name: "Ferienort", lat: 54, lon: 9, aktiv: true } });
     ans = w.wetterAnsicht(zeit(SA, "10:07"));
     gleich("Weiterer Ort aktiv: unverändert heute und morgen dort, ohne „Jetzt“", [ans.weitererOrt, "jetzt" in ans, ans.tage.length], [true, false, 2]);
+
+    // =============================================================
+    // Release 4e: Windrichtung im Reiter Wetter (W14)
+    // =============================================================
+    // -------------------------------------------------------------
+    // 51. Wind mit Himmelsrichtung und je Teilstrecke
+    // -------------------------------------------------------------
+    abschnitt("51. Windrichtung (W14): erste Zeile mit Himmelsrichtung und Böen, darunter je Teilstrecke die Richtung relativ zur Fahrt in acht Abschnitten");
+    const eine = (v, r) => [{ v, r }];
+    const abschnittBei = (r, kurs = 0) => w.windRelativ(eine(20, r), kurs).abschnitt;
+    const windGrenzen = [0, 22.4, 22.5, 22.6, 67.4, 67.5, 67.6, 112.4, 112.5, 112.6, 157.4, 157.5, 157.6, 180];
+    gleich("Rechts (Fahrtrichtung Nord): je Grenze knapp davor, genau darauf und knapp dahinter; die Grenze zählt zum Abschnitt weiter vorn (ungünstiger)",
+      windGrenzen.map(r => r + "° " + abschnittBei(r)), ["0° Gegenwind", "22.4° Gegenwind", "22.5° Gegenwind", "22.6° schräg von vorn rechts",
+        "67.4° schräg von vorn rechts", "67.5° schräg von vorn rechts", "67.6° von rechts", "112.4° von rechts", "112.5° von rechts", "112.6° schräg von hinten rechts",
+        "157.4° schräg von hinten rechts", "157.5° schräg von hinten rechts", "157.6° Rückenwind", "180° Rückenwind"]);
+    gleich("Links ebenso (−22,5° = 337,5° usw.)",
+      windGrenzen.map(r => -r).map(r => r + "° " + abschnittBei((r + 360) % 360)), ["0° Gegenwind", "-22.4° Gegenwind", "-22.5° Gegenwind", "-22.6° schräg von vorn links",
+        "-67.4° schräg von vorn links", "-67.5° schräg von vorn links", "-67.6° von links", "-112.4° von links", "-112.5° von links", "-112.6° schräg von hinten links",
+        "-157.4° schräg von hinten links", "-157.5° schräg von hinten links", "-157.6° Rückenwind", "-180° Rückenwind"]);
+    gleich("Über Nord hinweg (Fahrtrichtung 350° bzw. 10°) und bei einer echten Fahrtrichtung (Musterdorf → Beispielstadt, ca. 51,3°)",
+      [abschnittBei(12.5, 350), abschnittBei(12.6, 350), abschnittBei(347.5, 10), abschnittBei(347.4, 10), abschnittBei(0, 90), abschnittBei(90, 270),
+        abschnittBei(kurs + 22.5, kurs), abschnittBei(kurs + 22.6, kurs), abschnittBei(kurs + 360 - 157.5, kurs), abschnittBei(kurs + 360 - 157.6, kurs)],
+      ["Gegenwind", "schräg von vorn rechts", "Gegenwind", "schräg von vorn links", "von links", "Rückenwind",
+        "Gegenwind", "schräg von vorn rechts", "schräg von hinten links", "Rückenwind"]);
+    gleich("Mehrere Werte: Richtung aus dem Mittel der Windvektoren, Stärke als Mittel der Geschwindigkeiten (volle Stärke, nicht der Anteil)",
+      [w.windRelativ([{ v: 10, r: 80 }, { v: 30, r: 100 }], 0).text, w.windRelativ([{ v: 20, r: 350 }, { v: 20, r: 30 }], 0).text, w.windRelativ([], 0)],
+      ["von rechts 20 km/h", "Gegenwind 20 km/h", null]);
+    gleich("Schwacher Wind mit Himmelsrichtung, relativer Richtung (Fahrt nach Südwest bzw. Nordost) und „(schwach)“; Böen immer dabei",
+      [w.windAllgemein(eine(4, 225), 12).text, w.windRelativ(eine(4, 225), 225).text, w.windRelativ(eine(4, 225), 45).text, w.windAllgemein(eine(4, 225), 12).schwach],
+      ["Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h", "Gegenwind 4 km/h (schwach)", "Rückenwind 4 km/h (schwach)", true]);
+    gleich("Der angezeigte (gerundete) Wert entscheidet: 9,4 → 9 km/h (schwach), 9,5 → 10 km/h ohne Zusatz",
+      [w.windAllgemein(eine(9.4, 180), 20).text, w.windAllgemein(eine(9.5, 180), 20).text, w.windRelativ(eine(9.4, 180), 0).text, w.windRelativ(eine(9.6, 180), 0).text],
+      ["Wind 9 km/h aus Süd (schwach), Böen bis 20 km/h", "Wind 10 km/h aus Süd, Böen bis 20 km/h", "Rückenwind 9 km/h (schwach)", "Rückenwind 10 km/h"]);
+    gleich("Windstill bei gerundet 0 km/h (ohne Richtung); 0,5 km/h ist schon 1 km/h",
+      [w.windAllgemein(eine(0.4, 90), 5).text, w.windRelativ(eine(0.4, 90), 0).text, w.windRelativ(eine(0.4, 90), 0).abschnitt, w.windAllgemein(eine(0.5, 90), 5).text],
+      ["Windstill, Böen bis 5 km/h", "windstill", null, "Wind 1 km/h aus Ost (schwach), Böen bis 5 km/h"]);
+    gleich("Himmelsrichtungen wie bisher (Grenze zur nächsten im Uhrzeigersinn)",
+      [0, 22.4, 22.5, 200, 337.5, 350].map(r => w.windAllgemein(eine(20, r), 20).richtung), ["Nord", "Nord", "Nordost", "Süd", "Nord", "Nord"]);
+
+    // Fahrt-Karten am Fahrtag (Di 27.10., angezeigt am Vorabend)
+    const windKarten = () => {
+      const d = w.document.createElement("div");
+      d.innerHTML = w.bildWetter(ABEND);
+      return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ({ titel: ohneTags(k.querySelector("h3").innerHTML), text: ohneTags(k.innerHTML),
+        teile: [...k.querySelectorAll(".wind-teile > div")].map(z => ohneTags(z.innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
+    };
+    const windVorhersage = (jeOrt, richtung, boeen) => {
+      const om = drei(ruhig());
+      jeOrt.forEach((v, i) => aendern(om, "wind_speed_10m", D, "05:00", "18:00", v, i));
+      aendern(om, "wind_direction_10m", D, "05:00", "18:00", richtung);
+      return aendern(om, "wind_gusts_10m", D, "05:00", "18:00", boeen);
+    };
+    // Südwestwind, am Wohnort 18, an Ecke und Arbeitsort 14 km/h (Mittel 15), Böen 36 km/h
+    wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [true, true] });
+    await laden(windVorhersage([18, 14, 14], 225, 36));
+    let windK = windKarten();
+    gleich("Hinfahrt: zuerst Wind mit Himmelsrichtung und Böen, darunter je Teilstrecke (Ost, dann Nord) mit der Stärke an ihren Enden",
+      [windK[0].titel, windK[0].zeilen, windK[0].teile],
+      ["Hinfahrt 06:00–07:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Musterdorf → Ecke: schräg von hinten rechts 16 km/h", "Ecke → Beispielstadt: schräg von hinten links 14 km/h"]]);
+    gleich("Rückfahrt: umgekehrte Reihenfolge und Richtung",
+      [windK[1].titel, windK[1].zeilen, windK[1].teile],
+      ["Rückfahrt 16:00–17:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Beispielstadt → Ecke: schräg von vorn rechts 14 km/h", "Ecke → Musterdorf: schräg von vorn links 16 km/h"]]);
+    wahr("Die frühere Zusammenfassung (Gegen-/Seitenwind gewichtet) und „zählt nicht“ stehen nicht mehr in den Karten; Böen nicht bei den Werten",
+      windK.every(k => !/Seitenwind|wechselnd|zählt nicht|mm · Böen/.test(k.text) && (k.text.match(/Böen/g) || []).length === 1), windK.map(k => k.text).join("\n"));
+    const ablage51 = w.document.createElement("div");
+    ablage51.innerHTML = w.bildWetter(ABEND);
+    const teileStil = ablage51.querySelector(".wind-teile");
+    w.document.body.appendChild(ablage51);
+    const stil = w.getComputedStyle(ablage51.querySelector(".wind-teile"));
+    gleich("Teilstrecken-Zeilen in normaler Schrift (nicht „klein“), eingerückt, jede eine eigene Zeile",
+      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, stil.fontSize === w.getComputedStyle(ablage51.querySelector(".karte")).fontSize, teileStil.children.length],
+      [false, true, true, 2]);
+    ablage51.remove();
+
+    // Schwacher Wind, die erste Teilstrecke zählt nicht
+    wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [false, true] });
+    await laden(windVorhersage([4, 4, 4], 225, 12));
+    windK = windKarten();
+    gleich("Schwacher Wind: Himmelsrichtung und relative Richtung mit „(schwach)“; die ausgeschlossene Teilstrecke wird nicht erwähnt",
+      windK.map(k => [k.zeilen, k.teile, k.text.includes("Musterdorf →") || k.text.includes("→ Musterdorf")]), [
+        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Ecke → Beispielstadt: schräg von hinten links 4 km/h (schwach)"], false],
+        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Beispielstadt → Ecke: schräg von vorn rechts 4 km/h (schwach)"], false]]);
+    wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [false, false] });
+    await laden(windVorhersage([4, 4, 4], 225, 12));
+    gleich("Keine Teilstrecke zählt: nur die erste Zeile", windKarten().map(k => [k.zeilen, k.teile]),
+      [[["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], []], [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], []]]);
+    wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [true, true] });
+    await laden(windVorhersage([0.3, 0.2, 0.4], 225, 5));
+    gleich("Windstill: erste Zeile ohne Richtung, je Teilstrecke „windstill“", windKarten()[0].zeilen.concat(windKarten()[0].teile),
+      ["🧭 Windstill, Böen bis 5 km/h", "Musterdorf → Ecke: windstill", "Ecke → Beispielstadt: windstill"]);
+
+    // Ohne Wegpunkte: eine Zeile Wohnort → Arbeitsort
+    wetterDaten();
+    let om51 = aendern(aendern(aendern(ruhig(), "wind_speed_10m", D, "05:00", "18:00", 20), "wind_direction_10m", D, "05:00", "18:00", 50), "wind_gusts_10m", D, "05:00", "18:00", 30);
+    await laden(om51);
+    gleich("Ohne Wegpunkte: auch bei nur einer Teilstrecke eine Zeile (Nordost: hin Gegenwind, zurück Rückenwind)", windKarten().map(k => [k.zeilen, k.teile]), [
+      [["🧭 Wind 20 km/h aus Nordost, Böen bis 30 km/h"], ["Musterdorf → Beispielstadt: Gegenwind 20 km/h"]],
+      [["🧭 Wind 20 km/h aus Nordost, Böen bis 30 km/h"], ["Beispielstadt → Musterdorf: Rückenwind 20 km/h"]]]);
+    wetterDaten({ windTeilstrecken: [false] });
+    await laden(om51);
+    gleich("Ohne Wegpunkte, Teilstrecke zählt nicht: nur die erste Zeile", windKarten().map(k => [k.zeilen, k.teile]),
+      [[["🧭 Wind 20 km/h aus Nordost, Böen bis 30 km/h"], []], [["🧭 Wind 20 km/h aus Nordost, Böen bis 30 km/h"], []]]);
+    wetterDaten();
+    await laden(om51, undefined, zeit(D, "10:00"));
+    const vorbeiKarten = (() => { const d = w.document.createElement("div"); d.innerHTML = w.bildWetter(zeit(D, "10:00")); return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ohneTags(k.innerHTML)); })();
+    gleich("Nach der Hinfahrt: die vorbeigegangene Fahrt ohne Wind (nur Ampel), die Rückfahrt mit", vorbeiKarten.map(t => [t.split(" ")[0], t.includes("vorbei"), t.includes("🧭")]),
+      [["Hinfahrt", true, false], ["Rückfahrt", false, true]]);
+
+    // „Jetzt“ (spontane Runde): nur die erste Zeile, auch mit Wegpunkten
+    const SA51 = zeit(SA, "10:07");
+    wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [true, true] });
+    let omJ51 = drei(ruhig());
+    aendern(omJ51, "wind_speed_10m", SA, "06:00", "18:00", 4);
+    aendern(omJ51, "wind_direction_10m", SA, "06:00", "18:00", 225);
+    aendern(omJ51, "wind_gusts_10m", SA, "06:00", "18:00", 12);
+    await laden(omJ51, undefined, SA51);
+    jf = w.wetterAnsicht(SA51).jetzt.fahrt;
+    const jetztDiv = w.document.createElement("div");
+    jetztDiv.innerHTML = w.bildWetter(SA51);
+    const jetztKarte = [...jetztDiv.querySelectorAll(".karte")].find(k => k.querySelector("h3") && k.querySelector("h3").textContent.startsWith("Jetzt"));
+    gleich("Karte „Jetzt“: nur die erste Zeile (Richtung der Fahrt unbekannt), schwacher Wind mit Himmelsrichtung; Werte ohne Böen",
+      [jf.wind.text, jf.wind.teile, [...jetztKarte.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)), jetztKarte.querySelectorAll(".wind-teile").length,
+        ohneTags(jetztKarte.innerHTML).includes("→"), (ohneTags(jetztKarte.innerHTML).match(/Böen/g) || []).length],
+      ["Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h", [], ["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], 0, false, 1]);
+
+    // Kachel und Hinweise unverändert (Texte wie in 4d), gleich bei jeder Windrichtung
+    const kachelBei = async (richtung, jetzt, om = ruhig(), tag = D) => {
+      aendern(aendern(om, "wind_speed_10m", tag, "00:00", "23:45", 25), "wind_direction_10m", tag, "00:00", "23:45", richtung);
+      await laden(om, undefined, jetzt);
+      return w.wetterKachel(jetzt);
+    };
+    wetterDaten({ wegpunkte: [], windTeilstrecken: [true] });
+    const kachelN = await kachelBei(0, ABEND, aendern(ruhig(), "wind_gusts_10m", D, "16:15", "16:30", 45));
+    const kachelS = await kachelBei(180, ABEND, aendern(ruhig(), "wind_gusts_10m", D, "16:15", "16:30", 45));
+    const kachelJetzt = await kachelBei(270, SA51, ruhig(), SA);
+    gleich("Kachel in der Übersicht wie in 4d: Ampeln und Grund, kein Wind, bei Nord- und Südwind dasselbe",
+      [ohneTags(kachelN), kachelN === kachelS, kachelN.includes("🧭") || kachelJetzt.includes("🧭"), ohneTags(kachelJetzt)],
+      ["🌦️ Morgen, Di 27.10. Hin grün Rück gelb Rückfahrt gelb: Böen 45 km/h ab 16:15", true, false,
+        "🌦️ Jetzt · Musterdorf (Wohnort) grün: trocken 🕔 Empfehlung für Mo 02.11. ab So 17:00"]);
+    await laden(ruhig());
+    gleich("Hinweise außerhalb der Karten unverändert (Kleidung für die Rückfahrt, Empfehlung ab)",
+      [w.wetterAnsicht(ABEND).kleidungsHinweis, ohneTags(w.bildWetter(SA51)).includes("🕔 Empfehlung für Mo 02.11. ab So 17:00 (Hin- und Rückfahrt mit Ampel, Kleidung und Wind)")], [null, true]);
+
+    // Anzeige ändert keine Daten; Hinweis in den Einstellungen
+    wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [true, false] });
+    w.speichern();
+    const vorher51 = localStorage.getItem(TEST_SCHLUESSEL);
+    await laden(windVorhersage([18, 14, 14], 225, 36));
+    w.bildWetter(ABEND); w.wetterKachel(ABEND);
+    gleich("Die Anzeige des Winds verändert die gespeicherten Daten nicht", localStorage.getItem(TEST_SCHLUESSEL), vorher51);
+    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    const hinweis51 = w.document.querySelector('#inhalt [data-change="teilstrecke-wind"]').closest(".karte").querySelector(".feldhinweis").textContent;
+    gleich("Einstellungen → Teilstrecken für den Wind: Hinweis auf die Zeile je Teilstrecke (statt „nach Länge gewichtet“)", hinweis51,
+      "Der Reiter Wetter zeigt je Teilstrecke, die zählt, eine Zeile mit dem Wind relativ zu ihrer Fahrtrichtung (z. B. Gegenwind); die Rückfahrt in umgekehrter Reihenfolge und Richtung. " +
+      "Nimm z. B. eine Strecke durch ein Wohngebiet heraus.");
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    wetterLeeren();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
