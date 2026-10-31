@@ -1712,13 +1712,35 @@ async function start() {
     gleich("Bereich Wetter: Orte und Fahrzeiten", [...w.document.querySelectorAll('#inhalt [data-action="ort-bearbeiten"], #inhalt [data-action="fahrt-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
       ["Wohnort nicht festgelegt ›", "Arbeitsort nicht festgelegt ›", "Weiterer Ort nicht festgelegt ›",
         "Hinfahrt 06:00–07:00 übliche Abfahrt 06:00 · Dauer 60 min ›", "Rückfahrt 16:00–17:00 übliche Abfahrt 16:00 · Dauer 60 min ›"]);
+    const fz = id => w.document.getElementById(id);
     w.fahrtFormular("rueckfahrt");
+    gleich("Fahrzeit-Formular: Schalter „Übliche Abfahrt“ an, darunter die Uhrzeit 16:00 (bedienbar)",
+      [fz("fz-abfahrt-an").type, fz("fz-abfahrt-an").checked, ohneTags(fz("fz-abfahrt-an").closest("label").innerHTML), fz("fz-abfahrt").type, fz("fz-abfahrt").value, fz("fz-abfahrt").disabled],
+      ["checkbox", true, "Übliche Abfahrt", "time", "16:00", false]);
     w.document.getElementById("fz-von").value = "15:30";
     w.document.getElementById("fz-bis").value = "17:00";
-    w.document.getElementById("fz-abfahrt").value = "";
+    fz("fz-abfahrt-an").checked = false;
+    fz("fz-abfahrt-an").dispatchEvent(new w.Event("change", { bubbles: true }));
+    const abfahrtGesperrt = fz("fz-abfahrt").disabled;
     w.document.getElementById("fz-dauer").value = "45";
     w.fahrtSpeichern();
-    gleich("Fahrzeit ändern, übliche Abfahrt leer lassen: aus, die Uhrzeit bleibt", w.eval("daten.einstellungen.wetter.rueckfahrt"), { von: "15:30", bis: "17:00", abfahrtAn: false, abfahrt: "16:00", dauer: 45 });
+    gleich("Fahrzeit ändern, übliche Abfahrt aus: Uhrzeit gesperrt, gespeichert mit abfahrtAn false, die Uhrzeit bleibt",
+      [abfahrtGesperrt, w.eval("daten.einstellungen.wetter.rueckfahrt")], [true, { von: "15:30", bis: "17:00", abfahrtAn: false, abfahrt: "16:00", dauer: 45 }]);
+    gleich("Einstellungen: „keine übliche Abfahrt“", ohneTags(w.document.querySelector('#inhalt [data-action="fahrt-bearbeiten"][data-art="rueckfahrt"]').innerHTML),
+      "Rückfahrt 15:30–17:00 keine übliche Abfahrt · Dauer 45 min ›");
+    w.fahrtFormular("rueckfahrt");
+    gleich("Erneut geöffnet: Schalter aus, Uhrzeit 16:00 gesperrt", [fz("fz-abfahrt-an").checked, fz("fz-abfahrt").value, fz("fz-abfahrt").disabled], [false, "16:00", true]);
+    fz("fz-abfahrt-an").checked = true;
+    fz("fz-abfahrt-an").dispatchEvent(new w.Event("change", { bubbles: true }));
+    fz("fz-abfahrt").value = "";
+    w.fahrtSpeichern();
+    gleich("Wieder an mit leerem Uhrzeitfeld (iPhone „Zurücksetzen“): die bisherige Uhrzeit 16:00 bleibt", w.eval("daten.einstellungen.wetter.rueckfahrt"),
+      { von: "15:30", bis: "17:00", abfahrtAn: true, abfahrt: "16:00", dauer: 45 });
+    w.fahrtFormular("rueckfahrt");
+    fz("fz-abfahrt").value = "15:45";
+    w.fahrtSpeichern();
+    gleich("Andere Uhrzeit 15:45", [w.eval("daten.einstellungen.wetter.rueckfahrt.abfahrt"), ohneTags(w.document.querySelector('#inhalt [data-action="fahrt-bearbeiten"][data-art="rueckfahrt"]').innerHTML)],
+      ["15:45", "Rückfahrt 15:30–17:00 übliche Abfahrt 15:45 · Dauer 45 min ›"]);
     alerts.length = 0;
     w.fahrtFormular("hinfahrt");
     w.document.getElementById("fz-dauer").value = "0";
@@ -1969,9 +1991,14 @@ async function start() {
     gleich("Mit Eintrag für heute: kein Hinweis für heute", w.fehlendeFahrtage(FR, 20 * 60), VORHER);
     lueckenDaten();
     w.eval("aktiverTab = 'einstellungen'; zeichnen()");
-    const hinweisFeld = feld("e-hinweis-ab");
-    gleich("Einstellungen → Fahrtage: „Hinweis für heute ab“ 18:00", [hinweisFeld && hinweisFeld.type, hinweisFeld && hinweisFeld.value,
-      ohneTags(w.document.querySelector('label[for="e-hinweis-ab"]').innerHTML)], ["time", "18:00", "Hinweis für heute ab"]);
+    const hinweisFeld = feld("e-hinweis-ab"), hinweisSchalter = feld("e-hinweis-an");
+    gleich("Einstellungen → Fahrtage (W13): Schalter „Hinweis schon am selben Tag“ an, darunter die Uhrzeit 18:00 (bedienbar)",
+      [hinweisSchalter && hinweisSchalter.type, hinweisSchalter && hinweisSchalter.checked, ohneTags(hinweisSchalter.closest("label").innerHTML),
+        hinweisFeld && hinweisFeld.type, hinweisFeld && hinweisFeld.value, hinweisFeld.disabled, ohneTags(w.document.querySelector('label[for="e-hinweis-ab"]').innerHTML)],
+      ["checkbox", true, "Hinweis schon am selben Tag", "time", "18:00", false, "ab Uhrzeit"]);
+    wahr("Hilfetext: „An: … ab dieser Uhrzeit schon am selben Tag … Aus: erst ab dem nächsten Tag.“",
+      hinweisFeld.nextElementSibling.textContent === "An: Fehlt an einem Fahrtag der Eintrag, weist die Übersicht ab dieser Uhrzeit schon am selben Tag darauf hin. Aus: erst ab dem nächsten Tag.",
+      hinweisFeld.nextElementSibling.textContent);
     hinweisFeld.value = "16:30";
     hinweisFeld.dispatchEvent(new w.Event("change", { bubbles: true }));
     gleich("Uhrzeit 16:30: sofort gespeichert; 16:29 noch nicht, 16:30 schon",
@@ -1979,9 +2006,22 @@ async function start() {
       ["16:30", "Hinweis für heute ab 16:30 Uhr", false, true]);
     hinweisFeld.value = "";
     hinweisFeld.dispatchEvent(new w.Event("change", { bubbles: true }));
-    gleich("Leer: heute nie, erst ab dem nächsten Tag", [w.eval("daten.einstellungen.hinweisHeuteAn"), toast()[0], w.fehlendeFahrtage(FR, 23 * 60 + 59)],
-      [false, "Hinweis erst ab dem nächsten Tag", VORHER]);
-    w.eval(`daten.einstellungen.hinweisHeuteAn = true; daten.einstellungen.hinweisHeuteAb = "00:00"`);
+    gleich("Leeres Uhrzeitfeld (z. B. „Zurücksetzen“ auf dem iPhone): nichts geändert, das Feld zeigt wieder 16:30",
+      [w.eval("daten.einstellungen.hinweisHeuteAn"), w.eval("daten.einstellungen.hinweisHeuteAb"), hinweisFeld.value, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.hinweisHeuteAb],
+      [true, "16:30", "16:30", "16:30"]);
+    hinweisSchalter.checked = false;
+    hinweisSchalter.dispatchEvent(new w.Event("change", { bubbles: true }));
+    gleich("Schalter aus: sofort gespeichert, Uhrzeit nicht mehr bedienbar (bleibt 16:30), heute nie, erst ab dem nächsten Tag",
+      [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.hinweisHeuteAn, w.eval("daten.einstellungen.hinweisHeuteAb"), hinweisFeld.disabled, toast()[0],
+        w.fehlendeFahrtage(FR, 23 * 60 + 59), w.fehlendeFahrtage(w.plusTage(FR, 1), 0).includes(FR)],
+      [false, "16:30", true, "Hinweis erst ab dem nächsten Tag", VORHER, true]);
+    w.eval("zeichnen()");
+    gleich("Nach dem Neuzeichnen: Schalter aus, Uhrzeit 16:30 nicht bedienbar", [feld("e-hinweis-an").checked, feld("e-hinweis-ab").value, feld("e-hinweis-ab").disabled], [false, "16:30", true]);
+    feld("e-hinweis-an").checked = true;
+    feld("e-hinweis-an").dispatchEvent(new w.Event("change", { bubbles: true }));
+    gleich("Wieder an: die Uhrzeit 16:30 gilt wieder", [w.eval("daten.einstellungen.hinweisHeuteAn"), feld("e-hinweis-ab").disabled, toast()[0], w.fehlendeFahrtage(FR, 16 * 60 + 30).includes(FR)],
+      [true, false, "Hinweis schon am selben Tag ab 16:30 Uhr", true]);
+    w.eval(`daten.einstellungen.hinweisHeuteAb = "00:00"`);
     gleich("Ohne Uhrzeit-Angabe zählt für einen anderen Tag als heute 0:00", [w.fehlendeFahrtage(FR), w.fehlendeFahrtage("2026-10-29")], [VORHER.concat([FR]), ["2026-10-20", "2026-10-23"]]);
 
     // -------------------------------------------------------------

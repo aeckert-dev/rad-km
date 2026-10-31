@@ -301,6 +301,7 @@ input, select, textarea {
   -webkit-appearance: none; appearance: none;
 }
 input[type="date"], input[type="time"] { display: block; }
+input:disabled { opacity: .45; }
 input::-webkit-date-and-time-value { text-align: left; }
 select {
   background-image: linear-gradient(45deg, transparent 50%, var(--text2) 50%), linear-gradient(135deg, var(--text2) 50%, transparent 50%);
@@ -3445,23 +3446,27 @@ function fahrtFormular(art) {
     '<label for="fz-bis">bis</label><input type="time" id="fz-bis" value="' + f.bis + '">' +
     '<div class="feldhinweis">Für diesen Zeitraum gelten Ampel, Kleidung und Wind.' +
     (art === "rueckfahrt" ? " Nach seinem Ende zeigt der Reiter Wetter den nächsten Fahrtag." : "") + '</div>' +
-    '<label for="fz-abfahrt">Übliche Abfahrt (optional)</label><input type="time" id="fz-abfahrt" value="' + (ueblicheAbfahrt(f) || "") + '">' +
+    // Schalter und Uhrzeit (das Uhrzeitfeld lässt sich auf dem iPhone nicht leeren)
+    '<label class="haken"><input type="checkbox" id="fz-abfahrt-an" data-change="fahrt-abfahrt-an"' + (f.abfahrtAn ? " checked" : "") + '><span>Übliche Abfahrt</span></label>' +
+    '<label for="fz-abfahrt">Uhrzeit der üblichen Abfahrt</label><input type="time" id="fz-abfahrt" value="' + f.abfahrt + '"' + (f.abfahrtAn ? "" : " disabled") + '>' +
     '<label for="fz-dauer">Dauer der Fahrt (Minuten)</label><input type="text" id="fz-dauer" inputmode="numeric" value="' + f.dauer + '">' +
     '<div class="feldhinweis">Für das beste Abfahrtsfenster prüft die App Abfahrten im 15-Minuten-Raster von 30 Minuten vor bis 30 Minuten nach der Fahrzeit. ' +
-    'Mit üblicher Abfahrt heißt es z. B. „Abfahrt 15:45 statt 16:00“, ohne nennt die App die beste Abfahrt und die Zeit, die du meiden solltest.</div>' +
+    'Mit üblicher Abfahrt (Schalter an) heißt es z. B. „Abfahrt 15:45 statt 16:00“; aus: Die App nennt die beste Abfahrt und die Zeit, die du meiden solltest.</div>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="fahrt-speichern">Speichern</button></div>'
   );
 }
 function fahrtSpeichern() {
-  const von = wert("fz-von").slice(0, 5), bis = wert("fz-bis").slice(0, 5), abfahrt = wert("fz-abfahrt").slice(0, 5);
+  const alt = daten.einstellungen.wetter[formFahrt];
+  const von = wert("fz-von").slice(0, 5), bis = wert("fz-bis").slice(0, 5), abfahrtAn = document.getElementById("fz-abfahrt-an").checked;
+  // Leeres Uhrzeitfeld (z. B. "Zurücksetzen" auf dem iPhone): die bisherige Uhrzeit bleibt
+  const abfahrt = wert("fz-abfahrt").slice(0, 5) || alt.abfahrt;
   const dauerText = wert("fz-dauer").trim(), dauer = Number(dauerText);
   if (!istUhrzeit(von) || !istUhrzeit(bis)) { alert("Bitte Beginn und Ende der Fahrzeit als Uhrzeit eingeben, z. B. 06:00."); return; }
   if (von >= bis) { alert("Der Beginn der Fahrzeit muss vor ihrem Ende liegen."); return; }
-  if (abfahrt && !istUhrzeit(abfahrt)) { alert("Die übliche Abfahrt muss eine Uhrzeit sein (oder leer)."); return; }
+  if (!istUhrzeit(abfahrt)) { alert("Die übliche Abfahrt muss eine Uhrzeit sein, z. B. 16:00."); return; }
   if (!(/^\d+$/.test(dauerText) && dauer >= 5 && dauer <= 240)) { alert("Bitte die Dauer in Minuten von 5 bis 240 eingeben, z. B. 60."); return; }
-  const alt = daten.einstellungen.wetter[formFahrt];
-  daten.einstellungen.wetter[formFahrt] = { von, bis, abfahrtAn: !!abfahrt, abfahrt: abfahrt || alt.abfahrt, dauer };
+  daten.einstellungen.wetter[formFahrt] = { von, bis, abfahrtAn, abfahrt, dauer };
   if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Fahrzeit gespeichert"); }
 }
 
@@ -4457,9 +4462,12 @@ function bildEinstellungen() {
       (fahrtage.includes(t) ? " checked" : "") + '><span>' + WOCHENTAGE[t % 7] + '</span></label>').join("") +
     '</div><div class="feldhinweis">Deine üblichen Fahrtage. Die Übersicht weist auf Fahrtage der letzten 14 Tage ohne Eintrag hin, ' +
     'die Statistik zählt damit die längste Serie, und der Reiter Wetter zeigt dafür Hin- und Rückfahrt.</div>' +
-    '<label for="e-hinweis-ab">Hinweis für heute ab</label>' +
-    '<input type="time" id="e-hinweis-ab" value="' + (daten.einstellungen.hinweisHeuteAn ? daten.einstellungen.hinweisHeuteAb : "") + '" data-change="hinweis-heute-ab">' +
-    '<div class="feldhinweis">Fehlt an einem Fahrtag der Eintrag, weist die Übersicht ab dieser Uhrzeit schon am selben Tag darauf hin. Leer = erst ab dem nächsten Tag.</div></div>';
+    // Schalter und Uhrzeit (das Uhrzeitfeld lässt sich auf dem iPhone nicht leeren)
+    '<label class="haken"><input type="checkbox" id="e-hinweis-an" data-change="hinweis-heute-an"' + (daten.einstellungen.hinweisHeuteAn ? " checked" : "") + '>' +
+    '<span>Hinweis schon am selben Tag</span></label>' +
+    '<label for="e-hinweis-ab">ab Uhrzeit</label>' +
+    '<input type="time" id="e-hinweis-ab" value="' + daten.einstellungen.hinweisHeuteAb + '" data-change="hinweis-heute-ab"' + (daten.einstellungen.hinweisHeuteAn ? "" : " disabled") + '>' +
+    '<div class="feldhinweis">An: Fehlt an einem Fahrtag der Eintrag, weist die Übersicht ab dieser Uhrzeit schon am selben Tag darauf hin. Aus: erst ab dem nächsten Tag.</div></div>';
 
   html += wetterEinstellungen();
 
@@ -4490,13 +4498,22 @@ function bildEinstellungen() {
   return html;
 }
 
-// Uhrzeit für den Hinweis am selben Tag geändert: sofort speichern (leer = erst ab dem nächsten Tag)
+// Schalter "Hinweis schon am selben Tag": sofort speichern; die Uhrzeit ist nur bei "an" bedienbar
+function hinweisHeuteAnGeaendert(an) {
+  const es = daten.einstellungen;
+  es.hinweisHeuteAn = an;
+  const feld = document.getElementById("e-hinweis-ab");
+  if (feld) feld.disabled = !an;
+  if (speichern()) meldung(an ? "Hinweis schon am selben Tag ab " + es.hinweisHeuteAb + " Uhr" : "Hinweis erst ab dem nächsten Tag");
+}
+// Uhrzeit für den Hinweis am selben Tag geändert: sofort speichern. Ein leeres
+// Feld (z. B. "Zurücksetzen" auf dem iPhone) ändert nichts, die Uhrzeit bleibt.
 function hinweisHeuteAbGeaendert(wertText) {
-  const t = String(wertText || "").slice(0, 5);
-  if (t && !istUhrzeit(t)) return;
-  daten.einstellungen.hinweisHeuteAn = !!t;
-  if (t) daten.einstellungen.hinweisHeuteAb = t;
-  if (speichern()) meldung(t ? "Hinweis für heute ab " + t + " Uhr" : "Hinweis erst ab dem nächsten Tag");
+  const es = daten.einstellungen, t = String(wertText || "").slice(0, 5);
+  const feld = document.getElementById("e-hinweis-ab");
+  if (!istUhrzeit(t)) { if (feld) feld.value = es.hinweisHeuteAb; return; }
+  es.hinweisHeuteAb = t;
+  if (speichern()) meldung("Hinweis für heute ab " + t + " Uhr");
 }
 
 // Fahrtage geändert: sofort speichern (aufsteigend sortiert)
@@ -5010,7 +5027,9 @@ const AENDERUNGEN = {
   "mangel-status": () => mangelStatusGeaendert(),
   "art-fenster": () => artFensterGeaendert(),
   "fahrtag": () => fahrtageGeaendert(),
+  "hinweis-heute-an": el => hinweisHeuteAnGeaendert(el.checked),
   "hinweis-heute-ab": el => hinweisHeuteAbGeaendert(el.value),
+  "fahrt-abfahrt-an": el => { const f = document.getElementById("fz-abfahrt"); if (f) f.disabled = !el.checked; },
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),
   "teilstrecke-wind": el => teilstreckeWind(Number(el.dataset.i), el.checked),
   "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
