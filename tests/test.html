@@ -1876,7 +1876,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5a.1, Datenversion 9 (Release 5b)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5a.1", 9]);
+    gleich("App-Version 5b, Datenversion 9 (Release 5b)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5b", 9]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7

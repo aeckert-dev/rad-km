@@ -33,16 +33,16 @@ sind immer erfunden.
 | `js/grundlagen.js` | `APP_VERSION`, `DATEN_VERSION`, Speicherschlüssel, Konstanten; Hilfsfunktionen Datum/Zahlen/Text |
 | `js/daten.js` | Datenmodell: Standardwerte, Laden, Prüfen, `MIGRATIONEN`, Speichern |
 | `js/berechnungen.js` | km-Stand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
-| `js/statistik.js` | Fahrtage/Kennzahlen, Reiter Statistik, Diagramm, Wetter-Statistik, „Wetter nachtragen“ |
-| `js/wartung.js` | Werkstatt-Berechnung: Fälligkeit, `werkstattLage`, Standard-Zuordnung, Vorschläge |
+| `js/statistik.js` | Reiter Fahrten (Einträge \| Statistik), Fahrtage/Kennzahlen, Diagramm, Jahresziele, Wetter-Statistik, „Wetter nachtragen“ |
+| `js/wartung.js` | Werkstatt-Berechnung: Fälligkeit (`intervallStatus`, `saisonStatus`), `werkstattLage`, Standard-Zuordnung, Vorschläge |
 | `js/kalender.js` | Kalenderdatei (.ics) zum Termin eines geplanten Auftrags |
-| `js/wartung-ansicht.js` | Reiter Wartung, Aufträge, Termin, Kalender-Fenster, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
+| `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten-Liste, Aufträge, Termin, Kalender-Fenster, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
 | `js/wetter.js` | Wetter-Logik: Abruf, Zwischenspeicher, Standort, Ampel, Kleidung, Wind, Abfahrt, Rückblick |
-| `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Wetter-Einstellungen, Ampel-Grenzen, Kleidung, Rückmeldung |
-| `js/uebersicht.js` | Reiter Übersicht, Eintragsliste, Eintragsformular, Prognosefenster |
-| `js/einstellungen.js` | Reiter Einstellungen: Fahrrad, Vorlagen, Fahrtage, Jahresziele |
+| `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Wetter-Einstellungen (Hauptseite, Orte und Strecke, außerhalb), Ampel-Grenzen, Kleidung, Rückmeldung |
+| `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (Fahrten → Einträge), Eintragsformular, Prognosefenster |
+| `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Export, Prüfung, Vergleich, Import |
-| `js/oberflaeche.js` | Fenster, Rückfrage, Meldung, Rückgängig, `zeichnen()`, Reiter |
+| `js/oberflaeche.js` | Fenster, Rückfrage, Meldung, Rückgängig, `zeichnen()`, Reiter, Umschalter, Wege |
 | `js/bedienung.js` | `AKTIONEN`: Zuordnung von `data-action`/`data-change` zu Funktionen |
 | `js/start.js` | Service Worker anmelden, „Neue Version verfügbar“, Start |
 | `sw.js` | Service Worker: vollständiger Satz aller Dateien offline, Update erst nach „Neu laden“ |
