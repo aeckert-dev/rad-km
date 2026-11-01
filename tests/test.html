@@ -1858,7 +1858,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5a, Datenversion 8 (Release 5a)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5a", 8]);
+    gleich("App-Version 5a.1, Datenversion 8 (Release 5a.1)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5a.1", 8]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -3610,12 +3610,13 @@ async function start() {
       [JSON.stringify(w.eval("daten.auftraege").find(a => a.id === kleinId)) === fest, fensterText5()],
       [true, "Kleine Inspektion Datum Sa, 31.10.2026 Werkstatt Beispiel-Werkstatt Kilometerstand 3.040 km (berechnet) Erledigte Positionen ✓ Mangel: Klingel klemmt ✓ Kette " +
         "Nicht gemacht – Bremsbeläge wechseln Schließen Ändern"]);
-    // Ändern: Mangel abwählen → wieder offen; weiteren Mangel abhaken
+    // Ändern: Mangel abwählen → wieder offen; weiteren Mangel mit „+ Mangel“ hinzufügen
     w.erledigterAuftragAendern(kleinId);
     w.document.querySelectorAll('input[name="p-position"]')[1].checked = false;
-    w.document.querySelector('input[name="p-mangel"][value="m-licht"]').checked = true;
+    w.document.getElementById("p-mangel-neu").value = "m-licht";
+    w.document.querySelector('#fensterinhalt [data-action="abschluss-mangel-dazu"]').click();
     w.abschlussSpeichern();
-    gleich("Ändern: abgewählter Mangel wieder offen (Position „nicht gemacht“), weiterer Mangel als erledigte Position",
+    gleich("Ändern: abgewählter Mangel wieder offen (Position „nicht gemacht“), weiterer Mangel mit „+ Mangel“ als erledigte Position",
       [w.eval("daten.auftraege").find(a => a.id === kleinId).positionen.map(p => [p.wartungsartId || p.mangelId, p.status]),
         w.eval("daten.maengel").map(m => [m.id, m.status, m.erledigtAm])],
       [[["bremse", "nicht-gemacht"], ["m-klingel", "nicht-gemacht"], ["kette", "erledigt"], ["m-licht", "erledigt"]], [["m-klingel", "offen", null], ["m-licht", "erledigt", "2026-10-31"]]]);
@@ -3632,8 +3633,9 @@ async function start() {
     w.aufgabeAnsicht("bremse");
     wahr("Ansicht einer Aufgabe: Bauteil, Regel, Fälligkeit, Auftrag, „Zu Auftrag …“, „Erledigt eintragen“ (Eigenleistung)",
       fensterText5().startsWith("Bremsbeläge wechseln Bauteil Bremse vorn Regel Intervall: 3.200 km · Bremse vorn · Standard: Große Inspektion Fälligkeit fällig ca. im November 2026") &&
-      fensterText5().includes("Auftrag Kleine Inspektion (fällig bis 30.11.)") && fensterText5().includes("legt eine erledigte Eigenleistung"), fensterText5());
+      fensterText5().includes("Auftrag Kleine Inspektion (fällig bis 30.11.)") && fensterText5().includes("als neuer Auftrag (z. B. Eigenleistung"), fensterText5());
     w.document.querySelector('#fensterinhalt [data-action="aufgabe-erledigen"]').click();
+    w.document.querySelector('#fensterinhalt [data-action="aufgabe-erledigen-neu"]').click();
     gleich("„Erledigt eintragen“ an der Aufgabe: Formular einer Eigenleistung mit dieser Position", [w.document.querySelector("#fensterinhalt h2").textContent,
       [...w.document.querySelectorAll('input[name="p-position"]')].map(el => ohneTags(el.parentElement.innerHTML))], ["Erledigt: Eigenleistung", ["🔧 Bremsbeläge wechseln"]]);
     w.abschlussSpeichern();
