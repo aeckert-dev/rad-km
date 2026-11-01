@@ -410,7 +410,7 @@ const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 const APP_VERSION = "4e";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 7;
+const DATEN_VERSION = 8;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;
@@ -418,6 +418,11 @@ const PROGNOSE_MIN_TAGE = 7;
 const RUECKGAENGIG_MS = 12000;
 // Übliche Fahrtage bei einer Neuinstallation: 1 = Montag … 7 = Sonntag
 const STANDARD_FAHRTAGE = [1, 2, 5];
+// Standard-Zuordnung einer Aufgabe: der nächste offene Auftrag einer Inspektion
+const NAECHSTE_INSPEKTION = "naechste-inspektion";
+// Merkt sich, dass die Wartungsarten nach der Umwandlung auf Version 8 noch
+// geprüft werden sollen (kein Teil der Daten und der Sicherung)
+const PRUEF_SCHLUESSEL = TESTMODUS ? "radkm-test-wartungsarten-pruefen" : "radkm-wartungsarten-pruefen";
 // Ab dieser Uhrzeit weist die Übersicht schon am selben Tag auf einen fehlenden Eintrag hin
 // (Schalter "Hinweis schon am selben Tag", Standard an)
 const STANDARD_HINWEIS_HEUTE_AB = "18:00";
@@ -561,9 +566,23 @@ function neueId() {
    3. DATENMODELL: Laden, Prüfen, Umwandeln, Speichern
    ===================================================================== */
 
-// Die Standard-Wartungsarten. Bei einer Neuinstallation (mitFenster) mit
-// jährlichem Zeitfenster; ohne für die Umwandlung von Version-1-Daten.
-function standardWartungsarten(mitFenster = true) {
+// Die Standard-Wartungsarten bei einer Neuinstallation (ab Version 8): Aufträge,
+// keine Aufgaben (die sind je Fahrrad zu verschieden).
+function standardWartungsarten() {
+  const auftrag = (id, name, intervallMonate, intervallKm, von, bis, einmalig = false) => ({
+    id, name, typ: "auftrag", intervallMonate, intervallKm, fensterVon: von, fensterBis: bis, gueltigAbJahr: null, einmalig, bauteil: null, zuordnung: null
+  });
+  return [
+    auftrag("erstinspektion", "Erstinspektion", 3, 300, null, null, true),
+    auftrag("kleine-inspektion", "Kleine Inspektion", null, null, 3, 4),
+    auftrag("grosse-inspektion", "Große Inspektion", 12, null, 10, 11),
+    auftrag("reparatur", "Reparatur", null, null, null, null),
+    auftrag("eigenleistung", "Eigenleistung", null, null, null, null)
+  ];
+}
+// Die Standard-Wartungsarten bis Version 7: mit jährlichem Zeitfenster
+// (mitFenster), ohne für die Umwandlung von Version-1-Daten.
+function wartungsartenVersion7(mitFenster = true) {
   const art = (id, name, intervallMonate, von, bis) => ({
     id, name, intervallMonate, intervallKm: null,
     fensterVon: mitFenster ? von : null, fensterBis: mitFenster ? bis : null, gueltigAbJahr: null, einmalig: false
@@ -667,8 +686,7 @@ function leereDaten() {
     vorlagen: [],
     eintraege: [],
     wartungsarten: standardWartungsarten(),
-    wartungsprotokoll: [],
-    termine: [],
+    auftraege: [],
     maengel: []
   };
 }
@@ -691,7 +709,7 @@ const MIGRATIONEN = {
       d.fahrrad = Object.assign({ rahmennummer: "", beschreibung: "" }, d.fahrrad);
     }
     // In Version 1 bedeutete eine fehlende Liste: die Standard-Wartungsarten (ohne Zeitfenster)
-    const arten = d.wartungsarten === undefined ? standardWartungsarten(false) : d.wartungsarten;
+    const arten = d.wartungsarten === undefined ? wartungsartenVersion7(false) : d.wartungsarten;
     d.wartungsarten = Array.isArray(arten)
       ? arten.map(a => a && typeof a === "object" ? Object.assign({ fensterVon: null, fensterBis: null, gueltigAbJahr: null }, a) : a)
       : arten;
@@ -779,8 +797,175 @@ const MIGRATIONEN = {
     }
     d.einstellungen = es;
     return d;
+  },
+  // Version 7 → 8: Werkstatt. Wartungsarten werden Aufträge oder Aufgaben,
+  // Protokoll und Termine werden Aufträge mit Positionen (siehe wartungAusVersion7).
+  7: alt => {
+    const d = Object.assign({}, alt, { version: 8 }, wartungAusVersion7(alt));
+    delete d.wartungsprotokoll;
+    delete d.termine;
+    return d;
   }
 };
+
+// Ist eine Wartungsart aus Version 7 ein Auftrag? Mit Zeitfenster, einmalig oder
+// mit „Inspektion“, „Reparatur“ bzw. „Eigenleistung“ im Namen; sonst eine Aufgabe.
+function istAuftragVersion7(a) {
+  return (a.fensterVon ?? null) !== null || a.einmalig === true || /inspektion|reparatur|eigenleistung/i.test(typeof a.name === "string" ? a.name : "");
+}
+// Hat eine Wartungsart eine Fälligkeit (Intervall, Zeitfenster oder einmalig)?
+function hatFaelligkeit(a) {
+  return (a.fensterVon ?? null) !== null || !!a.intervallMonate || !!a.intervallKm || a.einmalig === true;
+}
+
+// Umwandlung der Wartung aus Version 7. Alle Kennungen werden aus den alten
+// abgeleitet, damit eine umgewandelte Sicherung gleich bleibt.
+//   - Wartungsarten: Auftrag oder Aufgabe (istAuftragVersion7). Aufgaben bekommen
+//     kein Bauteil und die Standard-Zuordnung „nächste Inspektion“. Fehlen
+//     „Reparatur“ oder „Eigenleistung“ (Aufträge ohne Fälligkeit), kommen sie dazu.
+//   - Protokoll eines Auftrags → erledigter Auftrag (id des Protokolleintrags).
+//   - Protokoll einer Aufgabe → erledigte Position im erledigten Auftrag vom
+//     selben Datum, sonst in einer erledigten Reparatur dieses Datums. Weichen
+//     Werkstatt oder ein von Hand eingetragener km-Stand ab, stehen sie in der
+//     Notiz der Position.
+//   - Mängel mit protokollId → erledigte Position im daraus entstandenen Auftrag.
+//   - Termin eines Auftrags → geplanter Auftrag. Termin einer Aufgabe → Position
+//     im geplanten Inspektions-Auftrag mit demselben Termin, sonst in einem neuen
+//     geplanten Auftrag der Inspektion, in deren Zeitfenster der Termin liegt,
+//     sonst in einer geplanten Reparatur mit diesem Termin.
+function wartungAusVersion7(alt) {
+  const fehler = msg => { throw new Error(msg); };
+  const liste = (v, name) => {
+    if (v === undefined) return [];
+    if (!Array.isArray(v)) fehler("„" + name + "“ muss eine Liste sein.");
+    return v.map((x, i) => istObjekt(x) ? x : fehler("„" + name + "“ Nr. " + (i + 1) + " ist kein Objekt."));
+  };
+  const arten7 = alt.wartungsarten === undefined ? wartungsartenVersion7(true) : alt.wartungsarten;
+  if (!Array.isArray(arten7)) return { wartungsarten: arten7, auftraege: [] }; // meldet die Prüfung
+  const protokoll = liste(alt.wartungsprotokoll, "wartungsprotokoll");
+  const termine = liste(alt.termine, "termine");
+  const maengel = alt.maengel === undefined ? [] : alt.maengel;
+
+  // Wartungsarten einordnen
+  const ids = new Set(arten7.filter(istObjekt).map(a => a.id));
+  const arten = arten7.map(a => {
+    if (!istObjekt(a)) return a;
+    return istAuftragVersion7(a)
+      ? Object.assign({}, a, { typ: "auftrag", bauteil: null, zuordnung: null })
+      : Object.assign({}, a, { typ: "aufgabe", bauteil: null, zuordnung: NAECHSTE_INSPEKTION });
+  });
+  const artVon = id => arten.find(a => istObjekt(a) && a.id === id) || null;
+  const ohneFaelligkeit = (muster) => arten.find(a => istObjekt(a) && a.typ === "auftrag" && muster.test(a.name || "") && !hatFaelligkeit(a));
+  const ergaenzen = (basis, name) => {
+    let id = basis, n = 2;
+    while (ids.has(id)) id = basis + "-" + n++;
+    ids.add(id);
+    const a = { id, name, typ: "auftrag", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null,
+      einmalig: false, bauteil: null, zuordnung: null };
+    arten.push(a);
+    return a;
+  };
+  const reparatur = ohneFaelligkeit(/reparatur/i) || ergaenzen("reparatur", "Reparatur");
+  if (!ohneFaelligkeit(/eigenleistung/i)) ergaenzen("eigenleistung", "Eigenleistung");
+  const istInspektion = a => istObjekt(a) && a.typ === "auftrag" && hatFaelligkeit(a);
+
+  // Mängel: fehlende Kennungen ergänzen, protokollId entfällt
+  const mangelListe = Array.isArray(maengel) ? maengel.map(m => istObjekt(m) && !(typeof m.id === "string" && m.id) ? Object.assign({}, m, { id: neueId() }) : m) : maengel;
+
+  // Protokoll prüfen (die übrigen Felder prüft die Prüfung der Aufträge)
+  const protIds = new Set();
+  const eintraege = protokoll.map((p, i) => {
+    const wo = "Wartungsprotokoll Nr. " + (i + 1);
+    if (!istGueltigesDatum(p.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
+    if (!artVon(p.wartungsartId)) fehler(wo + " (" + datumText(p.datum) + "): unbekannte wartungsartId „" + p.wartungsartId + "“.");
+    const id = typeof p.id === "string" && p.id ? p.id : neueId();
+    if (protIds.has(id)) fehler(wo + ": id „" + id + "“ kommt doppelt vor.");
+    protIds.add(id);
+    const ks = p.kmStand ?? null;
+    const manuell = p.kmManuell === undefined ? ks !== null : p.kmManuell;
+    return Object.assign({}, p, { id, kmStand: ks, kmManuell: manuell, art: artVon(p.wartungsartId) });
+  });
+  if (Array.isArray(mangelListe)) mangelListe.forEach((m, i) => {
+    if (!istObjekt(m)) return;
+    const pid = m.protokollId ?? null;
+    if (pid !== null && !protIds.has(pid)) fehler("Mangel Nr. " + (i + 1) + (istGueltigesDatum(m.datum) ? " (" + datumText(m.datum) + ")" : "") + ": unbekannte protokollId „" + pid + "“.");
+  });
+
+  const auftraege = [];
+  const neuerAuftrag = (id, art, felder) => {
+    const a = Object.assign({ id, wartungsartId: art.id, status: "erledigt", termin: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
+      notiz: "", positionen: [], ausgeschlossen: [] }, felder);
+    auftraege.push(a);
+    return a;
+  };
+  // Erledigte Mängel eines Protokolleintrags als Positionen
+  const maengelDazu = (auftrag, pid) => {
+    if (!Array.isArray(mangelListe)) return;
+    mangelListe.filter(m => istObjekt(m) && m.protokollId === pid && m.status === "erledigt")
+      .forEach(m => auftrag.positionen.push({ id: "pos-" + m.id, art: "mangel", mangelId: m.id, status: "erledigt", notiz: "" }));
+  };
+  // Aufträge zuerst, damit Aufgaben vom selben Datum dazukommen
+  const ausAuftraegen = [];
+  eintraege.filter(p => p.art.typ === "auftrag").forEach(p => {
+    const a = neuerAuftrag(p.id, p.art, { werkstatt: p.werkstatt, datum: p.datum, kmStand: p.kmStand, kmManuell: p.kmManuell, notiz: p.notiz });
+    ausAuftraegen.push(a);
+    maengelDazu(a, p.id);
+  });
+  const reparaturAm = new Map(); // Datum → erledigte Reparatur aus Aufgaben
+  eintraege.filter(p => p.art.typ === "aufgabe").forEach(p => {
+    let ziel = ausAuftraegen.find(a => a.datum === p.datum) || reparaturAm.get(p.datum) || null;
+    const zusatz = [];
+    if (!ziel) {
+      ziel = neuerAuftrag(p.id, reparatur, { werkstatt: p.werkstatt, datum: p.datum, kmStand: p.kmStand, kmManuell: p.kmManuell, notiz: "" });
+      reparaturAm.set(p.datum, ziel);
+    } else {
+      const w = typeof p.werkstatt === "string" ? p.werkstatt.trim() : "";
+      if (w && w !== (typeof ziel.werkstatt === "string" ? ziel.werkstatt.trim() : "")) zusatz.push("Werkstatt: " + w);
+      if (p.kmManuell === true && p.kmStand !== null && !(ziel.kmManuell === true && ziel.kmStand === p.kmStand)) {
+        zusatz.push("Kilometerstand: " + (typeof p.kmStand === "number" ? kmText(p.kmStand) + " km" : String(p.kmStand)));
+      }
+    }
+    const notiz = typeof p.notiz === "string" ? p.notiz : "";
+    ziel.positionen.push({ id: "pos-" + p.id, art: "aufgabe", wartungsartId: p.art.id, status: "erledigt",
+      notiz: [notiz, ...zusatz].filter(Boolean).join("\n") });
+    maengelDazu(ziel, p.id);
+  });
+
+  // Termine
+  const terminArten = new Set();
+  const geplante = [];
+  termine.forEach((t, i) => {
+    const wo = "Termin Nr. " + (i + 1);
+    const art = artVon(t.wartungsartId);
+    if (!art) fehler(wo + ": unbekannte wartungsartId „" + t.wartungsartId + "“.");
+    if (terminArten.has(t.wartungsartId)) fehler(wo + ": pro Wartungsart ist nur ein geplanter Termin erlaubt.");
+    terminArten.add(t.wartungsartId);
+    if (!istGueltigesDatum(t.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
+    geplante.push({ t, art });
+  });
+  const geplant = (id, art, t) => neuerAuftrag(id, art, { status: "geplant", termin: t.datum, werkstatt: t.werkstatt });
+  geplante.filter(x => x.art.typ === "auftrag").forEach(x => geplant("termin-" + x.art.id, x.art, x.t));
+  geplante.filter(x => x.art.typ === "aufgabe").forEach(({ t, art }) => {
+    const offen = auftraege.filter(a => a.status === "geplant");
+    let ziel = offen.find(a => a.termin === t.datum && istInspektion(artVon(a.wartungsartId)));
+    if (!ziel) {
+      const jahr = Number(t.datum.slice(0, 4));
+      const fenster = arten.find(a => istInspektion(a) && (a.fensterVon ?? null) !== null && Number.isInteger(a.fensterVon) && Number.isInteger(a.fensterBis) &&
+        t.datum >= monatsanfang(jahr, a.fensterVon) && t.datum <= monatsende(jahr, a.fensterBis) && !offen.some(o => o.wartungsartId === a.id));
+      ziel = geplant("termin-" + (fenster || art).id, fenster || reparatur, t);
+    }
+    ziel.positionen.push({ id: "pos-termin-" + art.id, art: "aufgabe", wartungsartId: art.id, status: "offen", notiz: "" });
+  });
+
+  // Erledigte Aufträge in der Reihenfolge des Protokolls, danach die geplanten
+  const stelle = new Map(eintraege.map((p, i) => [p.id, i]));
+  auftraege.sort((a, b) => (a.status === "geplant") - (b.status === "geplant") ||
+    (a.status === "erledigt" ? stelle.get(a.id) - stelle.get(b.id) : 0));
+  const ohneVerknuepfung = Array.isArray(mangelListe)
+    ? mangelListe.map(m => { if (!istObjekt(m)) return m; const { protokollId, ...rest } = m; return rest; })
+    : mangelListe;
+  return { wartungsarten: arten, auftraege, maengel: ohneVerknuepfung };
+}
 
 // Kleidungsregeln aus Version 5: Sind die Stufen (ohne die Verschiebungen aus
 // Rückmeldungen) noch die Standardwerte aus 4b, kommen die neuen Standardstufen;
@@ -1117,7 +1302,8 @@ function pruefen(d) {
     };
   });
 
-  // Wartungsarten
+  // Wartungsarten: Aufträge (mit Zeitfenster, Intervall, einmalig oder ohne
+  // Fälligkeit) und Aufgaben (Intervall, Bauteil, Standard-Zuordnung)
   const artIds = new Set();
   const istMonat = v => Number.isInteger(v) && v >= 1 && v <= 12;
   erg.wartungsarten = d.wartungsarten === undefined ? standardWartungsarten() : objekte(d.wartungsarten, "wartungsarten").map((a, i) => {
@@ -1127,6 +1313,8 @@ function pruefen(d) {
     artIds.add(a.id);
     if (!istText(a.name) || !a.name.trim()) fehler(wo + ": Name fehlt.");
     const wn = wo + " („" + a.name + "“)";
+    if (a.typ !== "auftrag" && a.typ !== "aufgabe") fehler(wn + ": typ muss „auftrag“ oder „aufgabe“ sein.");
+    const aufgabe = a.typ === "aufgabe";
     const im = a.intervallMonate ?? null;
     if (im !== null && !(Number.isInteger(im) && im >= 1)) fehler(wn + ": intervallMonate muss eine ganze Zahl ≥ 1 oder null sein.");
     const ik = a.intervallKm ?? null;
@@ -1135,55 +1323,31 @@ function pruefen(d) {
     if ((von === null) !== (bis === null)) fehler(wn + ": fensterVon und fensterBis müssen beide gesetzt oder beide null sein.");
     if (von !== null && !(istMonat(von) && istMonat(bis))) fehler(wn + ": fensterVon und fensterBis müssen Monate von 1 bis 12 sein.");
     if (von !== null && von > bis) fehler(wn + ": Das Zeitfenster darf nicht über den Jahreswechsel gehen (fensterVon ≤ fensterBis).");
+    if (von !== null && aufgabe) fehler(wn + ": Eine Aufgabe kann kein Zeitfenster haben.");
     const ab = a.gueltigAbJahr ?? null;
     if (ab !== null && !(Number.isInteger(ab) && ab >= 1900 && ab <= 9999)) fehler(wn + ": gueltigAbJahr muss eine Jahreszahl oder null sein.");
     if (ab !== null && von === null) fehler(wn + ": gueltigAbJahr ist nur mit Zeitfenster erlaubt.");
     const einmalig = jaNein(a.einmalig, wn + " (einmalig)");
     if (einmalig && von !== null) fehler(wn + ": Eine einmalige Wartung kann kein jährliches Zeitfenster haben.");
+    if (einmalig && aufgabe) fehler(wn + ": Eine Aufgabe kann nicht einmalig sein.");
+    const bauteil = optText(a.bauteil, wn + " (bauteil)").trim() || null;
+    if (bauteil !== null && !aufgabe) fehler(wn + ": Ein Bauteil gibt es nur bei Aufgaben.");
+    const zu = a.zuordnung ?? null;
+    if (aufgabe ? !istText(zu) || !zu : zu !== null) fehler(wn + ": zuordnung muss bei Aufgaben „" + NAECHSTE_INSPEKTION + "“ oder die id eines Auftrags sein, bei Aufträgen null.");
     return {
-      id: a.id, name: a.name.trim(), intervallMonate: im, intervallKm: ik === null ? null : runden(ik),
-      fensterVon: von, fensterBis: bis, gueltigAbJahr: ab, einmalig
+      id: a.id, name: a.name.trim(), typ: a.typ, intervallMonate: im, intervallKm: ik === null ? null : runden(ik),
+      fensterVon: von, fensterBis: bis, gueltigAbJahr: ab, einmalig, bauteil, zuordnung: zu
     };
   });
-  if (d.wartungsarten === undefined) erg.wartungsarten.forEach(a => artIds.add(a.id));
-
-  // Wartungsprotokoll
-  const protIds = new Set();
-  erg.wartungsprotokoll = objekte(d.wartungsprotokoll, "wartungsprotokoll").map((p, i) => {
-    const wo = "Wartungsprotokoll Nr. " + (i + 1);
-    if (!istGueltigesDatum(p.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
-    if (!artIds.has(p.wartungsartId)) fehler(wo + " (" + datumText(p.datum) + "): unbekannte wartungsartId „" + p.wartungsartId + "“.");
-    const ks = p.kmStand ?? null;
-    if (ks !== null && !istZahl(ks)) fehler(wo + " (" + datumText(p.datum) + "): kmStand muss eine Zahl ≥ 0 oder null sein.");
-    let manuell = p.kmManuell;
-    if (manuell === undefined) manuell = ks !== null; // fehlt die Angabe, gilt ein vorhandener Wert als von Hand eingetragen
-    if (typeof manuell !== "boolean") fehler(wo + ": kmManuell muss true oder false sein.");
-    const id = istText(p.id) && p.id ? p.id : neueId();
-    if (protIds.has(id)) fehler(wo + ": id „" + id + "“ kommt doppelt vor.");
-    protIds.add(id);
-    return {
-      id,
-      datum: p.datum,
-      wartungsartId: p.wartungsartId,
-      werkstatt: optText(p.werkstatt, wo + " (werkstatt)"),
-      kmStand: ks === null ? null : runden(ks),
-      kmManuell: manuell && ks !== null,
-      notiz: optText(p.notiz, wo + " (notiz)")
-    };
-  });
-
-  // Geplante Termine
-  const terminArten = new Set();
-  erg.termine = objekte(d.termine, "termine").map((t, i) => {
-    const wo = "Termin Nr. " + (i + 1);
-    if (!artIds.has(t.wartungsartId)) fehler(wo + ": unbekannte wartungsartId „" + t.wartungsartId + "“.");
-    if (terminArten.has(t.wartungsartId)) fehler(wo + ": pro Wartungsart ist nur ein geplanter Termin erlaubt.");
-    terminArten.add(t.wartungsartId);
-    if (!istGueltigesDatum(t.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
-    return { wartungsartId: t.wartungsartId, datum: t.datum, werkstatt: optText(t.werkstatt, wo + " (werkstatt)") };
+  const artVon = id => erg.wartungsarten.find(a => a.id === id) || null;
+  erg.wartungsarten.forEach((a, i) => {
+    if (a.typ === "aufgabe" && a.zuordnung !== NAECHSTE_INSPEKTION && !(artVon(a.zuordnung) && artVon(a.zuordnung).typ === "auftrag")) {
+      fehler("Wartungsart Nr. " + (i + 1) + " („" + a.name + "“): zuordnung „" + a.zuordnung + "“ ist kein Auftrag.");
+    }
   });
 
   // Mängel
+  const mangelIds = new Set();
   erg.maengel = objekte(d.maengel, "maengel").map((m, i) => {
     const wo = "Mangel Nr. " + (i + 1);
     if (!istGueltigesDatum(m.datum)) fehler(wo + ": Datum ist ungültig (Format JJJJ-MM-TT).");
@@ -1192,17 +1356,99 @@ function pruefen(d) {
     if (status !== "offen" && status !== "erledigt") fehler(wo + " (" + datumText(m.datum) + "): status muss „offen“ oder „erledigt“ sein.");
     const am = m.erledigtAm ?? null;
     if (am !== null && !istGueltigesDatum(am)) fehler(wo + " (" + datumText(m.datum) + "): erledigtAm ist ungültig (Format JJJJ-MM-TT).");
-    const pid = m.protokollId ?? null;
-    if (pid !== null && !protIds.has(pid)) fehler(wo + " (" + datumText(m.datum) + "): unbekannte protokollId „" + pid + "“.");
-    const erledigt = status === "erledigt";
+    const id = istText(m.id) && m.id ? m.id : neueId();
+    if (mangelIds.has(id)) fehler(wo + ": id „" + id + "“ kommt doppelt vor.");
+    mangelIds.add(id);
     return {
-      id: istText(m.id) && m.id ? m.id : neueId(),
+      id,
       datum: m.datum,
       beschreibung: m.beschreibung.trim(),
       status,
-      // Bei offenen Mängeln gibt es weder Erledigt-Datum noch Verknüpfung
-      erledigtAm: erledigt ? am : null,
-      protokollId: erledigt ? pid : null
+      // Bei offenen Mängeln gibt es kein Erledigt-Datum
+      erledigtAm: status === "erledigt" ? am : null
+    };
+  });
+  const mangelVon = id => erg.maengel.find(m => m.id === id) || null;
+
+  // Aufträge: geplant (Termin, Positionen offen) oder erledigt (Datum,
+  // Kilometerstand, Positionen erledigt bzw. nicht gemacht)
+  const auftragIds = new Set(), posIds = new Set();
+  const geplanteArten = new Set(), geplanteAufgaben = new Set(), geplanteMaengel = new Set(), erledigteMaengel = new Set();
+  erg.auftraege = objekte(d.auftraege, "auftraege").map((x, i) => {
+    let wo = "Auftrag Nr. " + (i + 1);
+    const art = artVon(x.wartungsartId);
+    if (!art || art.typ !== "auftrag") fehler(wo + ": wartungsartId „" + x.wartungsartId + "“ ist kein Auftrag.");
+    wo += " („" + art.name + "“)";
+    const id = istText(x.id) && x.id ? x.id : neueId();
+    if (auftragIds.has(id)) fehler(wo + ": id „" + id + "“ kommt doppelt vor.");
+    auftragIds.add(id);
+    if (x.status !== "geplant" && x.status !== "erledigt") fehler(wo + ": status muss „geplant“ oder „erledigt“ sein.");
+    const erledigt = x.status === "erledigt";
+    const termin = x.termin ?? null;
+    if (termin !== null && (erledigt || !istGueltigesDatum(termin))) fehler(wo + ": termin muss bei geplanten Aufträgen ein Datum (JJJJ-MM-TT) oder null sein, bei erledigten null.");
+    const datum = x.datum ?? null;
+    if (erledigt ? !istGueltigesDatum(datum) : datum !== null) fehler(wo + ": datum muss bei erledigten Aufträgen ein gültiges Datum (JJJJ-MM-TT) sein, bei geplanten null.");
+    if (erledigt) wo += " vom " + datumText(datum);
+    const ks = x.kmStand ?? null;
+    if (ks !== null && (!erledigt || !istZahl(ks))) fehler(wo + ": kmStand muss eine Zahl ≥ 0 oder null sein (nur bei erledigten Aufträgen).");
+    let manuell = x.kmManuell;
+    if (manuell === undefined) manuell = ks !== null; // fehlt die Angabe, gilt ein vorhandener Wert als von Hand eingetragen
+    if (typeof manuell !== "boolean") fehler(wo + ": kmManuell muss true oder false sein.");
+    if (!erledigt) {
+      if (hatFaelligkeit(art) && geplanteArten.has(art.id)) fehler(wo + ": Für einen Auftrag mit Intervall, Zeitfenster oder einmalig ist nur ein geplanter Auftrag erlaubt.");
+      geplanteArten.add(art.id);
+    }
+    const aufgabenHier = new Set(), maengelHier = new Set();
+    const positionen = liste(x.positionen, "positionen").map((p, j) => {
+      const wp = wo + ", Position Nr. " + (j + 1);
+      if (!istObjekt(p)) fehler(wp + ": ist kein Objekt.");
+      const pid = istText(p.id) && p.id ? p.id : neueId();
+      if (posIds.has(pid)) fehler(wp + ": id „" + pid + "“ kommt doppelt vor.");
+      posIds.add(pid);
+      const status = p.status;
+      if (erledigt ? status !== "erledigt" && status !== "nicht-gemacht" : status !== "offen") {
+        fehler(wp + ": status muss " + (erledigt ? "„erledigt“ oder „nicht-gemacht“" : "„offen“") + " sein.");
+      }
+      const notiz = optText(p.notiz, wp + " (notiz)");
+      if (p.art === "aufgabe") {
+        const a = artVon(p.wartungsartId);
+        if (!a || a.typ !== "aufgabe") fehler(wp + ": wartungsartId „" + p.wartungsartId + "“ ist keine Aufgabe.");
+        if (aufgabenHier.has(a.id)) fehler(wp + ": Die Aufgabe „" + a.name + "“ steht doppelt im Auftrag.");
+        aufgabenHier.add(a.id);
+        if (!erledigt) {
+          if (geplanteAufgaben.has(a.id)) fehler(wp + ": Die Aufgabe „" + a.name + "“ steht schon in einem anderen geplanten Auftrag.");
+          geplanteAufgaben.add(a.id);
+        }
+        return { id: pid, art: "aufgabe", wartungsartId: a.id, status, notiz };
+      }
+      if (p.art === "mangel") {
+        const m = mangelVon(p.mangelId);
+        if (!m) fehler(wp + ": unbekannte mangelId „" + p.mangelId + "“.");
+        if (maengelHier.has(m.id)) fehler(wp + ": Der Mangel „" + m.beschreibung + "“ steht doppelt im Auftrag.");
+        maengelHier.add(m.id);
+        if (!erledigt) {
+          if (m.status !== "offen") fehler(wp + ": Der Mangel „" + m.beschreibung + "“ ist erledigt und kann nicht in einem geplanten Auftrag stehen.");
+          if (geplanteMaengel.has(m.id)) fehler(wp + ": Der Mangel „" + m.beschreibung + "“ steht schon in einem anderen geplanten Auftrag.");
+          geplanteMaengel.add(m.id);
+        } else if (status === "erledigt") {
+          if (m.status !== "erledigt") fehler(wp + ": Der Mangel „" + m.beschreibung + "“ ist als erledigt eingetragen, aber noch offen.");
+          if (erledigteMaengel.has(m.id)) fehler(wp + ": Der Mangel „" + m.beschreibung + "“ ist schon mit einem anderen Auftrag erledigt.");
+          erledigteMaengel.add(m.id);
+        }
+        return { id: pid, art: "mangel", mangelId: m.id, status, notiz };
+      }
+      fehler(wp + ": art muss „aufgabe“ oder „mangel“ sein.");
+    });
+    const ausgeschlossen = liste(x.ausgeschlossen, "ausgeschlossen").map(aid => {
+      const a = artVon(aid);
+      if (erledigt || !a || a.typ !== "aufgabe" || aufgabenHier.has(aid)) fehler(wo + ": ausgeschlossen darf nur bei geplanten Aufträgen Aufgaben enthalten, die nicht im Auftrag stehen.");
+      return aid;
+    });
+    if (new Set(ausgeschlossen).size !== ausgeschlossen.length) fehler(wo + ": ausgeschlossen enthält eine Aufgabe doppelt.");
+    return {
+      id, wartungsartId: art.id, status: x.status, termin, werkstatt: optText(x.werkstatt, wo + " (werkstatt)"),
+      datum, kmStand: ks === null ? null : runden(ks), kmManuell: manuell && ks !== null, notiz: optText(x.notiz, wo + " (notiz)"),
+      positionen, ausgeschlossen
     };
   });
 
@@ -1231,6 +1477,8 @@ function laden() {
   if (!text) return; // erster Start
   try {
     daten = datenEinlesen(text);
+    // Nach der Umwandlung auf Version 8 die Wartungsarten prüfen lassen
+    if (JSON.parse(text).version < 8) pruefungVormerken(true);
   } catch (e) {
     // Defekte Daten nicht überschreiben, sondern beiseitelegen
     try { localStorage.setItem(SPEICHER_SCHLUESSEL + "-defekt-" + Date.now(), text); } catch (_) {}
@@ -1242,7 +1490,7 @@ function laden() {
 function speichern() {
   // Jede Änderung beendet ein offenes "Rückgängig" (es würde sie sonst überschreiben)
   rueckgaengigVerwerfen();
-  aktualisiereProtokollKm();
+  aktualisiereAuftragKm();
   try {
     localStorage.setItem(SPEICHER_SCHLUESSEL, JSON.stringify(daten));
     return true;
@@ -1250,6 +1498,14 @@ function speichern() {
     alert("Speichern fehlgeschlagen: " + e.message);
     return false;
   }
+}
+
+// Hinweis „Bitte Wartungsarten prüfen“ (nach der Umwandlung auf Version 8)
+function pruefungVorgemerkt() {
+  try { return localStorage.getItem(PRUEF_SCHLUESSEL) === "ja"; } catch (e) { return false; }
+}
+function pruefungVormerken(an) {
+  try { if (an) localStorage.setItem(PRUEF_SCHLUESSEL, "ja"); else localStorage.removeItem(PRUEF_SCHLUESSEL); } catch (e) {}
 }
 
 function letzterExport() {
@@ -1403,10 +1659,10 @@ function jahresKennzahlen(h = heute()) {
   };
 }
 
-// Nicht von Hand überschriebene Kilometerstände im Protokoll neu berechnen
-function aktualisiereProtokollKm() {
-  daten.wartungsprotokoll.forEach(p => {
-    if (!p.kmManuell) p.kmStand = kmStandAm(p.datum);
+// Nicht von Hand überschriebene Kilometerstände erledigter Aufträge neu berechnen
+function aktualisiereAuftragKm() {
+  daten.auftraege.forEach(a => {
+    if (a.status === "erledigt" && !a.kmManuell) a.kmStand = kmStandAm(a.datum);
   });
 }
 
@@ -4840,7 +5096,7 @@ function kurzinfoFuer(d, zeitpunkt) {
     eintraege: d.eintraege.length,
     kmSumme: runden(d.eintraege.reduce((s, e) => s + e.km, 0)),
     kmStand: f ? runden(f.startKm + d.eintraege.filter(e => e.datum >= f.startdatum).reduce((s, e) => s + e.km, 0)) : null,
-    wartungen: d.wartungsprotokoll.length,
+    wartungen: d.auftraege.filter(a => a.status === "erledigt").length,
     maengel: d.maengel.length
   };
 }
@@ -5142,8 +5398,7 @@ async function importDateiGewaehlt(datei) {
     (wann ? "Gesichert am " + esc(wann) + "<br>" : "") +
     "Fahrrad: " + (neu.fahrrad ? esc(neu.fahrrad.name) : "–") + "<br>" +
     neu.eintraege.length + " Einträge, " + neu.vorlagen.length + " Vorlagen, " +
-    neu.wartungsarten.length + " Wartungsarten, " + neu.wartungsprotokoll.length + " Wartungen, " +
-    neu.termine.length + " geplante Termine, " + neu.maengel.length + " Mängel" +
+    neu.wartungsarten.length + " Wartungsarten, " + auftraegeText(neu.auftraege) + ", " + neu.maengel.length + " Mängel" +
     (neu.maengel.length ? " (davon " + neu.maengel.filter(m => m.status === "offen").length + " offen)" : "") +
     (ziele ? ", " + (ziele === 1 ? "1 Jahresziel" : ziele + " Jahresziele") : "") + ".<br><br>" +
     "<strong>Alle vorhandenen Daten in der App werden ersetzt.</strong> Fortfahren?";
@@ -5151,6 +5406,7 @@ async function importDateiGewaehlt(datei) {
   daten = neu;
   ladeFehler = null;
   sicherungsErgebnis = null;
+  if (roh.version < 8) pruefungVormerken(true);
   if (speichern()) { zeichnen(); meldung("Import erfolgreich"); }
 }
 
