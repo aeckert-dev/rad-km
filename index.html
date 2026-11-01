@@ -286,7 +286,17 @@ input.kurzfeld { max-width: 140px; }
 .details dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .umbrueche { white-space: pre-wrap; }
 
-/* Mängel zum Abhaken im Wartungsformular */
+/* Werkstatt: Positionen und Vorschläge eines Auftrags, Mängel mit Knöpfen */
+.positionen { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--linie); }
+.position { margin: 6px 0; overflow-wrap: anywhere; }
+.position-zeile { border-bottom: 1px solid var(--linie); padding: 4px 0 10px; }
+.position-zeile .knopfreihe { margin-top: 4px; }
+.position-zeile .knopfreihe button, .zeile.mit-knoepfen .knopfreihe button { min-height: 40px; padding: 6px 10px; font-size: 15px; }
+.vorschlag { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--akzent-hell); overflow-wrap: anywhere; }
+.vorschlag button { display: block; margin-top: 8px; min-height: 40px; padding: 6px 12px; background: var(--karte); }
+.zeile.mit-knoepfen { flex-direction: column; align-items: stretch; gap: 0; }
+.zeile.mit-knoepfen .knopfreihe { margin: 0 12px 10px; }
+/* Mängel und Positionen zum Abhaken im Formular „Erledigt eintragen“ */
 .haken { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; color: var(--text); font-size: 17px; }
 .haken input { width: 24px; min-height: 24px; height: 24px; margin: 0; flex: none; -webkit-appearance: checkbox; appearance: auto; }
 
@@ -1819,72 +1829,190 @@ function intervallStatus(art, letzte, h) {
   return st;
 }
 
-// Status einer Wartungsart: letzte Durchführung, Termin, Fälligkeit, Anzeigetext.
-// "regel" ist die Fälligkeit ohne Berücksichtigung eines geplanten Termins.
-// "erwartet" = erwarteter Kilometerstand zum Termin bzw. zur Fälligkeit.
-function wartungsStatus(art, h = heute()) {
-  const durchfuehrungen = daten.wartungsprotokoll
-    .filter(p => p.wartungsartId === art.id)
-    .sort((a, b) => b.datum.localeCompare(a.datum));
-  const letzte = durchfuehrungen[0] || null;
+// ---------- Werkstatt: Aufträge, Aufgaben, Positionen ----------
 
-  // Einmalige Wartung nach der ersten Durchführung: nur noch "erledigt am"
+function artVon(id) { return daten.wartungsarten.find(a => a.id === id) || null; }
+const istAufgabe = art => !!art && art.typ === "aufgabe";
+// Inspektion = Auftrag mit Fälligkeit (Intervall, Zeitfenster oder einmalig), z. B. nicht die Reparatur
+const istInspektion = art => !!art && art.typ === "auftrag" && hatFaelligkeit(art);
+const aufgabenArten = () => daten.wartungsarten.filter(istAufgabe);
+const auftragsArten = () => daten.wartungsarten.filter(a => a.typ === "auftrag");
+
+// Erledigte Aufträge einer Auftragsart, der neueste zuerst
+function erledigteAuftraege(artId) {
+  return daten.auftraege.filter(a => a.status === "erledigt" && a.wartungsartId === artId).sort((a, b) => b.datum.localeCompare(a.datum));
+}
+// Letzte Erledigung einer Aufgabe: { datum, kmStand, werkstatt, auftrag } oder null
+function letzteErledigung(aufgabeId) {
+  let letzte = null;
+  daten.auftraege.forEach(a => {
+    if (a.status === "erledigt" && a.positionen.some(p => p.art === "aufgabe" && p.wartungsartId === aufgabeId && p.status === "erledigt") &&
+      (!letzte || a.datum > letzte.datum)) letzte = { datum: a.datum, kmStand: a.kmStand, werkstatt: a.werkstatt, auftrag: a };
+  });
+  return letzte;
+}
+// Anzahl der Positionen als Text: "1 Position", "3 Positionen"
+function positionenText(n) { return n === 1 ? "1 Position" : n + " Positionen"; }
+// "3 erledigte Aufträge, 1 geplanter Auftrag"
+function auftraegeText(liste) {
+  const e = liste.filter(a => a.status === "erledigt").length, g = liste.length - e;
+  return (e === 1 ? "1 erledigter Auftrag" : e + " erledigte Aufträge") + ", " + (g === 1 ? "1 geplanter Auftrag" : g + " geplante Aufträge");
+}
+
+// Fälligkeit einer Auftragsart nach ihren erledigten Aufträgen (ohne Termin).
+// Mit Zeitfenster gilt das Fenster; ein km-Intervall gibt dann nur einen Hinweis
+// (kmHinweis), wenn die km-Grenze vor dem maßgeblichen Datum erreicht wird.
+// Einmalige Aufträge sind nach der ersten Erledigung erledigt.
+function auftragsartStatus(art, h = heute()) {
+  const erledigte = erledigteAuftraege(art.id).filter(a => a.datum <= h);
+  const letzte = erledigte[0] || null;
   if (art.einmalig && letzte) {
-    const erste = durchfuehrungen[durchfuehrungen.length - 1];
-    return { art, letzte, erste, erledigt: true, termin: null, seitKm: null, regel: null, datum: null,
-      text: "erledigt am " + datumText(erste.datum), klasse: "status-gruen", nochNie: false, erwartet: null };
+    const erste = erledigte[erledigte.length - 1];
+    return { erledigt: true, letzte, erste, datum: null, text: "erledigt am " + datumText(erste.datum), klasse: "status-gruen", nochNie: false,
+      restKm: null, abStart: false, kmGeschaetzt: false, kmHinweis: null, seitKm: null };
   }
-
-  const termin = daten.termine.find(t => t.wartungsartId === art.id) || null;
-  const seitKm = letzte ? kmSeit(letzte, h) : null;
-  const regel = hatZeitfenster(art)
-    ? Object.assign({ nochNie: false }, saisonStatus(art, durchfuehrungen.map(p => p.datum), daten.fahrrad ? daten.fahrrad.startdatum : null, h))
-    : intervallStatus(art, letzte, h);
-  const st = { art, letzte, erledigt: false, termin, seitKm, regel, datum: regel.datum, text: regel.text, klasse: regel.klasse, nochNie: regel.nochNie };
-
-  // Ein geplanter Termin hat Vorrang in der Anzeige
-  if (termin) {
-    const t = tageZwischen(h, termin.datum);
-    st.datum = termin.datum;
-    st.text = "Termin am " + datumText(termin.datum) + (termin.werkstatt ? " bei " + termin.werkstatt : "") +
-      (t > 0 ? " (in " + tageText(t) + ")" : t === 0 ? " (heute)" : " (vor " + tageText(-t) + ", noch nicht als erledigt eingetragen)");
-    st.klasse = t < 0 ? "status-orange" : "status-gruen";
-    st.nochNie = false;
+  if (!hatFaelligkeit(art)) {
+    return { erledigt: false, letzte, datum: null, text: "ohne Intervall", klasse: "", nochNie: false, restKm: null, abStart: false, kmGeschaetzt: false,
+      kmHinweis: null, seitKm: letzte ? kmSeit(letzte, h) : null };
   }
+  let st;
+  if (hatZeitfenster(art)) {
+    st = Object.assign({ nochNie: false, restKm: null, abStart: false, kmGeschaetzt: false },
+      saisonStatus(art, erledigte.map(a => a.datum), daten.fahrrad ? daten.fahrrad.startdatum : null, h));
+    st.kmHinweis = null;
+    if (art.intervallKm) {
+      const km = intervallStatus(Object.assign({}, art, { intervallMonate: null }), letzte, h);
+      if (km.datum && km.datum < regelZiel(art, Object.assign({}, st, { erledigt: false }), h)) {
+        st.kmHinweis = km.restKm <= 0
+          ? "km-Grenze" + (km.grenzeKm !== null ? " (" + kmText(km.grenzeKm) + " km)" : "") + " schon erreicht"
+          : "km-Grenze (" + (km.grenzeKm !== null ? caKm(km.grenzeKm) : kmText(art.intervallKm) + " km") + ") voraussichtlich schon im " + monatJahrText(km.datum) + " erreicht";
+      }
+    }
+  } else {
+    st = Object.assign({ kmHinweis: null }, intervallStatus(art, letzte, h));
+  }
+  return Object.assign(st, { erledigt: false, letzte, seitKm: letzte ? kmSeit(letzte, h) : null });
+}
+
+// Fälligkeit einer Aufgabe ab ihrer letzten Erledigung (Datum und Kilometerstand
+// des Auftrags), ohne Erledigung ab Startdatum und Start-Kilometerstand
+function aufgabeStatus(art, h = heute()) {
+  const l = letzteErledigung(art.id);
+  const letzte = l && l.datum <= h ? l : null;
+  const st = intervallStatus(art, letzte, h);
+  return Object.assign(st, { letzte, seitKm: letzte ? kmSeit(letzte, h) : null });
+}
+
+// Text zum Termin eines geplanten Auftrags
+function terminText(termin, werkstatt, h) {
+  const t = tageZwischen(h, termin);
+  return "Termin am " + datumText(termin) + (werkstatt ? " bei " + werkstatt : "") +
+    (t > 0 ? " (in " + tageText(t) + ")" : t === 0 ? " (heute)" : " (vor " + tageText(-t) + ", noch nicht als erledigt eingetragen)");
+}
+
+// Ziel einer Fälligkeit für die Positionen: Ende des Zeitfensters bzw.
+// Fälligkeitsdatum; liegt es vor heute oder fehlt es, gilt heute.
+function regelZiel(art, regel, h) {
+  if (!regel || regel.erledigt) return h;
+  if (hatZeitfenster(art)) {
+    const jahr = regel.datum ? Number(regel.datum.slice(0, 4)) : art.gueltigAbJahr;
+    if (regel.datum && regel.datum < h) return h;
+    return jahr ? fensterEnde(art, jahr) : h;
+  }
+  return regel.datum && regel.datum > h ? regel.datum : h;
+}
+
+// Lage der Werkstatt am Tag h: offene Aufträge (gespeicherte und vorgemerkte)
+// mit Fälligkeit, Zieldatum und Positionen, Aufgaben mit Fälligkeit und Auftrag,
+// Vorschläge und Mängel ohne Auftrag. Rechnet nur, verändert nichts.
+//   Vorgemerkter Auftrag: Hat eine Auftragsart mit Fälligkeit keinen geplanten
+//   Auftrag, gilt der nächste als offen (ohne Termin); gespeichert wird er erst
+//   bei der ersten Änderung.
+//   Standard-Zuordnung (nur berechnet): Eine Aufgabe, die in keinem geplanten
+//   Auftrag steht, gehört zum Auftrag ihrer Zuordnung („nächste Inspektion“ = der
+//   früheste offene Auftrag einer Inspektion), wenn sie bis zu dessen Zieldatum
+//   fällig wird und dort nicht entfernt wurde.
+function werkstattLage(h = heute()) {
+  const offene = [];
+  daten.auftraege.filter(a => a.status === "geplant").forEach(a => offene.push(offenerAuftrag(a, artVon(a.wartungsartId), false, h)));
+  auftragsArten().forEach(art => {
+    if (!hatFaelligkeit(art) || offene.some(o => o.art.id === art.id)) return;
+    const regel = auftragsartStatus(art, h);
+    if (regel.erledigt) return;
+    offene.push(offenerAuftrag({ id: null, wartungsartId: art.id, status: "geplant", termin: null, werkstatt: "", datum: null, kmStand: null,
+      kmManuell: false, notiz: "", positionen: [], ausgeschlossen: [] }, art, true, h, regel));
+  });
+  // Reihenfolge: überfällig, mit Datum, ohne Datum (km ohne Schätzung), ohne Fälligkeit
+  const reihenfolge = new Map(daten.wartungsarten.map((a, i) => [a.id, i]));
+  offene.sort((a, b) => a.gruppe - b.gruppe || (a.gruppe <= 2 ? a.datum.localeCompare(b.datum) : 0) ||
+    reihenfolge.get(a.art.id) - reihenfolge.get(b.art.id));
+
+  // Aufgaben mit Fälligkeit
+  const aufgaben = aufgabenArten().map((art, i) => ({ art, i, st: aufgabeStatus(art, h), offen: null, berechnet: false }));
+  const aufgabeVon = id => aufgaben.find(x => x.art.id === id);
+  const faelligBis = (x, ziel) => !!x.st.datum && x.st.datum <= ziel;
+  // Ausdrücklich zugeordnet
+  offene.forEach(o => o.auftrag.positionen.forEach(p => {
+    if (p.art === "aufgabe" && aufgabeVon(p.wartungsartId)) Object.assign(aufgabeVon(p.wartungsartId), { offen: o, berechnet: false });
+  }));
+  // Nach der Standard-Zuordnung (Kandidaten nach Zieldatum)
+  const nachZiel = [...offene].sort((a, b) => a.ziel.localeCompare(b.ziel) || offene.indexOf(a) - offene.indexOf(b));
+  aufgaben.forEach(x => {
+    if (x.offen) return;
+    const passt = o => (x.art.zuordnung === NAECHSTE_INSPEKTION ? istInspektion(o.art) : o.art.id === x.art.zuordnung) &&
+      !o.auftrag.ausgeschlossen.includes(x.art.id) && faelligBis(x, o.ziel);
+    const o = nachZiel.find(passt);
+    if (o) Object.assign(x, { offen: o, berechnet: true });
+  });
+  aufgaben.sort((a, b) => (a.st.datum ? 0 : 1) - (b.st.datum ? 0 : 1) || (a.st.datum && b.st.datum ? a.st.datum.localeCompare(b.st.datum) : 0) || a.i - b.i);
+
+  // Positionen und Vorschläge je offenem Auftrag
+  offene.forEach(o => {
+    o.positionen = o.auftrag.positionen.map(p => Object.assign({}, p, { berechnet: false }))
+      .concat(aufgaben.filter(x => x.offen === o && x.berechnet)
+        .map(x => ({ id: null, art: "aufgabe", wartungsartId: x.art.id, status: "offen", notiz: "", berechnet: true })));
+    o.vorschlaege = aufgaben.filter(x => x.offen !== o && faelligBis(x, o.ziel) && !o.auftrag.ausgeschlossen.includes(x.art.id) &&
+      (!x.offen || (x.berechnet && x.offen.ziel > o.ziel)));
+  });
+
+  const imAuftrag = new Set(offene.flatMap(o => o.auftrag.positionen.filter(p => p.art === "mangel").map(p => p.mangelId)));
+  return {
+    offene,
+    aufgaben,
+    aufgabeVon,
+    maengelOhneAuftrag: offeneMaengel().filter(m => !imAuftrag.has(m.id)),
+    mangelAuftrag: id => offene.find(o => o.auftrag.positionen.some(p => p.art === "mangel" && p.mangelId === id)) || null
+  };
+}
+
+// Offener Auftrag mit Fälligkeit: "datum" ist das maßgebliche Datum (Termin,
+// sonst Fälligkeit), "ziel" das Zieldatum für Positionen und Vorschläge (Termin,
+// sonst Ende des Zeitfensters bzw. Fälligkeit; frühestens heute). "erwartet" =
+// erwarteter Kilometerstand zum Termin bzw. zur Fälligkeit.
+function offenerAuftrag(auftrag, art, vorgemerkt, h, regel = hatFaelligkeit(art) ? auftragsartStatus(art, h) : null) {
+  const o = { auftrag, art, vorgemerkt, regel, termin: auftrag.termin, datum: null, text: "", klasse: "" };
+  if (auftrag.termin) {
+    o.datum = auftrag.termin;
+    o.text = terminText(auftrag.termin, auftrag.werkstatt, h);
+    o.klasse = auftrag.termin < h ? "status-orange" : "status-gruen";
+  } else if (regel) {
+    Object.assign(o, { datum: regel.datum, text: regel.text, klasse: regel.klasse });
+  } else {
+    o.text = "noch kein Termin";
+  }
+  const zielTermin = auftrag.termin && auftrag.termin > h ? auftrag.termin : auftrag.termin ? h : null;
+  o.ziel = zielTermin || regelZiel(art, regel, h);
+  o.gruppe = o.datum ? (o.datum < h ? 1 : 2) : regel && !regel.erledigt && (art.intervallMonate || art.intervallKm) && !hatZeitfenster(art) ? 3 : 4;
   // Steht der km-Wert schon im Text ("fällig ca. im Mai 2027 bei ca. 7.500 km"), entfällt er hier
-  const ziel = termin ? termin.datum : regel.kmGeschaetzt ? null : st.datum;
-  const km = ziel && ziel > h ? kmPrognose(ziel, h) : null;
-  st.erwartet = km === null ? null : { datum: ziel, km };
-  return st;
+  const zielKm = auftrag.termin ? auftrag.termin : regel && regel.kmGeschaetzt ? null : o.datum;
+  const km = zielKm && zielKm > h ? kmPrognose(zielKm, h) : null;
+  o.erwartet = km === null ? null : { datum: zielKm, km };
+  return o;
 }
 
-// Gruppe einer Wartungsart für die Reihenfolge im Reiter Wartung:
-//   1 überfällig (maßgebliches Datum vor heute, auch ein verstrichener Termin)
-//   2 anstehend mit Datum: geplanter Termin; vor dem Zeitfenster dessen Beginn,
-//     im Zeitfenster dessen Ende; bei Intervall das (prognostizierte) Datum
-//   3 anstehend ohne Datum (km-Grenze ohne Schätzung)
-//   4 ohne Fälligkeit (z. B. Reparatur) oder noch nicht gültig (Gültig ab Jahr)
-//   5 einmalige Wartung, erledigt
-function wartungsGruppe(st, h) {
-  if (st.erledigt) return 5;
-  if (st.datum) return st.datum < h ? 1 : 2;
-  const art = st.art;
-  return !hatZeitfenster(art) && (art.intervallMonate || art.intervallKm) ? 3 : 4;
-}
-
-// Alle Wartungsarten in Anzeigereihenfolge: nach Gruppe, in den Gruppen 1 und 2
-// nach Datum (am längsten überfällig bzw. am frühesten fällig zuerst), sonst in
-// der Reihenfolge der Wartungsarten
-function wartungsKarten(h = heute()) {
-  return daten.wartungsarten
-    .map((a, i) => { const st = wartungsStatus(a, h); return { st, i, gruppe: wartungsGruppe(st, h) }; })
-    .sort((a, b) => a.gruppe - b.gruppe || (a.gruppe <= 2 ? a.st.datum.localeCompare(b.st.datum) : 0) || a.i - b.i)
-    .map(x => x.st);
-}
-
-// Nächste fällige Wartung für die Startseite: die erste überfällige bzw. anstehende
-function naechsteWartung(h = heute()) {
-  return wartungsKarten(h).find(st => wartungsGruppe(st, h) <= 3) || null;
+// Nächster fälliger Auftrag für die Übersicht: der erste überfällige bzw. anstehende
+function naechsterAuftrag(lage, h = heute()) {
+  return lage.offene.find(o => o.gruppe <= 3) || null;
 }
 
 function offeneMaengel() {
@@ -3097,13 +3225,19 @@ function bildUebersicht() {
   // Kilometerstand, nächste Wartung und offene Mängel
   html += '<div class="karte"><div class="klein">' + esc(daten.fahrrad ? daten.fahrrad.name : "Kilometerstand") + '</div>' +
     '<div class="stand-zahl">' + kmText(aktuellerKmStand()) + ' km</div>';
-  const nw = naechsteWartung(h);
+  const lage = werkstattLage(h);
+  const nw = naechsterAuftrag(lage, h);
   if (nw) {
     html += '<div style="margin-top:8px">🔧 ' + esc(nw.art.name) + ': <span class="' + nw.klasse + '">' + esc(nw.text) + '</span>' +
-      (nw.erwartet ? ' <span class="klein">(' + caKm(nw.erwartet.km) + ')</span>' : "") + '</div>';
+      (nw.erwartet ? ' <span class="klein">(' + caKm(nw.erwartet.km) + ')</span>' : "") +
+      (nw.positionen.length ? ' · ' + positionenText(nw.positionen.length) : "") + '</div>';
   } else {
     html += '<div class="klein" style="margin-top:8px">🔧 Keine Wartung fällig</div>';
   }
+  // Überfällige Aufgaben ohne Auftrag als Hinweis
+  lage.aufgaben.filter(x => !x.offen && x.st.klasse === "status-rot").forEach(x => {
+    html += '<div class="status-rot" style="margin-top:4px">⚠️ ' + esc(x.art.name) + ' ' + esc(aufgabeKurz(x.st)) + ' – keinem Auftrag zugeordnet</div>';
+  });
   const anzahlMaengel = offeneMaengel().length;
   if (anzahlMaengel) {
     html += '<div class="status-orange" style="margin-top:4px">⚠️ ' + maengelText(anzahlMaengel) + '</div>';
@@ -4247,208 +4381,427 @@ function rueckmeldungKarte(jetzt) {
     '<div class="feldhinweis">Die Auswertung je Stufe steht unter Einstellungen → Wetter → Kleidung. Die Grenzen ändern sich dadurch nicht.</div></div>';
 }
 
-/* ---------- Wartung ---------- */
+/* ---------- Wartung (Werkstatt: Aufträge, Aufgaben, Mängel) ---------- */
+
+// Kennung eines offenen Auftrags in der Oberfläche: die id eines gespeicherten
+// Auftrags oder "neu:<Auftragsart>" für einen vorgemerkten
+function auftragKey(o) { return o.auftrag.id || "neu:" + o.art.id; }
+function offenerVon(key, lage = werkstattLage()) { return lage.offene.find(o => auftragKey(o) === key) || null; }
+// Vorgemerkten Auftrag bei der ersten Änderung speichern; liefert den gespeicherten Auftrag
+function auftragFestlegen(key) {
+  const vorhanden = daten.auftraege.find(a => a.id === key && a.status === "geplant");
+  if (vorhanden) return vorhanden;
+  const artId = key.startsWith("neu:") ? key.slice(4) : key.startsWith("anlegen:") ? key.slice(8) : null;
+  if (!artVon(artId)) return null;
+  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
+    notiz: "", positionen: [], ausgeschlossen: [] };
+  daten.auftraege.push(a);
+  return a;
+}
+// Auftragsarten ohne Fälligkeit (Reparatur, Eigenleistung): bei Bedarf angelegt
+const bedarfsArten = () => auftragsArten().filter(a => !hatFaelligkeit(a));
+function bedarfsArt(muster) { return bedarfsArten().find(a => muster.test(a.name)) || bedarfsArten()[0] || null; }
+const reparaturArt = () => bedarfsArt(/reparatur/i);
+const eigenleistungArt = () => bedarfsArt(/eigenleistung/i);
+
+// Kurze Fälligkeit einer Aufgabe: "überfällig", "bei ca. 5.000 km fällig", "am 20.11.2026 fällig"
+function aufgabeKurz(st) {
+  if (st.klasse === "status-rot") return st.text.startsWith("heute") ? "heute fällig" : "überfällig";
+  if (st.kmGeschaetzt && st.grenzeKm !== null) return "bei " + caKm(st.grenzeKm) + " fällig";
+  if (st.datum) return "am " + datumText(st.datum) + " fällig";
+  return st.text;
+}
+// Name einer Aufgabe mit Bauteil: "Bremsbeläge wechseln · Bremse vorn"
+function aufgabeTitel(art) { return esc(art.name) + (art.bauteil ? ' <span class="klein">· ' + esc(art.bauteil) + '</span>' : ""); }
+// Kurzer Name eines offenen Auftrags mit Termin bzw. Fälligkeit
+function auftragKurz(o) {
+  return esc(o.art.name) + (o.termin ? " am " + datumText(o.termin) : o.regel && o.regel.datum && !o.regel.erledigt ? " (" + esc(o.regel.text) + ")" : "");
+}
+function zuordnungText(art) {
+  return art.zuordnung === NAECHSTE_INSPEKTION ? "nächste Inspektion" : artName(art.zuordnung);
+}
+
+// Eine Position als HTML (Aufgabe mit Bauteil und Fälligkeit bzw. Mangel)
+function positionHtml(p, lage) {
+  if (p.art === "aufgabe") {
+    const x = lage && lage.aufgabeVon(p.wartungsartId);
+    const art = artVon(p.wartungsartId);
+    return '<div class="position">🔧 ' + aufgabeTitel(art) +
+      (x && p.status === "offen" ? '<div class="klein"><span class="' + x.st.klasse + '">' + esc(x.st.text) + '</span>' + (p.berechnet ? " · nach Standard" : "") + '</div>' : "") +
+      (p.notiz ? '<div class="klein umbrueche">' + esc(p.notiz) + '</div>' : "") + '</div>';
+  }
+  const m = daten.maengel.find(m => m.id === p.mangelId);
+  return '<div class="position">⚠️ ' + esc(m ? m.beschreibung : "(unbekannt)") +
+    (m ? '<div class="klein">festgestellt am ' + datumText(m.datum) + '</div>' : "") +
+    (p.notiz ? '<div class="klein umbrueche">' + esc(p.notiz) + '</div>' : "") + '</div>';
+}
+// Vorschlag: "Bremsbeläge wechseln bei ca. 5.000 km fällig – zu diesem Auftrag nehmen?"
+function vorschlagHtml(x, o) {
+  return '<div class="vorschlag">💡 ' + esc(x.art.name) + ' ' + esc(aufgabeKurz(x.st)) + ' – zu diesem Auftrag nehmen?' +
+    (x.offen ? ' <span class="klein">(sonst ' + esc(x.offen.art.name) + ')</span>' : "") +
+    '<button type="button" data-action="vorschlag-annehmen" data-key="' + esc(auftragKey(o)) + '" data-id="' + esc(x.art.id) + '">Mitnehmen</button></div>';
+}
+
 function bildWartung(h = heute()) {
+  const lage = werkstattLage(h);
   let html = "";
 
-  // Offene Mängel ganz oben (nur wenn vorhanden)
-  const offen = offeneMaengel();
-  const erledigt = daten.maengel.filter(m => m.status === "erledigt")
-    .sort((a, b) => (b.erledigtAm || b.datum).localeCompare(a.erledigtAm || a.datum));
-  if (offen.length) {
-    html += '<h2 style="margin-top:8px">Offene Mängel <span class="klein">(' + offen.length + ')</span></h2><div class="liste">' +
-      offen.map(mangelZeile).join("") + '</div>' +
+  if (pruefungVorgemerkt()) {
+    html += '<div class="hinweis warn"><strong>Bitte Wartungsarten prüfen</strong><br>Nach dem Update sind die Wartungsarten in Aufträge und ' +
+      'Aufgaben eingeteilt. Bitte Art, Intervall, Bauteil und Standard-Zuordnung prüfen.<br>' +
+      '<button type="button" data-action="pruefung-oeffnen">Wartungsarten prüfen</button></div>';
+  }
+
+  // Offene Mängel ohne Auftrag ganz oben (nur wenn vorhanden)
+  const ohne = lage.maengelOhneAuftrag;
+  if (ohne.length) {
+    html += '<h2 style="margin-top:8px">Offene Mängel ohne Auftrag <span class="klein">(' + ohne.length + ')</span></h2><div class="liste">' +
+      ohne.map(m => mangelZeile(m, true)).join("") + '</div>' +
       '<div class="knopfreihe" style="margin-bottom:12px"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
   }
 
-  // Wartungsarten: überfällig, anstehend, ohne Fälligkeit, einmalig erledigt
-  wartungsKarten(h).forEach(st => {
-    const art = st.art;
-    html += '<div class="karte"><h3>' + esc(art.name) + '</h3>' +
-      '<div class="' + st.klasse + '">' + esc(st.text) + '</div>';
-    // Einmalige Wartung nach der Durchführung: nur noch "erledigt am"
-    if (st.erledigt) { html += '</div>'; return; }
-    if (st.erwartet) {
-      html += '<div class="klein">Erwarteter Kilometerstand am ' + datumText(st.erwartet.datum) + ': ' + caKm(st.erwartet.km) + '</div>';
-    }
-    if (st.termin && st.regel.datum) {
-      // Bei geplantem Termin zusätzlich die Fälligkeit nach Regel klein zeigen
-      html += '<div class="klein">Ohne Termin: ' + esc(st.regel.text) + '</div>';
-    }
-    if (st.regel.restKm > 0) {
-      html += '<div class="klein">' + (rund10(st.regel.restKm) > 0 ? "Noch " + caKm(st.regel.restKm) : "Weniger als 10 km") + ' bis zur km-Grenze</div>';
-    }
-    if (hatZeitfenster(art)) {
-      html += '<div class="klein">Zeitfenster: ' + fensterText(art) + (art.gueltigAbJahr ? ", gültig ab " + art.gueltigAbJahr : "") + '</div>';
-    }
-    if (st.letzte) {
-      html += '<div class="klein">Zuletzt: ' + datumText(st.letzte.datum) +
-        (st.letzte.werkstatt ? " bei " + esc(st.letzte.werkstatt) : "") +
-        (st.letzte.kmStand !== null ? " · " + kmText(st.letzte.kmStand) + " km" : "") + '</div>' +
-        '<div class="klein">Seit letzter Wartung gefahren: ' + kmText(st.seitKm) + ' km</div>';
-    } else if (st.regel.abStart) {
-      html += '<div class="klein">Noch nicht durchgeführt – gerechnet ab dem Startdatum (' + datumText(daten.fahrrad.startdatum) +
-        ', ' + kmText(daten.fahrrad.startKm) + ' km)</div>';
-    } else if (!st.nochNie) {
-      html += '<div class="klein">Noch nicht durchgeführt</div>';
-    }
-    html += '<div class="knopfreihe">' +
-      '<button type="button" data-action="termin" data-id="' + esc(art.id) + '">' + (st.termin ? "Termin ändern" : "Termin planen") + '</button>' +
-      '<button type="button" class="primaer" data-action="wartung-erledigt" data-id="' + esc(art.id) + '">Erledigt eintragen</button>' +
-      '</div></div>';
+  // Offene Aufträge mit ihren Positionen und Vorschlägen
+  html += '<h2>Offene Aufträge</h2>';
+  if (!lage.offene.length) html += '<div class="liste"><div class="leer">Keine offenen Aufträge.</div></div>';
+  lage.offene.forEach(o => { html += auftragKarte(o, lage, h); });
+  const neu = bedarfsArten();
+  if (neu.length) {
+    html += '<div class="knopfreihe" style="margin-bottom:12px">' + neu.map(a =>
+      '<button type="button" data-action="auftrag-neu" data-id="' + esc(a.id) + '">+ ' + esc(a.name) + '</button>').join("") + '</div>';
+  }
+
+  // Aufgaben mit Fälligkeit und Hinweis auf ihren Auftrag
+  html += '<h2>Aufgaben</h2><div class="liste">';
+  if (!lage.aufgaben.length) html += '<div class="leer">Noch keine Aufgaben. Lege unter „Wartungsarten“ eine Wartungsart der Art „Aufgabe“ an, z. B. „Bremsbeläge wechseln“.</div>';
+  lage.aufgaben.forEach(x => {
+    const auftrag = x.offen ? "→ " + auftragKurz(x.offen) + (x.berechnet ? " · nach Standard" : "")
+      : "noch kein Auftrag · Standard: " + esc(zuordnungText(x.art));
+    html += '<div class="zeile"><button type="button" class="inhalt" data-action="aufgabe-ansehen" data-id="' + esc(x.art.id) + '">' +
+      '<div class="text"><div>' + aufgabeTitel(x.art) + '</div>' +
+      '<div class="umbrechen"><span class="' + x.st.klasse + '">' + esc(x.st.text) + '</span></div>' +
+      '<div class="klein umbrechen">' + auftrag + '</div></div>' +
+      '<span class="klein" style="padding-right:16px">›</span></button></div>';
   });
+  html += '</div>';
 
-  // Mängel erfassen (ohne offene Mängel) und erledigte Mängel
-  if (!offen.length || erledigt.length) html += '<h2>Mängel</h2>';
-  if (!offen.length) {
-    html += '<div class="liste"><div class="leer">Keine offenen Mängel.</div></div>' +
-      '<div class="knopfreihe"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
-  }
-  if (erledigt.length) {
-    html += '<div class="liste"' + (offen.length ? "" : ' style="margin-top:12px"') + '><div class="zeile gruppe">' +
-      '<button type="button" class="inhalt" data-action="maengel-erledigt-umschalten" aria-expanded="' + erledigteMaengelOffen + '">' +
-      CHEVRON +
-      '<div class="text"><div class="titel">Erledigte Mängel (' + erledigt.length + ')</div></div></button></div>' +
-      (erledigteMaengelOffen ? erledigt.map(mangelZeile).join("") : "") + '</div>';
-  }
-
-  // Protokoll
-  const prot = [...daten.wartungsprotokoll].sort((a, b) => b.datum.localeCompare(a.datum));
-  html += '<h2>Wartungsprotokoll</h2><div class="liste">';
-  if (!prot.length) html += '<div class="leer">Noch keine Wartung eingetragen.</div>';
-  prot.forEach(p => {
-    const unten = [p.werkstatt, p.notiz].filter(Boolean).map(esc).join(" · ");
+  // Historie: erledigte Aufträge
+  const erledigte = daten.auftraege.filter(a => a.status === "erledigt").sort((a, b) => b.datum.localeCompare(a.datum));
+  html += '<h2>Erledigte Aufträge</h2><div class="liste">';
+  if (!erledigte.length) html += '<div class="leer">Noch kein Auftrag erledigt.</div>';
+  erledigte.forEach(a => {
+    const n = a.positionen.filter(p => p.status === "erledigt").length;
+    const unten = [a.werkstatt, n ? positionenText(n) : "", a.notiz].filter(Boolean).map(esc).join(" · ");
     html += '<div class="zeile">' +
-      '<button type="button" class="inhalt" data-action="protokoll-ansehen" data-id="' + p.id + '">' +
-      '<div class="text"><div>' + datumText(p.datum) + ' · <strong>' + esc(artName(p.wartungsartId)) + '</strong></div>' +
+      '<button type="button" class="inhalt" data-action="auftrag-ansehen" data-key="' + esc(a.id) + '">' +
+      '<div class="text"><div>' + datumText(a.datum) + ' · <strong>' + esc(artName(a.wartungsartId)) + '</strong></div>' +
       (unten ? '<div class="klein">' + unten + '</div>' : "") +
-      '</div><span class="zahl" style="padding-right:16px">' + (p.kmStand !== null ? kmText(p.kmStand) + ' km' : "") + '</span></button>' +
+      '</div><span class="zahl" style="padding-right:16px">' + (a.kmStand !== null ? kmText(a.kmStand) + ' km' : "") + '</span></button>' +
       '</div>';
   });
   html += '</div>';
 
+  // Mängel erfassen (ohne offene Mängel ohne Auftrag) und erledigte Mängel
+  const erledigt = daten.maengel.filter(m => m.status === "erledigt")
+    .sort((a, b) => (b.erledigtAm || b.datum).localeCompare(a.erledigtAm || a.datum));
+  if (!ohne.length || erledigt.length) html += '<h2>Mängel</h2>';
+  if (!ohne.length) {
+    html += '<div class="liste"><div class="leer">' + (offeneMaengel().length ? "Alle offenen Mängel stehen in einem Auftrag." : "Keine offenen Mängel.") + '</div></div>' +
+      '<div class="knopfreihe"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
+  }
+  if (erledigt.length) {
+    html += '<div class="liste"' + (ohne.length ? "" : ' style="margin-top:12px"') + '><div class="zeile gruppe">' +
+      '<button type="button" class="inhalt" data-action="maengel-erledigt-umschalten" aria-expanded="' + erledigteMaengelOffen + '">' +
+      CHEVRON +
+      '<div class="text"><div class="titel">Erledigte Mängel (' + erledigt.length + ')</div></div></button></div>' +
+      (erledigteMaengelOffen ? erledigt.map(m => mangelZeile(m, false)).join("") : "") + '</div>';
+  }
+
   // Wartungsarten verwalten
-  html += '<h2>Wartungsarten</h2><div class="liste">';
-  daten.wartungsarten.forEach(a => {
-    let regel;
-    if (hatZeitfenster(a)) {
-      regel = "Zeitfenster: " + fensterText(a) + (a.gueltigAbJahr ? ", ab " + a.gueltigAbJahr : "");
-    } else {
-      const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" oder ");
-      regel = iv ? "Intervall: " + iv : "ohne Intervall";
-    }
-    if (a.einmalig) regel = "einmalig · " + regel;
-    html += '<div class="zeile"><button type="button" class="inhalt" data-action="art-bearbeiten" data-id="' + esc(a.id) + '">' +
-      '<div class="text"><div>' + esc(a.name) + '</div><div class="klein">' + regel + '</div></div>' +
-      '<span class="klein" style="padding-right:16px">›</span></button></div>';
+  html += '<h2>Wartungsarten</h2>';
+  [["auftrag", "Aufträge"], ["aufgabe", "Aufgaben"]].forEach(([typ, titel]) => {
+    const arten = daten.wartungsarten.filter(a => a.typ === typ);
+    html += '<h3>' + titel + '</h3><div class="liste">' + (arten.length ? "" : '<div class="leer">Keine.</div>') +
+      arten.map(a => '<div class="zeile"><button type="button" class="inhalt" data-action="art-bearbeiten" data-id="' + esc(a.id) + '">' +
+        '<div class="text"><div>' + esc(a.name) + '</div><div class="klein umbrechen">' + esc(artRegelText(a)) + '</div></div>' +
+        '<span class="klein" style="padding-right:16px">›</span></button></div>').join("") + '</div>';
   });
-  html += '</div><div class="knopfreihe"><button type="button" data-action="art-neu">+ Neue Wartungsart</button></div>';
+  html += '<div class="knopfreihe"><button type="button" data-action="art-neu">+ Neue Wartungsart</button></div>';
   return html;
 }
 
-function mangelZeile(m) {
+// Regel einer Wartungsart als Text: "Zeitfenster: März–April, ab 2027", "Intervall: 24 Monate oder 5.000 km · Bremse · Standard: nächste Inspektion"
+function artRegelText(a) {
+  let regel;
+  if (hatZeitfenster(a)) {
+    regel = "Zeitfenster: " + fensterText(a) + (a.gueltigAbJahr ? ", ab " + a.gueltigAbJahr : "") +
+      (a.intervallKm ? " (Hinweis bei " + kmText(a.intervallKm) + " km)" : "");
+  } else {
+    const iv = [a.intervallMonate ? a.intervallMonate + " Monate" : "", a.intervallKm ? kmText(a.intervallKm) + " km" : ""].filter(Boolean).join(" oder ");
+    regel = iv ? "Intervall: " + iv : a.typ === "auftrag" ? "ohne Intervall, bei Bedarf" : "ohne Intervall";
+  }
+  if (a.einmalig) regel = "einmalig · " + regel;
+  if (a.typ === "aufgabe") regel += (a.bauteil ? " · " + a.bauteil : "") + " · Standard: " + zuordnungText(a);
+  return regel;
+}
+
+// Karte eines offenen Auftrags im Reiter Wartung
+function auftragKarte(o, lage, h) {
+  const art = o.art, r = o.regel;
+  let html = '<div class="karte"><h3>' + esc(art.name) + '</h3>' +
+    '<div class="' + o.klasse + '">' + esc(o.text) + '</div>';
+  if (o.erwartet) html += '<div class="klein">Erwarteter Kilometerstand am ' + datumText(o.erwartet.datum) + ': ' + caKm(o.erwartet.km) + '</div>';
+  if (r) {
+    // Bei geplantem Termin zusätzlich die Fälligkeit nach Regel klein zeigen
+    if (o.termin && r.datum) html += '<div class="klein">Ohne Termin: ' + esc(r.text) + '</div>';
+    if (r.kmHinweis) html += '<div class="klein status-orange">Hinweis: ' + esc(r.kmHinweis) + '</div>';
+    if (r.restKm > 0) html += '<div class="klein">' + (rund10(r.restKm) > 0 ? "Noch " + caKm(r.restKm) : "Weniger als 10 km") + ' bis zur km-Grenze</div>';
+    if (hatZeitfenster(art)) html += '<div class="klein">Zeitfenster: ' + fensterText(art) + (art.gueltigAbJahr ? ", gültig ab " + art.gueltigAbJahr : "") + '</div>';
+    if (r.letzte) {
+      html += '<div class="klein">Zuletzt: ' + datumText(r.letzte.datum) + (r.letzte.werkstatt ? " bei " + esc(r.letzte.werkstatt) : "") +
+        (r.letzte.kmStand !== null ? " · " + kmText(r.letzte.kmStand) + " km" : "") + '</div>' +
+        '<div class="klein">Seit letzter Wartung gefahren: ' + kmText(r.seitKm) + ' km</div>';
+    } else if (r.abStart) {
+      html += '<div class="klein">Noch nicht durchgeführt – gerechnet ab dem Startdatum (' + datumText(daten.fahrrad.startdatum) +
+        ', ' + kmText(daten.fahrrad.startKm) + ' km)</div>';
+    } else if (!r.nochNie && hatFaelligkeit(art)) {
+      html += '<div class="klein">Noch nicht durchgeführt</div>';
+    }
+  }
+  html += '<div class="positionen"><div class="klein">' + (o.positionen.length ? "Positionen (" + o.positionen.length + ")" : "Keine Positionen") + '</div>' +
+    o.positionen.map(p => positionHtml(p, lage)).join("") + '</div>';
+  html += o.vorschlaege.map(x => vorschlagHtml(x, o)).join("");
+  const key = esc(auftragKey(o));
+  return html + '<div class="knopfreihe">' +
+    '<button type="button" data-action="auftrag-termin" data-key="' + key + '">' + (o.termin ? "Termin ändern" : "Termin planen") + '</button>' +
+    '<button type="button" data-action="auftrag-ansehen" data-key="' + key + '">Positionen</button>' +
+    '<button type="button" class="primaer" data-action="auftrag-erledigen" data-key="' + key + '">Erledigt eintragen</button>' +
+    '</div></div>';
+}
+
+// Zeile eines Mangels; offene ohne Auftrag mit "Zu Auftrag …" und "Reparatur anlegen"
+function mangelZeile(m, mitKnoepfen) {
   const unten = m.status === "erledigt"
     ? "erledigt" + (m.erledigtAm ? " am " + datumText(m.erledigtAm) : "")
     : "festgestellt am " + datumText(m.datum);
-  return '<div class="zeile"><button type="button" class="inhalt" data-action="mangel-ansehen" data-id="' + m.id + '">' +
+  const rep = reparaturArt();
+  return '<div class="zeile' + (mitKnoepfen ? " mit-knoepfen" : "") + '"><button type="button" class="inhalt" data-action="mangel-ansehen" data-id="' + m.id + '">' +
     '<div class="text"><div>' + esc(m.beschreibung) + '</div><div class="klein">' + unten + '</div></div>' +
-    '<span class="klein" style="padding-right:16px">›</span></button></div>';
+    '<span class="klein" style="padding-right:16px">›</span></button>' +
+    (mitKnoepfen ? '<div class="knopfreihe">' +
+      '<button type="button" data-action="mangel-zuordnen" data-id="' + m.id + '">Zu Auftrag …</button>' +
+      (rep ? '<button type="button" data-action="mangel-auftrag-neu" data-id="' + m.id + '" data-art="' + esc(rep.id) + '">' + esc(rep.name) + ' anlegen</button>' : "") +
+      '</div>' : "") + '</div>';
 }
 
-// Geplanter Termin
-function terminFormular(artId) {
-  const art = daten.wartungsarten.find(a => a.id === artId);
-  const t = daten.termine.find(t => t.wartungsartId === artId);
+// ---------- Offener Auftrag: Ansicht mit Positionen ----------
+function auftragAnsicht(key) {
+  const erledigt = daten.auftraege.find(a => a.id === key && a.status === "erledigt");
+  if (erledigt) { erledigterAuftragAnsicht(erledigt); return; }
+  const lage = werkstattLage();
+  const o = offenerVon(key, lage);
+  if (!o) { fensterSchliessen(); return; }
+  const k = esc(key);
+  const andere = lage.offene.filter(x => x !== o);
+  const zeilen = o.positionen.map(p => {
+    const pk = p.art === "aufgabe" ? "aufgabe:" + p.wartungsartId : "mangel:" + p.mangelId;
+    return '<div class="position-zeile">' + positionHtml(p, lage) + '<div class="knopfreihe">' +
+      (andere.length ? '<button type="button" data-action="position-verschieben" data-key="' + k + '" data-pos="' + esc(pk) + '">Verschieben …</button>' : "") +
+      '<button type="button" data-action="position-entfernen" data-key="' + k + '" data-pos="' + esc(pk) + '">Entfernen</button></div></div>';
+  }).join("");
+  const imAuftrag = new Set(o.positionen.map(p => p.art === "aufgabe" ? p.wartungsartId : p.mangelId));
+  const aufgabenWahl = lage.aufgaben.filter(x => !imAuftrag.has(x.art.id));
+  const maengelWahl = offeneMaengel().filter(m => !imAuftrag.has(m.id));
   fensterOeffnen(
-    '<h2>Termin: ' + esc(art.name) + '</h2>' +
-    '<label for="t-datum">Datum</label><input type="date" id="t-datum" value="' + (t ? t.datum : "") + '">' +
-    '<label for="t-werkstatt">Werkstatt</label><input type="text" id="t-werkstatt" value="' + esc(t ? t.werkstatt : "") + '">' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
-    '<button type="button" class="primaer" data-action="termin-speichern" data-id="' + esc(artId) + '">Speichern</button></div>' +
-    (t ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="termin-loeschen" data-id="' + esc(artId) + '">Termin entfernen</button></div>' : "")
+    '<h2>' + esc(o.art.name) + '</h2>' +
+    '<div class="' + o.klasse + '">' + esc(o.text) + '</div>' +
+    (o.regel && o.termin && o.regel.datum ? '<div class="klein">Ohne Termin: ' + esc(o.regel.text) + '</div>' : "") +
+    (o.auftrag.notiz ? '<div class="klein umbrueche">' + esc(o.auftrag.notiz) + '</div>' : "") +
+    '<h3>Positionen</h3>' + (zeilen || '<div class="klein">Noch keine Positionen.</div>') +
+    o.vorschlaege.map(x => vorschlagHtml(x, o)).join("") +
+    (aufgabenWahl.length ? '<label for="ap-aufgabe">Aufgabe hinzufügen</label><div class="suchzeile"><select id="ap-aufgabe">' +
+      aufgabenWahl.map(x => '<option value="' + esc(x.art.id) + '">' + esc(x.art.name) + ' – ' + esc(aufgabeKurz(x.st)) +
+        (x.offen ? " (jetzt: " + esc(x.offen.art.name) + ")" : "") + '</option>').join("") +
+      '</select><button type="button" data-action="position-aufgabe-dazu" data-key="' + k + '">Hinzufügen</button></div>' : "") +
+    (maengelWahl.length ? '<label for="ap-mangel">Mangel hinzufügen</label><div class="suchzeile"><select id="ap-mangel">' +
+      maengelWahl.map(m => { const in_ = lage.mangelAuftrag(m.id); return '<option value="' + esc(m.id) + '">' + esc(m.beschreibung) +
+        (in_ ? " (jetzt: " + esc(in_.art.name) + ")" : "") + '</option>'; }).join("") +
+      '</select><button type="button" data-action="position-mangel-dazu" data-key="' + k + '">Hinzufügen</button></div>' : "") +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    '<button type="button" data-action="auftrag-termin" data-key="' + k + '">' + (o.termin ? "Termin ändern" : "Termin planen") + '</button>' +
+    '<button type="button" class="primaer" data-action="auftrag-erledigen" data-key="' + k + '">Erledigt eintragen</button></div>' +
+    (o.auftrag.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="auftrag-loeschen" data-key="' + k + '">Auftrag löschen</button></div>' : "")
   );
 }
-function terminSpeichern(artId) {
-  const datum = wert("t-datum");
-  if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
-  daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
-  daten.termine.push({ wartungsartId: artId, datum, werkstatt: wert("t-werkstatt").trim() });
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Termin gespeichert"); }
+
+// Aufgabe in einen offenen Auftrag nehmen (aus einem anderen geplanten Auftrag verschoben)
+function aufgabeZuAuftrag(key, aufgabeId) {
+  const ziel = auftragFestlegen(key);
+  if (!ziel) return null;
+  daten.auftraege.filter(a => a.status === "geplant" && a !== ziel).forEach(a => {
+    a.positionen = a.positionen.filter(p => !(p.art === "aufgabe" && p.wartungsartId === aufgabeId));
+  });
+  ziel.ausgeschlossen = ziel.ausgeschlossen.filter(id => id !== aufgabeId);
+  if (!ziel.positionen.some(p => p.art === "aufgabe" && p.wartungsartId === aufgabeId)) {
+    ziel.positionen.push({ id: neueId(), art: "aufgabe", wartungsartId: aufgabeId, status: "offen", notiz: "" });
+  }
+  return ziel;
 }
-async function terminLoeschen(artId) {
-  if (!await frage("Geplanten Termin wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
-  daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
+// Mangel in einen offenen Auftrag nehmen (aus einem anderen geplanten Auftrag verschoben)
+function mangelZuAuftrag(key, mangelId) {
+  const ziel = auftragFestlegen(key);
+  if (!ziel) return null;
+  daten.auftraege.filter(a => a.status === "geplant" && a !== ziel).forEach(a => {
+    a.positionen = a.positionen.filter(p => !(p.art === "mangel" && p.mangelId === mangelId));
+  });
+  if (!ziel.positionen.some(p => p.art === "mangel" && p.mangelId === mangelId)) {
+    ziel.positionen.push({ id: neueId(), art: "mangel", mangelId, status: "offen", notiz: "" });
+  }
+  return ziel;
+}
+// Position aus einem offenen Auftrag entfernen. Eine Aufgabe wird dort
+// ausgeschlossen, damit die Standard-Zuordnung sie nicht wieder hineinnimmt.
+function positionEntfernen(key, pos) {
+  const [art, id] = [pos.slice(0, pos.indexOf(":")), pos.slice(pos.indexOf(":") + 1)];
+  const a = auftragFestlegen(key);
+  if (!a) return null;
+  a.positionen = a.positionen.filter(p => !(p.art === art && (art === "aufgabe" ? p.wartungsartId : p.mangelId) === id));
+  if (art === "aufgabe" && !a.ausgeschlossen.includes(id)) a.ausgeschlossen.push(id);
+  return a;
+}
+// Nach einer Änderung an einem offenen Auftrag: speichern und die Ansicht neu zeigen
+function auftragGeaendert(a, text) {
+  if (!speichern()) return;
+  zeichnen();
+  if (a && fenster.open) auftragAnsicht(a.id);
+  if (text) meldung(text);
+}
+
+// Auswahl eines Ziel-Auftrags (Verschieben, Mangel zuordnen, Aufgabe zuordnen)
+function zielAuswahl(titel, text, ziele, aktion, daten_) {
+  fensterOeffnen('<h2>' + titel + '</h2><p>' + text + '</p>' +
+    (ziele.length ? '<div class="liste">' + ziele.map(o => '<div class="zeile"><button type="button" class="inhalt" data-action="' + aktion + '" data-ziel="' +
+      esc(auftragKey(o)) + '"' + Object.entries(daten_).map(([k, v]) => ' data-' + k + '="' + esc(v) + '"').join("") + '>' +
+      '<div class="text"><div>' + esc(o.art.name) + '</div><div class="klein umbrechen">' + esc(o.text) + ' · ' + positionenText(o.positionen.length) + '</div></div>' +
+      '<span class="klein" style="padding-right:16px">›</span></button></div>').join("") + '</div>' : '<p class="klein">Kein anderer offener Auftrag.</p>') +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button></div>');
+}
+function positionVerschiebenWahl(key, pos) {
+  const lage = werkstattLage();
+  zielAuswahl("Position verschieben", "In welchen Auftrag?", lage.offene.filter(o => auftragKey(o) !== key), "position-verschieben-ziel", { key, pos });
+}
+function positionVerschieben(key, pos, zielKey) {
+  const [art, id] = [pos.slice(0, pos.indexOf(":")), pos.slice(pos.indexOf(":") + 1)];
+  positionEntfernen(key, pos);
+  const ziel = art === "aufgabe" ? aufgabeZuAuftrag(zielKey, id) : mangelZuAuftrag(zielKey, id);
+  auftragGeaendert(ziel, "Position verschoben");
+}
+
+// ---------- Termin eines offenen Auftrags ----------
+function auftragTerminFormular(key) {
+  const neu = key.startsWith("anlegen:");
+  const o = neu ? null : offenerVon(key);
+  const art = neu ? artVon(key.slice(8)) : o && o.art;
+  if (!art) return;
+  const a = o ? o.auftrag : { termin: null, werkstatt: "", notiz: "" };
+  fensterOeffnen(
+    '<h2>' + (neu ? "Neuer Auftrag: " : "Termin: ") + esc(art.name) + '</h2>' +
+    '<label for="t-datum">Termin' + (neu ? " (optional)" : "") + '</label><input type="date" id="t-datum" value="' + (a.termin || "") + '">' +
+    '<label for="t-werkstatt">Werkstatt</label><input type="text" id="t-werkstatt" value="' + esc(a.werkstatt) + '">' +
+    '<label for="t-notiz">Notiz</label><textarea id="t-notiz">' + esc(a.notiz) + '</textarea>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="auftrag-termin-speichern" data-key="' + esc(key) + '">' + (neu ? "Anlegen" : "Speichern") + '</button></div>' +
+    (a.termin ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="auftrag-termin-entfernen" data-key="' + esc(key) + '">Termin entfernen</button></div>' : "")
+  );
+}
+function auftragTerminSpeichern(key) {
+  const datum = wert("t-datum");
+  if (datum !== "" && !istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
+  if (!key.startsWith("anlegen:") && datum === "") { alert("Bitte ein Datum wählen. Ohne Termin: „Termin entfernen“."); return; }
+  const a = auftragFestlegen(key);
+  if (!a) return;
+  Object.assign(a, { termin: datum || null, werkstatt: wert("t-werkstatt").trim(), notiz: wert("t-notiz").trim() });
+  if (!speichern()) return;
+  zeichnen();
+  if (key.startsWith("anlegen:")) { auftragAnsicht(a.id); meldung(artName(a.wartungsartId) + " angelegt"); }
+  else { fensterSchliessen(); meldung("Termin gespeichert"); }
+}
+async function auftragTerminEntfernen(key) {
+  if (!await frage("Termin wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
+  const a = auftragFestlegen(key);
+  if (!a) return;
+  a.termin = null;
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
-
-// Mängel, die mit einem Protokoll-Eintrag verknüpft sind
-function maengelZuProtokoll(id) { return daten.maengel.filter(m => m.protokollId === id); }
-
-function protokollAnsicht(id) {
-  const p = daten.wartungsprotokoll.find(p => p.id === id);
-  if (!p) return;
-  const maengel = maengelZuProtokoll(p.id);
-  fensterOeffnen(
-    '<h2>Wartung</h2>' +
-    detailListe([
-      ["Datum", wochentag(p.datum) + ", " + datumText(p.datum)],
-      ["Wartungsart", esc(artName(p.wartungsartId))],
-      ["Werkstatt", esc(p.werkstatt)],
-      ["Kilometerstand", p.kmStand === null ? "–" : kmText(p.kmStand) + " km" + (p.kmManuell ? " (von Hand eingetragen)" : " (berechnet)")],
-      ["Durchgeführte Arbeiten / Notiz", p.notiz ? '<span class="umbrueche">' + esc(p.notiz) + '</span>' : ""],
-      ["Erledigte Mängel", maengel.map(m => "✓ " + esc(m.beschreibung)).join("<br>")]
-    ]) +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
-    '<button type="button" class="primaer" data-action="protokoll-aendern" data-id="' + p.id + '">Ändern</button></div>'
-  );
+async function auftragLoeschen(key) {
+  const a = daten.auftraege.find(x => x.id === key && x.status === "geplant");
+  if (!a) return;
+  const m = a.positionen.filter(p => p.art === "mangel").length;
+  if (!await frage("Geplanten Auftrag „" + esc(artName(a.wartungsartId)) + "“ wirklich löschen?" +
+    (m ? "<br><br>" + (m === 1 ? "Der Mangel steht" : "Die " + m + " Mängel stehen") + " danach wieder ohne Auftrag oben im Reiter Wartung." : ""),
+    "Löschen", "Abbrechen", true)) return;
+  mitRueckgaengig(() => { daten.auftraege = daten.auftraege.filter(x => x !== a); }, "Auftrag gelöscht");
 }
 
-// Zustand des Protokoll-Formulars
-let formProtokoll = null; // { id | null, manuell, terminUebernommen }
+// ---------- Erledigt eintragen (Abschluss) und erledigte Aufträge ----------
 
-async function wartungErledigt(artId) {
-  const t = daten.termine.find(t => t.wartungsartId === artId);
-  let vorgabe = { id: null, datum: heute(), wartungsartId: artId, werkstatt: "", kmStand: null, kmManuell: false, notiz: "" };
-  let uebernommen = false;
-  if (t) {
-    uebernommen = await frage("Für <strong>" + esc(artName(artId)) + "</strong> ist ein Termin am " + datumText(t.datum) +
-      (t.werkstatt ? " bei " + esc(t.werkstatt) : "") + " geplant. Diesen Termin ins Protokoll übernehmen?",
-      "Übernehmen", "Nein, anderes Datum");
-    if (uebernommen) { vorgabe.datum = t.datum; vorgabe.werkstatt = t.werkstatt; }
-  }
-  protokollFormular(vorgabe, uebernommen);
+// Zustand des Abschluss-Formulars: { key (offener Auftrag) | id (erledigter Auftrag) |
+// artId + aufgabeId (Eigenleistung zu einer Aufgabe), manuell, positionen }.
+// "positionen" ist genau der beim Öffnen angezeigte Stand (auch die nach der
+// Standard-Zuordnung berechneten); so wird er gespeichert.
+let formAuftrag = null;
+
+function auftragErledigen(key) {
+  const o = offenerVon(key);
+  if (!o) return;
+  const t = o.termin;
+  abschlussFormular({ key, art: o.art, datum: t && t <= heute() ? t : heute(), werkstatt: o.auftrag.werkstatt, kmStand: null, kmManuell: false,
+    notiz: o.auftrag.notiz, positionen: o.positionen.map(p => ({ id: p.id, art: p.art, wartungsartId: p.wartungsartId, mangelId: p.mangelId, notiz: p.notiz, status: "erledigt" })) });
+}
+// "Erledigt eintragen" an einer Aufgabe: eine erledigte Eigenleistung mit dieser Position
+function aufgabeErledigen(aufgabeId) {
+  const art = eigenleistungArt();
+  if (!art) { alert("Bitte zuerst eine Wartungsart „Eigenleistung“ (Auftrag ohne Intervall) anlegen."); return; }
+  abschlussFormular({ artId: art.id, art, datum: heute(), werkstatt: "", kmStand: null, kmManuell: false, notiz: "",
+    positionen: [{ id: null, art: "aufgabe", wartungsartId: aufgabeId, notiz: "", status: "erledigt" }] });
+}
+function erledigterAuftragAendern(id) {
+  const a = daten.auftraege.find(a => a.id === id && a.status === "erledigt");
+  if (!a) return;
+  abschlussFormular({ id, art: artVon(a.wartungsartId), datum: a.datum, werkstatt: a.werkstatt, kmStand: a.kmStand, kmManuell: a.kmManuell, notiz: a.notiz,
+    positionen: a.positionen.map(p => Object.assign({}, p)) });
 }
 
-function protokollFormular(p, terminUebernommen) {
-  formProtokoll = { id: p.id, manuell: p.kmManuell, terminUebernommen: !!terminUebernommen };
-  const optionen = daten.wartungsarten.map(a =>
-    '<option value="' + esc(a.id) + '"' + (a.id === p.wartungsartId ? " selected" : "") + '>' + esc(a.name) + '</option>').join("");
-  // Zum Abhaken: alle offenen Mängel und die schon mit diesem Eintrag verknüpften
-  const verknuepft = p.id ? maengelZuProtokoll(p.id) : [];
-  const zumAbhaken = [...verknuepft, ...offeneMaengel()];
-  const maengelHtml = zumAbhaken.length
-    ? '<label>Erledigte Mängel abhaken</label>' + zumAbhaken.map(m =>
-        '<label class="haken"><input type="checkbox" name="p-mangel" value="' + m.id + '"' + (m.protokollId === p.id && p.id ? " checked" : "") + '>' +
-        '<span>' + esc(m.beschreibung) + ' <span class="klein">(' + datumText(m.datum) + ')</span></span></label>').join("")
-    : "";
+function abschlussFormular(f) {
+  formAuftrag = { key: f.key || null, id: f.id || null, artId: f.artId || null, manuell: f.kmManuell, positionen: f.positionen };
+  const name = p => p.art === "aufgabe" ? esc(artName(p.wartungsartId))
+    : esc((daten.maengel.find(m => m.id === p.mangelId) || { beschreibung: "(unbekannt)" }).beschreibung);
+  const imAuftrag = new Set(f.positionen.filter(p => p.art === "mangel").map(p => p.mangelId));
+  // Mangel, der schon mit einem anderen Auftrag erledigt wurde, lässt sich hier nicht abhaken
+  const gesperrt = p => p.art === "mangel" && p.status !== "erledigt" &&
+    (daten.maengel.find(m => m.id === p.mangelId) || {}).status === "erledigt";
+  const weitere = offeneMaengel().filter(m => !imAuftrag.has(m.id));
   fensterOeffnen(
-    '<h2>' + (p.id ? "Wartung bearbeiten" : "Wartung eintragen") + '</h2>' +
-    (terminUebernommen ? '<div class="hinweis info">Der geplante Termin wird nach dem Speichern entfernt.</div>' : "") +
-    '<label for="p-datum">Datum</label><input type="date" id="p-datum" value="' + p.datum + '" data-change="protokoll-datum">' +
-    '<label for="p-art">Wartungsart</label><select id="p-art">' + optionen + '</select>' +
-    '<label for="p-werkstatt">Werkstatt</label><input type="text" id="p-werkstatt" value="' + esc(p.werkstatt) + '">' +
+    '<h2>' + (f.id ? "Auftrag bearbeiten: " : "Erledigt: ") + esc(f.art.name) + '</h2>' +
+    '<label for="p-datum">Datum</label><input type="date" id="p-datum" value="' + f.datum + '" data-change="protokoll-datum">' +
+    '<label for="p-werkstatt">Werkstatt</label><input type="text" id="p-werkstatt" value="' + esc(f.werkstatt) + '">' +
     '<label for="p-km">Kilometerstand</label>' +
     '<input type="text" id="p-km" inputmode="decimal" autocomplete="off" data-input="protokoll-km">' +
     '<div class="feldhinweis" id="p-km-hinweis"></div>' +
-    '<label for="p-notiz">Durchgeführte Arbeiten / Notiz</label><textarea id="p-notiz">' + esc(p.notiz) + '</textarea>' +
-    maengelHtml +
+    '<label for="p-notiz">Durchgeführte Arbeiten / Notiz</label><textarea id="p-notiz">' + esc(f.notiz) + '</textarea>' +
+    (f.positionen.length ? '<label>Positionen: erledigt abhaken (nicht abgehakt = nicht gemacht)</label>' + f.positionen.map((p, i) =>
+      '<label class="haken"><input type="checkbox" name="p-position" value="' + i + '"' + (p.status === "erledigt" ? " checked" : "") + (gesperrt(p) ? " disabled" : "") + '>' +
+      '<span>' + (p.art === "aufgabe" ? "🔧 " : "⚠️ ") + name(p) + (p.notiz ? ' <span class="klein">(' + esc(p.notiz) + ')</span>' : "") + '</span></label>').join("")
+      : '<div class="feldhinweis">Keine Positionen.</div>') +
+    (weitere.length ? '<label>Weitere offene Mängel, die dabei erledigt wurden</label>' + weitere.map(m =>
+      '<label class="haken"><input type="checkbox" name="p-mangel" value="' + m.id + '">' +
+      '<span>' + esc(m.beschreibung) + ' <span class="klein">(' + datumText(m.datum) + ')</span></span></label>').join("") : "") +
     '<div class="knopfreihe">' +
-    (p.id ? '<button type="button" data-action="protokoll-ansehen" data-id="' + p.id + '">Abbrechen</button>'
+    (f.id ? '<button type="button" data-action="auftrag-ansehen" data-key="' + esc(f.id) + '">Abbrechen</button>'
           : '<button type="button" data-action="fenster-zu">Abbrechen</button>') +
-    '<button type="button" class="primaer" data-action="protokoll-speichern">Speichern</button></div>' +
-    (p.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="protokoll-loeschen" data-id="' + p.id + '">Eintrag löschen</button></div>' : "")
+    '<button type="button" class="primaer" data-action="abschluss-speichern">Speichern</button></div>' +
+    (f.id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="erledigt-loeschen" data-id="' + esc(f.id) + '">Auftrag löschen</button></div>' : "")
   );
-  document.getElementById("p-km").value = p.kmManuell ? kmFeld(p.kmStand) : kmFeld(kmStandAm(p.datum));
+  document.getElementById("p-km").value = f.kmManuell ? kmFeld(f.kmStand) : kmFeld(kmStandAm(f.datum));
   protokollKmHinweis();
 }
 
@@ -4456,7 +4809,7 @@ function protokollKmHinweis() {
   const d = wert("p-datum");
   const berechnet = istGueltigesDatum(d) ? kmStandAm(d) : null;
   const el = document.getElementById("p-km-hinweis");
-  if (formProtokoll.manuell) {
+  if (formAuftrag.manuell) {
     el.innerHTML = "Von Hand eingetragen. Berechnet wären: " + kmText(berechnet) + " km " +
       '<button type="button" class="leise" data-action="protokoll-km-neu">Berechneten Wert verwenden</button>';
   } else if (berechnet === null) {
@@ -4466,78 +4819,140 @@ function protokollKmHinweis() {
   }
 }
 function protokollDatumGeaendert() {
-  if (!formProtokoll.manuell) {
+  if (!formAuftrag.manuell) {
     const d = wert("p-datum");
     document.getElementById("p-km").value = istGueltigesDatum(d) ? kmFeld(kmStandAm(d)) : "";
   }
   protokollKmHinweis();
 }
 function protokollKmEingabe() {
-  if (!formProtokoll.manuell) { formProtokoll.manuell = true; protokollKmHinweis(); }
+  if (!formAuftrag.manuell) { formAuftrag.manuell = true; protokollKmHinweis(); }
 }
 function protokollKmNeu() {
-  formProtokoll.manuell = false;
+  formAuftrag.manuell = false;
   protokollDatumGeaendert();
 }
 
-// Mangel wieder öffnen (Verknüpfung und Erledigt-Datum entfernen)
-function mangelWiederOeffnen(m) { Object.assign(m, { status: "offen", erledigtAm: null, protokollId: null }); }
+// Mangel als erledigt bzw. wieder offen markieren
+function mangelErledigen(id, datum) { Object.assign(daten.maengel.find(m => m.id === id), { status: "erledigt", erledigtAm: datum }); }
+function mangelWiederOeffnen(id) { Object.assign(daten.maengel.find(m => m.id === id), { status: "offen", erledigtAm: null }); }
 
-function protokollSpeichern() {
+function abschlussSpeichern() {
   const datum = wert("p-datum");
   if (!istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
   const kmEingabe = wert("p-km").trim();
-  let manuell = formProtokoll.manuell && kmEingabe !== "";
+  const manuell = formAuftrag.manuell && kmEingabe !== "";
   let kmStand = null;
   if (manuell) {
     kmStand = kmLesen(kmEingabe);
     if (kmStand === null) { alert("Bitte den Kilometerstand als Zahl eingeben, z. B. 1234,5."); return; }
   }
-  const artId = wert("p-art");
-  const satz = { datum, wartungsartId: artId, werkstatt: wert("p-werkstatt").trim(), kmStand, kmManuell: manuell, notiz: wert("p-notiz").trim() };
-  let id = formProtokoll.id;
-  if (id) {
-    Object.assign(daten.wartungsprotokoll.find(p => p.id === id), satz);
+  const abgehakt = new Set([...document.querySelectorAll('input[name="p-position"]:checked')].map(el => Number(el.value)));
+  const weitere = [...document.querySelectorAll('input[name="p-mangel"]:checked')].map(el => el.value);
+  const vorher = formAuftrag.id ? daten.auftraege.find(a => a.id === formAuftrag.id) : null;
+  const vorherErledigt = new Set(vorher ? vorher.positionen.filter(p => p.art === "mangel" && p.status === "erledigt").map(p => p.mangelId) : []);
+  const positionen = formAuftrag.positionen.map((p, i) => {
+    const pos = { id: p.id || neueId(), art: p.art, status: abgehakt.has(i) ? "erledigt" : "nicht-gemacht", notiz: p.notiz || "" };
+    if (p.art === "aufgabe") pos.wartungsartId = p.wartungsartId; else pos.mangelId = p.mangelId;
+    return pos;
+  }).concat(weitere.map(id => ({ id: neueId(), art: "mangel", mangelId: id, status: "erledigt", notiz: "" })));
+  const satz = { status: "erledigt", termin: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
+    notiz: wert("p-notiz").trim(), positionen, ausgeschlossen: [] };
+
+  let auftrag;
+  if (vorher) {
+    auftrag = Object.assign(vorher, satz);
+  } else if (formAuftrag.key && daten.auftraege.some(a => a.id === formAuftrag.key && a.status === "geplant")) {
+    auftrag = Object.assign(daten.auftraege.find(a => a.id === formAuftrag.key), satz);
   } else {
-    id = neueId();
-    daten.wartungsprotokoll.push(Object.assign({ id }, satz));
+    const artId = formAuftrag.artId || formAuftrag.key.slice(4);
+    auftrag = Object.assign({ id: neueId(), wartungsartId: artId }, satz);
+    daten.auftraege.push(auftrag);
   }
-  // Abgehakte Mängel erledigen und verknüpfen; nicht mehr abgehakte wieder öffnen
-  const abgehakt = new Set([...document.querySelectorAll('input[name="p-mangel"]:checked')].map(el => el.value));
-  daten.maengel.forEach(m => {
-    if (abgehakt.has(m.id)) Object.assign(m, { status: "erledigt", erledigtAm: datum, protokollId: id });
-    else if (m.protokollId === id) mangelWiederOeffnen(m);
+  // Mängel: erledigte Positionen schließen, abgewählte wieder öffnen
+  positionen.filter(p => p.art === "mangel").forEach(p => {
+    if (p.status === "erledigt") mangelErledigen(p.mangelId, datum);
+    else if (vorherErledigt.has(p.mangelId)) mangelWiederOeffnen(p.mangelId);
   });
-  // Übernommener Termin entfällt; bei einer einmaligen Wartung auch jeder andere
-  const art = daten.wartungsarten.find(a => a.id === artId);
-  if (formProtokoll.terminUebernommen || (art && art.einmalig)) {
-    daten.termine = daten.termine.filter(t => t.wartungsartId !== artId);
-  }
+  // Erledigte Aufgaben und Mängel stehen in keinem anderen geplanten Auftrag mehr
+  const fertig = new Set(positionen.filter(p => p.status === "erledigt").map(p => p.art + ":" + (p.wartungsartId || p.mangelId)));
+  daten.auftraege.filter(a => a.status === "geplant").forEach(a => {
+    a.positionen = a.positionen.filter(p => !fertig.has(p.art + ":" + (p.wartungsartId || p.mangelId)));
+  });
   if (speichern()) {
     fensterSchliessen(); zeichnen();
-    meldung(abgehakt.size ? "Wartung gespeichert, " + (abgehakt.size === 1 ? "1 Mangel" : abgehakt.size + " Mängel") + " erledigt" : "Wartung gespeichert");
+    const n = positionen.filter(p => p.status === "erledigt").length;
+    meldung(vorher ? "Auftrag gespeichert" : "Erledigt eingetragen" + (n ? ", " + positionenText(n) + " erledigt" : ""));
   }
 }
-async function protokollLoeschen(id) {
-  const p = daten.wartungsprotokoll.find(p => p.id === id);
-  if (!p) return;
-  const verknuepft = maengelZuProtokoll(id);
+
+function erledigterAuftragAnsicht(a) {
+  const pos = st => a.positionen.filter(p => p.status === st).map(p => {
+    const name = p.art === "aufgabe" ? artName(p.wartungsartId) : (daten.maengel.find(m => m.id === p.mangelId) || { beschreibung: "(unbekannt)" }).beschreibung;
+    return (st === "erledigt" ? "✓ " : "– ") + (p.art === "mangel" ? "Mangel: " : "") + esc(name) + (p.notiz ? ' <span class="klein umbrueche">(' + esc(p.notiz) + ')</span>' : "");
+  }).join("<br>");
+  fensterOeffnen(
+    '<h2>' + esc(artName(a.wartungsartId)) + '</h2>' +
+    detailListe([
+      ["Datum", wochentag(a.datum) + ", " + datumText(a.datum)],
+      ["Werkstatt", esc(a.werkstatt)],
+      ["Kilometerstand", a.kmStand === null ? "–" : kmText(a.kmStand) + " km" + (a.kmManuell ? " (von Hand eingetragen)" : " (berechnet)")],
+      ["Durchgeführte Arbeiten / Notiz", a.notiz ? '<span class="umbrueche">' + esc(a.notiz) + '</span>' : ""],
+      ["Erledigte Positionen", pos("erledigt")],
+      ["Nicht gemacht", pos("nicht-gemacht")]
+    ]) +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    '<button type="button" class="primaer" data-action="erledigt-aendern" data-id="' + esc(a.id) + '">Ändern</button></div>'
+  );
+}
+async function erledigtLoeschen(id) {
+  const a = daten.auftraege.find(x => x.id === id && x.status === "erledigt");
+  if (!a) return;
+  const verknuepft = a.positionen.filter(p => p.art === "mangel" && p.status === "erledigt").map(p => daten.maengel.find(m => m.id === p.mangelId)).filter(Boolean);
   const zusatz = verknuepft.length
-    ? "<br><br>" + (verknuepft.length === 1 ? "Der verknüpfte Mangel wird" : "Die " + verknuepft.length + " verknüpften Mängel werden") +
+    ? "<br><br>" + (verknuepft.length === 1 ? "Der erledigte Mangel wird" : "Die " + verknuepft.length + " erledigten Mängel werden") +
       " wieder auf <strong>offen</strong> gesetzt:<br>" + verknuepft.map(m => "• " + esc(m.beschreibung)).join("<br>")
     : "";
-  if (!await frage("Wartung „" + esc(artName(p.wartungsartId)) + "“ vom " + datumText(p.datum) + " wirklich löschen?" + zusatz, "Löschen", "Abbrechen", true)) return;
+  if (!await frage("Auftrag „" + esc(artName(a.wartungsartId)) + "“ vom " + datumText(a.datum) + " wirklich löschen?" + zusatz, "Löschen", "Abbrechen", true)) return;
   mitRueckgaengig(() => {
-    verknuepft.forEach(mangelWiederOeffnen);
-    daten.wartungsprotokoll = daten.wartungsprotokoll.filter(x => x.id !== id);
-  }, "Wartung gelöscht");
+    verknuepft.forEach(m => mangelWiederOeffnen(m.id));
+    daten.auftraege = daten.auftraege.filter(x => x.id !== id);
+  }, "Auftrag gelöscht");
+}
+
+// ---------- Aufgabe ansehen ----------
+function aufgabeAnsicht(id) {
+  const lage = werkstattLage();
+  const x = lage.aufgabeVon(id);
+  if (!x) return;
+  const st = x.st;
+  fensterOeffnen(
+    '<h2>' + esc(x.art.name) + '</h2>' +
+    detailListe([
+      ["Bauteil", esc(x.art.bauteil || "")],
+      ["Regel", esc(artRegelText(x.art))],
+      ["Fälligkeit", '<span class="' + st.klasse + '">' + esc(st.text) + '</span>' +
+        (st.restKm > 0 ? '<br><span class="klein">' + (rund10(st.restKm) > 0 ? "Noch " + caKm(st.restKm) : "Weniger als 10 km") + ' bis zur km-Grenze</span>' : "")],
+      ["Zuletzt erledigt", st.letzte ? datumText(st.letzte.datum) + " (" + esc(artName(st.letzte.auftrag.wartungsartId)) + ")" +
+        (st.letzte.kmStand !== null ? " · " + kmText(st.letzte.kmStand) + " km" : "") + "<br>Seit dem gefahren: " + kmText(st.seitKm) + " km" : "noch nicht"],
+      ["Auftrag", x.offen ? auftragKurz(x.offen) + (x.berechnet ? " · nach Standard" : "") : "noch kein Auftrag (Standard: " + esc(zuordnungText(x.art)) + ")"]
+    ]) +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    '<button type="button" data-action="aufgabe-zuordnen" data-id="' + esc(id) + '">Zu Auftrag …</button>' +
+    '<button type="button" class="primaer" data-action="aufgabe-erledigen" data-id="' + esc(id) + '">Erledigt eintragen</button></div>' +
+    '<div class="feldhinweis">„Erledigt eintragen“ legt eine erledigte Eigenleistung mit dieser Aufgabe an (z. B. selbst gewechselt).</div>' +
+    '<div class="knopfreihe"><button type="button" class="voll" data-action="art-bearbeiten" data-id="' + esc(id) + '">Wartungsart bearbeiten</button></div>'
+  );
 }
 
 /* ---------- Mängel ---------- */
 function mangelAnsicht(id) {
   const m = daten.maengel.find(m => m.id === id);
   if (!m) return;
-  const p = m.protokollId ? daten.wartungsprotokoll.find(p => p.id === m.protokollId) : null;
+  const lage = werkstattLage();
+  const offen = lage.mangelAuftrag(m.id);
+  const erledigtMit = daten.auftraege.find(a => a.status === "erledigt" && a.positionen.some(p => p.art === "mangel" && p.mangelId === m.id && p.status === "erledigt"));
+  const link = (key, text) => '<button type="button" class="leise" style="padding:0;min-height:0" data-action="auftrag-ansehen" data-key="' + esc(key) + '">' + text + '</button>';
   fensterOeffnen(
     '<h2>Mangel</h2>' +
     detailListe([
@@ -4545,17 +4960,37 @@ function mangelAnsicht(id) {
       ["Beschreibung", '<span class="umbrueche">' + esc(m.beschreibung) + '</span>'],
       ["Status", m.status === "erledigt" ? '<span class="status-gruen">erledigt</span>' : '<span class="status-orange">offen</span>'],
       ["Erledigt am", m.erledigtAm ? datumText(m.erledigtAm) : ""],
-      ["Erledigt mit Wartung", p ? '<button type="button" class="leise" style="padding:0;min-height:0" data-action="protokoll-ansehen" data-id="' + p.id + '">' +
-        esc(artName(p.wartungsartId)) + " vom " + datumText(p.datum) + '</button>' : ""]
+      ["Im Auftrag", offen ? link(auftragKey(offen), auftragKurz(offen)) : m.status === "offen" ? "noch keinem Auftrag zugeordnet" : ""],
+      ["Erledigt mit Auftrag", erledigtMit ? link(erledigtMit.id, esc(artName(erledigtMit.wartungsartId)) + " vom " + datumText(erledigtMit.datum)) : ""]
     ]) +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Schließen</button>' +
+    (m.status === "offen" ? '<button type="button" data-action="mangel-zuordnen" data-id="' + m.id + '">Zu Auftrag …</button>' : "") +
     '<button type="button" class="primaer" data-action="mangel-aendern" data-id="' + m.id + '">Ändern</button></div>'
   );
 }
+// Mangel einem offenen Auftrag zuordnen oder einen Auftrag ohne Fälligkeit (Reparatur, Eigenleistung) dafür anlegen
+function mangelZuordnenWahl(id) {
+  const lage = werkstattLage();
+  const m = daten.maengel.find(m => m.id === id);
+  const jetzt = lage.mangelAuftrag(id);
+  zielAuswahl("Mangel zuordnen", "„" + esc(m.beschreibung) + "“ in welchen Auftrag?", lage.offene.filter(o => o !== jetzt), "mangel-zuordnen-ziel", { id });
+  fensterInhalt.querySelector(".knopfreihe").insertAdjacentHTML("afterbegin", bedarfsArten().map(a =>
+    '<button type="button" data-action="mangel-auftrag-neu" data-id="' + esc(id) + '" data-art="' + esc(a.id) + '">Neu: ' + esc(a.name) + '</button>').join(""));
+}
+// Neuer Auftrag ohne Fälligkeit (z. B. Reparatur) mit diesem Mangel
+function mangelAuftragNeu(id, artId) {
+  const a = mangelZuAuftrag("anlegen:" + artId, id);
+  if (!a) return;
+  if (speichern()) { zeichnen(); auftragAnsicht(a.id); meldung(artName(artId) + " angelegt"); }
+}
+function aufgabeZuordnenWahl(id) {
+  const lage = werkstattLage();
+  const x = lage.aufgabeVon(id);
+  zielAuswahl("Aufgabe zuordnen", "„" + esc(x.art.name) + "“ in welchen Auftrag?", lage.offene.filter(o => !(x.offen === o && !x.berechnet)), "aufgabe-zuordnen-ziel", { id });
+}
 
 function mangelFormular(id) {
-  const m = id ? daten.maengel.find(m => m.id === id) : { datum: heute(), beschreibung: "", status: "offen", erledigtAm: null, protokollId: null };
-  const p = m.protokollId ? daten.wartungsprotokoll.find(p => p.id === m.protokollId) : null;
+  const m = id ? daten.maengel.find(m => m.id === id) : { datum: heute(), beschreibung: "", status: "offen", erledigtAm: null };
   fensterOeffnen(
     '<h2>' + (id ? "Mangel bearbeiten" : "Mangel erfassen") + '</h2>' +
     '<label for="m-datum">Festgestellt am</label><input type="date" id="m-datum" value="' + m.datum + '">' +
@@ -4565,7 +5000,8 @@ function mangelFormular(id) {
     '<option value="erledigt"' + (m.status === "erledigt" ? " selected" : "") + '>erledigt</option></select>' +
     '<div id="m-erledigt-feld"' + (m.status === "erledigt" ? "" : " hidden") + '>' +
     '<label for="m-am">Erledigt am</label><input type="date" id="m-am" value="' + (m.erledigtAm || heute()) + '">' +
-    (p ? '<div class="feldhinweis">Verknüpft mit der Wartung „' + esc(artName(p.wartungsartId)) + '“ vom ' + datumText(p.datum) + '.</div>' : "") +
+    '<div class="feldhinweis">Ein Mangel, der in einem geplanten Auftrag steht, wird dort entfernt. Wird ein mit einem Auftrag erledigter Mangel wieder ' +
+    'geöffnet, steht er dort als „nicht gemacht“.</div>' +
     '</div>' +
     '<div class="knopfreihe">' +
     (id ? '<button type="button" data-action="mangel-ansehen" data-id="' + id + '">Abbrechen</button>'
@@ -4591,43 +5027,83 @@ function mangelSpeichern(id) {
   const m = id ? daten.maengel.find(m => m.id === id) : null;
   if (m) {
     Object.assign(m, { datum, beschreibung, status, erledigtAm });
-    if (status === "offen") m.protokollId = null;
+    daten.auftraege.forEach(a => {
+      // Von Hand erledigt: aus geplanten Aufträgen entfernen; wieder geöffnet: dort „nicht gemacht“
+      if (status === "erledigt" && a.status === "geplant") a.positionen = a.positionen.filter(p => !(p.art === "mangel" && p.mangelId === id));
+      if (status === "offen" && a.status === "erledigt") a.positionen.forEach(p => { if (p.art === "mangel" && p.mangelId === id) p.status = "nicht-gemacht"; });
+    });
   } else {
-    daten.maengel.push({ id: neueId(), datum, beschreibung, status, erledigtAm, protokollId: null });
+    daten.maengel.push({ id: neueId(), datum, beschreibung, status, erledigtAm });
   }
   if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Mangel gespeichert"); }
 }
 async function mangelLoeschen(id) {
   const m = daten.maengel.find(m => m.id === id);
   if (!m) return;
-  if (!await frage("Mangel „" + esc(m.beschreibung) + "“ wirklich löschen?", "Löschen", "Abbrechen", true)) return;
-  mitRueckgaengig(() => { daten.maengel = daten.maengel.filter(x => x.id !== id); }, "Mangel gelöscht");
+  const in_ = daten.auftraege.filter(a => a.positionen.some(p => p.art === "mangel" && p.mangelId === id));
+  if (!await frage("Mangel „" + esc(m.beschreibung) + "“ wirklich löschen?" +
+    (in_.length ? "<br><br>Er wird auch aus " + (in_.length === 1 ? "dem Auftrag" : "den " + in_.length + " Aufträgen") + " entfernt." : ""), "Löschen", "Abbrechen", true)) return;
+  mitRueckgaengig(() => {
+    daten.maengel = daten.maengel.filter(x => x.id !== id);
+    daten.auftraege.forEach(a => { a.positionen = a.positionen.filter(p => !(p.art === "mangel" && p.mangelId === id)); });
+  }, "Mangel gelöscht");
 }
 
-// Wartungsarten
-function artFormular(id) {
+// ---------- Wartungsarten ----------
+
+// Wird eine Wartungsart verwendet (Aufträge, Positionen, Standard-Zuordnung)? Text oder null
+function artVerwendung(id) {
+  if (daten.auftraege.some(a => a.wartungsartId === id)) return "in Aufträgen verwendet";
+  if (daten.auftraege.some(a => a.positionen.some(p => p.art === "aufgabe" && p.wartungsartId === id))) return "als Position in Aufträgen verwendet";
+  return null;
+}
+// Bisher verwendete Bauteile (Auswahlliste)
+function bauteile() {
+  return [...new Set(daten.wartungsarten.map(a => a.bauteil).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+}
+// Nach dem Speichern einer Wartungsart zurück zum Prüfbildschirm?
+let artAusPruefung = false;
+
+function artFormular(id, ausPruefung = false) {
+  artAusPruefung = ausPruefung;
   const a = id ? daten.wartungsarten.find(a => a.id === id)
-    : { name: "", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false };
+    : { name: "", typ: "aufgabe", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false,
+      bauteil: null, zuordnung: NAECHSTE_INSPEKTION };
+  const verwendet = id ? artVerwendung(id) : null;
   const monatsAuswahl = (feld, wert) => '<select id="' + feld + '" data-change="art-fenster"><option value="">– kein Zeitfenster –</option>' +
     MONATE.map((n, i) => '<option value="' + (i + 1) + '"' + (wert === i + 1 ? " selected" : "") + '>' + n + '</option>').join("") + '</select>';
+  const zuordnungen = [[NAECHSTE_INSPEKTION, "nächste Inspektion"]].concat(auftragsArten().filter(x => x.id !== id).map(x => [x.id, x.name]));
   fensterOeffnen(
     '<h2>' + (id ? "Wartungsart bearbeiten" : "Neue Wartungsart") + '</h2>' +
     '<label for="a-name">Name</label><input type="text" id="a-name" value="' + esc(a.name) + '">' +
+    '<label for="a-typ">Art</label><select id="a-typ" data-change="art-typ"' + (verwendet ? " disabled" : "") + '>' +
+    '<option value="auftrag"' + (a.typ === "auftrag" ? " selected" : "") + '>Auftrag (z. B. Inspektion, Reparatur; mit Termin)</option>' +
+    '<option value="aufgabe"' + (a.typ === "aufgabe" ? " selected" : "") + '>Aufgabe (z. B. Bremsbeläge wechseln; Position in einem Auftrag)</option></select>' +
+    (verwendet ? '<div class="feldhinweis">Die Art lässt sich nicht mehr ändern, weil die Wartungsart ' + verwendet + ' wird.</div>' : "") +
+    '<div id="a-auftrag-feld"' + (a.typ === "auftrag" ? "" : " hidden") + '>' +
     '<label class="haken"><input type="checkbox" id="a-einmalig"' + (a.einmalig ? " checked" : "") + '>' +
-    '<span>Einmalig (z. B. Erstinspektion)<br><span class="klein">Nach der ersten Durchführung erledigt. Nicht mit Zeitfenster möglich.</span></span></label>' +
+    '<span>Einmalig (z. B. Erstinspektion)<br><span class="klein">Nach der ersten Erledigung erledigt. Nicht mit Zeitfenster möglich.</span></span></label>' +
     '<label for="a-von">Jährliches Zeitfenster: Monat von (optional)</label>' + monatsAuswahl("a-von", a.fensterVon) +
     '<label for="a-bis">Monat bis</label>' + monatsAuswahl("a-bis", a.fensterBis) +
     '<div id="a-fenster-feld"' + (a.fensterVon ? "" : " hidden") + '>' +
     '<label for="a-ab">Gültig ab Jahr (optional)</label>' +
     '<input type="text" id="a-ab" inputmode="numeric" placeholder="z. B. 2027" value="' + (a.gueltigAbJahr ?? "") + '">' +
-    '<div class="feldhinweis">Vor diesem Jahr wird keine Fälligkeit angezeigt. Leer = sofort gültig.</div></div>' +
+    '<div class="feldhinweis">Vor diesem Jahr wird keine Fälligkeit angezeigt. Leer = sofort gültig.</div></div></div>' +
     '<label for="a-monate">Intervall in Monaten (optional)</label>' +
     '<input type="text" id="a-monate" inputmode="numeric" value="' + (a.intervallMonate ?? "") + '">' +
-    '<label for="a-km">Intervall in km (optional, z. B. für Kette oder Bremsbeläge)</label>' +
+    '<label for="a-km">Intervall in km (optional)</label>' +
     '<input type="text" id="a-km" inputmode="decimal" value="' + kmFeld(a.intervallKm) + '">' +
-    '<div class="feldhinweis">Fällig ist, was zuerst erreicht wird: Monate oder km. Ohne bisherige Durchführung zählt ab Startdatum und ' +
-    'Start-Kilometerstand. Die Intervalle werden nur ausgewertet, wenn kein Zeitfenster gesetzt ist.</div>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<div class="feldhinweis">Fällig ist, was zuerst erreicht wird: Monate oder km. Ohne bisherige Erledigung zählt ab Startdatum und ' +
+    'Start-Kilometerstand. Mit Zeitfenster gilt das Fenster; die Monate werden dann nicht ausgewertet, die km nur als Hinweis. ' +
+    'Ein Auftrag ohne Intervall und Zeitfenster (z. B. Reparatur) wird bei Bedarf angelegt.</div>' +
+    '<div id="a-aufgabe-feld"' + (a.typ === "aufgabe" ? "" : " hidden") + '>' +
+    '<label for="a-bauteil">Bauteil (optional)</label><input type="text" id="a-bauteil" list="a-bauteile" autocomplete="off" placeholder="z. B. Bremse vorn" value="' + esc(a.bauteil || "") + '">' +
+    '<datalist id="a-bauteile">' + bauteile().map(b => '<option value="' + esc(b) + '">').join("") + '</datalist>' +
+    '<label for="a-zuordnung">Standard-Zuordnung</label><select id="a-zuordnung">' +
+    zuordnungen.map(([v, n]) => '<option value="' + esc(v) + '"' + (a.zuordnung === v ? " selected" : "") + '>' + esc(n) + '</option>').join("") + '</select>' +
+    '<div class="feldhinweis">Die Aufgabe kommt automatisch in diesen Auftrag, wenn sie bis zu seinem Termin bzw. bis zum Ende seines Zeitfensters ' +
+    'fällig wird. „Nächste Inspektion“ = der nächste offene Auftrag mit Intervall, Zeitfenster oder einmalig.</div></div>' +
+    '<div class="knopfreihe"><button type="button" data-action="' + (ausPruefung ? "pruefung-oeffnen" : "fenster-zu") + '">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="art-speichern" data-id="' + esc(id || "") + '">Speichern</button></div>' +
     (id ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="art-loeschen" data-id="' + esc(id) + '">Wartungsart löschen</button></div>' : "")
   );
@@ -4635,12 +5111,19 @@ function artFormular(id) {
 function artFensterGeaendert() {
   document.getElementById("a-fenster-feld").hidden = !(wert("a-von") || wert("a-bis"));
 }
+function artTypGeaendert() {
+  const typ = wert("a-typ");
+  document.getElementById("a-auftrag-feld").hidden = typ !== "auftrag";
+  document.getElementById("a-aufgabe-feld").hidden = typ !== "aufgabe";
+}
 function artSpeichern(id) {
   const name = wert("a-name").trim();
   if (!name) { alert("Bitte einen Namen eingeben."); return; }
-  const von = wert("a-von") ? Number(wert("a-von")) : null;
-  const bis = wert("a-bis") ? Number(wert("a-bis")) : null;
-  const einmalig = document.getElementById("a-einmalig").checked;
+  const typ = wert("a-typ");
+  const aufgabe = typ === "aufgabe";
+  const von = !aufgabe && wert("a-von") ? Number(wert("a-von")) : null;
+  const bis = !aufgabe && wert("a-bis") ? Number(wert("a-bis")) : null;
+  const einmalig = !aufgabe && document.getElementById("a-einmalig").checked;
   if ((von === null) !== (bis === null)) { alert("Für das Zeitfenster bitte beide Monate wählen (oder beide leer lassen)."); return; }
   if (einmalig && von !== null) { alert("Eine einmalige Wartung kann kein jährliches Zeitfenster haben. Bitte das Zeitfenster leeren oder „Einmalig“ abwählen."); return; }
   if (von !== null && von > bis) { alert("Das Zeitfenster darf nicht über den Jahreswechsel gehen: „Monat von“ muss vor oder gleich „Monat bis“ sein."); return; }
@@ -4656,23 +5139,71 @@ function artSpeichern(id) {
   const kText = wert("a-km").trim();
   const km = kText === "" ? null : kmLesen(kText);
   if (kText !== "" && !(km > 0)) { alert("Das Intervall in km muss eine Zahl größer 0 sein (oder leer)."); return; }
-  const satz = { name, intervallMonate: monate, intervallKm: km, fensterVon: von, fensterBis: bis, gueltigAbJahr: ab, einmalig };
-  if (id) {
-    Object.assign(daten.wartungsarten.find(a => a.id === id), satz);
+  const vorher = id ? daten.wartungsarten.find(a => a.id === id) : null;
+  if (vorher && vorher.typ !== typ) {
+    const verwendet = artVerwendung(id);
+    if (verwendet) { alert("Die Art lässt sich nicht ändern, weil die Wartungsart " + verwendet + " wird."); return; }
+    const ziele = daten.wartungsarten.filter(a => a.zuordnung === id);
+    if (ziele.length) {
+      alert("Die Art lässt sich nicht ändern, weil „" + name + "“ Standard-Zuordnung dieser Aufgaben ist: " + ziele.map(a => a.name).join(", ") + ". Bitte dort zuerst eine andere Zuordnung wählen.");
+      return;
+    }
+  }
+  const satz = { name, typ, intervallMonate: monate, intervallKm: km, fensterVon: von, fensterBis: bis, gueltigAbJahr: ab, einmalig,
+    bauteil: aufgabe ? wert("a-bauteil").trim() || null : null, zuordnung: aufgabe ? wert("a-zuordnung") : null };
+  // Ein Auftrag mit Fälligkeit hat höchstens einen geplanten Auftrag
+  if (vorher && hatFaelligkeit(satz) && daten.auftraege.filter(a => a.status === "geplant" && a.wartungsartId === id).length > 1) {
+    alert("Es gibt mehrere geplante Aufträge dieser Art. Ein Intervall, Zeitfenster oder „einmalig“ ist erst möglich, wenn höchstens einer geplant ist.");
+    return;
+  }
+  if (vorher) {
+    Object.assign(vorher, satz);
+    if (!aufgabe) daten.auftraege.forEach(a => { a.ausgeschlossen = a.ausgeschlossen.filter(x => x !== id); });
   } else {
     daten.wartungsarten.push(Object.assign({ id: neueId() }, satz));
   }
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
+  if (!speichern()) return;
+  zeichnen();
+  if (artAusPruefung) pruefungAnsicht(); else fensterSchliessen();
 }
 async function artLoeschen(id) {
-  if (daten.wartungsprotokoll.some(p => p.wartungsartId === id)) {
-    alert("Diese Wartungsart wird im Wartungsprotokoll verwendet und kann deshalb nicht gelöscht werden. Du kannst sie aber umbenennen.");
+  const verwendet = artVerwendung(id);
+  if (verwendet) {
+    alert("Diese Wartungsart wird " + verwendet + " und kann deshalb nicht gelöscht werden. Du kannst sie aber umbenennen.");
     return;
   }
-  if (!await frage("Wartungsart „" + esc(artName(id)) + "“ wirklich löschen? Ein geplanter Termin dafür wird ebenfalls entfernt.", "Löschen", "Abbrechen", true)) return;
+  const ziele = daten.wartungsarten.filter(a => a.zuordnung === id);
+  if (!await frage("Wartungsart „" + esc(artName(id)) + "“ wirklich löschen?" +
+    (ziele.length ? "<br><br>Diese Aufgaben bekommen die Standard-Zuordnung „nächste Inspektion“: " + ziele.map(a => esc(a.name)).join(", ") : ""),
+    "Löschen", "Abbrechen", true)) return;
   daten.wartungsarten = daten.wartungsarten.filter(a => a.id !== id);
-  daten.termine = daten.termine.filter(t => t.wartungsartId !== id);
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
+  ziele.forEach(a => { a.zuordnung = NAECHSTE_INSPEKTION; });
+  daten.auftraege.forEach(a => { a.ausgeschlossen = a.ausgeschlossen.filter(x => x !== id); });
+  if (speichern()) { zeichnen(); if (artAusPruefung) pruefungAnsicht(); else fensterSchliessen(); }
+}
+
+// ---------- Prüfbildschirm nach der Umwandlung auf Version 8 ----------
+function pruefungAnsicht() {
+  artAusPruefung = false;
+  const zeile = a => '<div class="zeile"><button type="button" class="inhalt" data-action="pruefung-art" data-id="' + esc(a.id) + '">' +
+    '<div class="text"><div><strong>' + esc(a.name) + '</strong> · ' + (a.typ === "auftrag" ? "Auftrag" : "Aufgabe") + '</div>' +
+    '<div class="klein umbrechen">' + esc(artRegelText(a)) + '</div></div>' +
+    '<span class="klein" style="padding-right:16px">›</span></button></div>';
+  fensterOeffnen(
+    '<h2>Bitte Wartungsarten prüfen</h2>' +
+    '<p>Mit dem Update sind Inspektionen und Reparaturen <strong>Aufträge</strong> mit Termin, die übrigen Wartungsarten <strong>Aufgaben</strong>, ' +
+    'die als Positionen in einem Auftrag erledigt werden. Eingeteilt hat die App nach Zeitfenster, „einmalig“ und Namen. ' +
+    'Bitte prüfe Art, Intervall, Bauteil und Standard-Zuordnung; Antippen öffnet das Formular.</p>' +
+    '<div class="liste">' + daten.wartungsarten.map(zeile).join("") + '</div>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Später</button>' +
+    '<button type="button" class="primaer" data-action="pruefung-fertig">Alles geprüft</button></div>'
+  );
+}
+function pruefungFertig() {
+  pruefungVormerken(false);
+  fensterSchliessen();
+  zeichnen();
+  meldung("Wartungsarten geprüft");
 }
 
 /* ---------- Statistik ---------- */
@@ -5123,7 +5654,7 @@ function gleicherInhalt(a, b) { return JSON.stringify(kanonisch(a)) === JSON.str
 // Je Liste: fehlen = nur im aktuellen Stand (neuer als die Sicherung),
 // nurSicherung = nur in der Sicherung, geaendert = in beiden, aber verschieden.
 // Einträge werden über das Datum zugeordnet, alles andere über die Kennung.
-// Berechnete Kilometerstände im Protokoll zählen nicht als Unterschied.
+// Berechnete Kilometerstände erledigter Aufträge zählen nicht als Unterschied.
 function datenVergleichen(sicherung, aktuell) {
   const liste = (alt, neu, schluessel, inhalt = x => x) => {
     const a = new Map(alt.map(x => [schluessel(x), x])), n = new Map(neu.map(x => [schluessel(x), x]));
@@ -5135,7 +5666,7 @@ function datenVergleichen(sicherung, aktuell) {
   };
   const nachId = x => x.id;
   const ohneId = ({ id, ...rest }) => rest;
-  const ohneBerechnetenKm = p => Object.assign({}, p, { kmStand: p.kmManuell ? p.kmStand : null });
+  const ohneBerechnetenKm = a => Object.assign({}, a, { kmStand: a.kmManuell ? a.kmStand : null });
   const gemeinsameReihenfolge = (x, y) => x.map(nachId).filter(id => y.some(v => v.id === id));
   const vorlagen = liste(sicherung.vorlagen, aktuell.vorlagen, nachId);
   vorlagen.reihenfolge = !gleicherInhalt(gemeinsameReihenfolge(sicherung.vorlagen, aktuell.vorlagen), gemeinsameReihenfolge(aktuell.vorlagen, sicherung.vorlagen));
@@ -5143,8 +5674,7 @@ function datenVergleichen(sicherung, aktuell) {
     eintraege: liste(sicherung.eintraege, aktuell.eintraege, e => e.datum, ohneId),
     vorlagen,
     wartungsarten: liste(sicherung.wartungsarten, aktuell.wartungsarten, nachId),
-    wartungsprotokoll: liste(sicherung.wartungsprotokoll, aktuell.wartungsprotokoll, nachId, ohneBerechnetenKm),
-    termine: liste(sicherung.termine, aktuell.termine, t => t.wartungsartId),
+    auftraege: liste(sicherung.auftraege, aktuell.auftraege, nachId, ohneBerechnetenKm),
     maengel: liste(sicherung.maengel, aktuell.maengel, nachId),
     fahrrad: !gleicherInhalt(sicherung.fahrrad, aktuell.fahrrad),
     einstellungen: !gleicherInhalt(sicherung.einstellungen, aktuell.einstellungen)
@@ -5175,11 +5705,10 @@ function datumsBereiche(liste, h, max = 4) {
 
 const VERGLEICH_BEZEICHNUNG = {
   eintraege: ["Eintrag", "Einträge"],
-  wartungsprotokoll: ["Wartung", "Wartungen"],
+  auftraege: ["Auftrag", "Aufträge"],
   maengel: ["Mangel", "Mängel"],
   vorlagen: ["Vorlage", "Vorlagen"],
-  wartungsarten: ["Wartungsart", "Wartungsarten"],
-  termine: ["geplanter Termin", "geplante Termine"]
+  wartungsarten: ["Wartungsart", "Wartungsarten"]
 };
 // Unterschiede als Text: "fehlen" (nur Neues seit der Sicherung) und "sonst"
 function unterschiedTexte(v, h) {
@@ -5214,6 +5743,8 @@ function sicherungAuswerten(text, aktuell, h = heute()) {
   }
   const ki = roh.kurzinfo && typeof roh.kurzinfo === "object" && !Array.isArray(roh.kurzinfo) ? roh.kurzinfo : null;
   const soll = kurzinfoFuer(gelesen, null);
+  // Bis Version 7 zählte "wartungen" die Einträge im Wartungsprotokoll
+  if (roh.version < 8) soll.wartungen = Array.isArray(roh.wartungsprotokoll) ? roh.wartungsprotokoll.length : 0;
   const kurzinfoPasst = roh.kurzinfo === undefined ? null
     : !!ki && ["eintraege", "kmSumme", "kmStand", "wartungen", "maengel"].every(k => ki[k] === soll[k]);
   const erg = { gelesen, kurzinfo: ki, kurzinfoPasst, inhalt: soll, details: [], identischStreng: gleicherInhalt(gelesen, aktuell) };
@@ -5438,15 +5969,33 @@ const AKTIONEN = {
   "eintrag-speichern": () => eintragSpeichern(),
   "eintrag-loeschen": el => eintragLoeschen(el.dataset.id),
 
-  "termin": el => terminFormular(el.dataset.id),
-  "termin-speichern": el => terminSpeichern(el.dataset.id),
-  "termin-loeschen": el => terminLoeschen(el.dataset.id),
-  "wartung-erledigt": el => wartungErledigt(el.dataset.id),
-  "protokoll-ansehen": el => protokollAnsicht(el.dataset.id),
-  "protokoll-aendern": el => protokollFormular(daten.wartungsprotokoll.find(p => p.id === el.dataset.id), false),
-  "protokoll-speichern": () => protokollSpeichern(),
-  "protokoll-loeschen": el => protokollLoeschen(el.dataset.id),
+  "auftrag-ansehen": el => auftragAnsicht(el.dataset.key),
+  "auftrag-termin": el => auftragTerminFormular(el.dataset.key),
+  "auftrag-termin-speichern": el => auftragTerminSpeichern(el.dataset.key),
+  "auftrag-termin-entfernen": el => auftragTerminEntfernen(el.dataset.key),
+  "auftrag-neu": el => auftragTerminFormular("anlegen:" + el.dataset.id),
+  "auftrag-loeschen": el => auftragLoeschen(el.dataset.key),
+  "auftrag-erledigen": el => auftragErledigen(el.dataset.key),
+  "vorschlag-annehmen": el => auftragGeaendert(aufgabeZuAuftrag(el.dataset.key, el.dataset.id), artName(el.dataset.id) + " aufgenommen"),
+  "position-entfernen": el => auftragGeaendert(positionEntfernen(el.dataset.key, el.dataset.pos), "Position entfernt"),
+  "position-verschieben": el => positionVerschiebenWahl(el.dataset.key, el.dataset.pos),
+  "position-verschieben-ziel": el => positionVerschieben(el.dataset.key, el.dataset.pos, el.dataset.ziel),
+  "position-aufgabe-dazu": el => auftragGeaendert(aufgabeZuAuftrag(el.dataset.key, wert("ap-aufgabe")), "Aufgabe hinzugefügt"),
+  "position-mangel-dazu": el => auftragGeaendert(mangelZuAuftrag(el.dataset.key, wert("ap-mangel")), "Mangel hinzugefügt"),
+  "abschluss-speichern": () => abschlussSpeichern(),
+  "erledigt-aendern": el => erledigterAuftragAendern(el.dataset.id),
+  "erledigt-loeschen": el => erledigtLoeschen(el.dataset.id),
   "protokoll-km-neu": () => protokollKmNeu(),
+  "aufgabe-ansehen": el => aufgabeAnsicht(el.dataset.id),
+  "aufgabe-erledigen": el => aufgabeErledigen(el.dataset.id),
+  "aufgabe-zuordnen": el => aufgabeZuordnenWahl(el.dataset.id),
+  "aufgabe-zuordnen-ziel": el => { const a = aufgabeZuAuftrag(el.dataset.ziel, el.dataset.id); if (a && speichern()) { fensterSchliessen(); zeichnen(); meldung(artName(el.dataset.id) + " zugeordnet"); } },
+  "mangel-zuordnen": el => mangelZuordnenWahl(el.dataset.id),
+  "mangel-zuordnen-ziel": el => { const a = mangelZuAuftrag(el.dataset.ziel, el.dataset.id); if (a && speichern()) { fensterSchliessen(); zeichnen(); meldung("Mangel zugeordnet"); } },
+  "mangel-auftrag-neu": el => mangelAuftragNeu(el.dataset.id, el.dataset.art),
+  "pruefung-oeffnen": () => pruefungAnsicht(),
+  "pruefung-art": el => artFormular(el.dataset.id, true),
+  "pruefung-fertig": () => pruefungFertig(),
   "mangel-neu": () => mangelFormular(null),
   "mangel-ansehen": el => mangelAnsicht(el.dataset.id),
   "mangel-aendern": el => mangelFormular(el.dataset.id),
@@ -5523,6 +6072,7 @@ const AENDERUNGEN = {
   "protokoll-datum": () => protokollDatumGeaendert(),
   "mangel-status": () => mangelStatusGeaendert(),
   "art-fenster": () => artFensterGeaendert(),
+  "art-typ": () => artTypGeaendert(),
   "fahrtag": () => fahrtageGeaendert(),
   "hinweis-heute-an": el => hinweisHeuteAnGeaendert(el.checked),
   "hinweis-heute-ab": el => hinweisHeuteAbGeaendert(el.value),
