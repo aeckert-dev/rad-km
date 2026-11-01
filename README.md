@@ -257,7 +257,8 @@ bleibt bei zwei Klicks (Vorlage antippen, Speichern).
 
 Nach dem Löschen eines Eintrags, eines Auftrags, eines
 Mangels oder einer Vorlage, nach „Keine Fahrt“, einer Rückmeldung zur Kleidung,
-„Wetter nachtragen …“, dem Entfernen einer Kleidungsstufe oder eines
+„Wetter nachtragen …“, dem Speichern eines geänderten erledigten Auftrags
+(„Auftrag bearbeiten“), dem Entfernen einer Kleidungsstufe oder eines
 Regenzusatzes und „Auf Standard zurücksetzen“ (Kleidung, Ampel-Grenzen)
 erscheint unten 12 Sekunden lang eine Meldung mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
 Verknüpfungen (z. B. die Mängel eines gelöschten Auftrags). Jede
@@ -671,8 +672,10 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
   - Datum (der Termin, wenn er heute oder früher liegt, sonst heute),
     Werkstatt, Kilometerstand (aus den Einträgen berechnet, überschreibbar; mit
     „Berechneten Wert verwenden“ zurück) und Notiz.
-  - Je Position „erledigt“ (abgehakt) oder „nicht gemacht“. Dazu lassen sich
-    weitere offene Mängel abhaken, die dabei erledigt wurden.
+  - Je Position „erledigt“ (abgehakt) oder „nicht gemacht“. Mit **„+ Aufgabe“**
+    kommt eine weitere Aufgabe dazu (als „erledigt“ abgehakt), mit **×** fällt
+    eine Position weg. Dazu lassen sich weitere offene Mängel abhaken, die
+    dabei erledigt wurden.
   - Gespeichert wird **genau der angezeigte Stand der Positionen**, auch die
     nur nach Standard berechneten. Spätere Änderungen an Intervallen oder
     Zuordnungen verändern erledigte Aufträge nicht.
@@ -680,12 +683,36 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
     Auftrags), erledigte Mängel werden geschlossen (mit dem Datum des Auftrags).
     Nicht gemachte Aufgaben tauchen wieder als Position bzw. Vorschlag auf,
     nicht gemachte Mängel bleiben offen und stehen wieder oben ohne Auftrag.
-  - **Selbst erledigt** (z. B. Reifen in der Garage gewechselt): „Erledigt
-    eintragen“ in der Ansicht einer Aufgabe legt eine erledigte
-    **Eigenleistung** mit dieser Position an.
-  - Ein erledigter Auftrag lässt sich ansehen, ändern (auch „erledigt“/„nicht
-    gemacht“ je Position) und löschen (mit Rückfrage und „Rückgängig“; Mängel,
-    die mit ihm erledigt wurden, sind dann wieder offen).
+  - Eine erledigte Aufgabe verschwindet aus einem geplanten Auftrag nur, wenn
+    dieser Auftrag ihre neueste Erledigung ist.
+  - **„Erledigt eintragen“ in der Ansicht einer Aufgabe** fragt, wohin sie
+    gehört:
+    - **Neuer Auftrag** (z. B. Reifen in der Garage gewechselt): Auftragsart
+      wählen – Eigenleistung ist vorgewählt, ebenso möglich sind Reparatur und
+      andere Auftragsarten ohne Intervall. Danach das Formular „Erledigt“ mit
+      dieser Position.
+    - **Zu erledigtem Auftrag …**: Liste der erledigten Aufträge (neueste
+      zuerst, mit Datum, Art und km). Es öffnet sich „Auftrag bearbeiten“ mit
+      der Aufgabe als erledigter Position; gespeichert wird erst mit
+      „Speichern“. Aufträge, in denen die Aufgabe schon erledigt ist, sind
+      ausgegraut; steht sie dort als „nicht gemacht“, wird sie „erledigt“.
+  - Ein erledigter Auftrag lässt sich ansehen, ändern und löschen (mit
+    Rückfrage und „Rückgängig“; Mängel, die mit ihm erledigt wurden, sind dann
+    wieder offen).
+  - **Auftrag bearbeiten** (erledigter Auftrag, z. B. wenn die durchgeführten
+    Arbeiten bisher nur in der Notiz stehen):
+    - Je Position „erledigt“ oder „nicht gemacht“ und **×** zum Entfernen.
+    - **„+ Aufgabe“**: alle Aufgaben, die noch nicht in diesem Auftrag stehen;
+      die neue Position ist „erledigt“ (Haken weg = „nicht gemacht“). Eine
+      Aufgabe steht höchstens einmal im Auftrag.
+    - **„+ Mangel“**: offene Mängel ohne Auftrag, die bis zum Datum des
+      Auftrags erfasst wurden. Beim Speichern wird der Mangel mit dem Datum
+      des Auftrags geschlossen. Wird eine Mangel-Position entfernt oder
+      abgewählt, ist der Mangel wieder offen (wie beim Löschen des Auftrags).
+    - Nach dem Speichern gilt die Fälligkeit der betroffenen Aufgaben ab Datum
+      und Kilometerstand dieses Auftrags (bzw. wieder ohne ihn), sofern es keine
+      spätere Erledigung gibt. Die Meldung „Auftrag gespeichert“ hat
+      **„Rückgängig“**; „Abbrechen“ verwirft alle Änderungen im Formular.
 - **Reihenfolge im Reiter Wartung:**
   1. „Bitte Wartungsarten prüfen“ (nur nach der Umwandlung, siehe unten).
   2. Offene Mängel ohne Auftrag (nur wenn vorhanden).
@@ -1128,7 +1155,7 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 ```json
 {
   "version": 8,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5a", "eintraege": 4,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5a.1", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1425,7 +1452,18 @@ damit nichts verloren geht.
   von Hand erledigen bzw. öffnen, das Formular der Wartungsarten (Art, Bauteil
   mit Auswahlliste, Zuordnung, Wechsel nur unbenutzt, Löschen) und den Wind je
   Teilstrecke zweizeilig (W15: Name klein, darunter eingerückt der Wind in
-  normaler Schrift).
+  normaler Schrift),
+- Release 5a.1 (Positionen in erledigten Aufträgen, W16): Aufgabe zu einem
+  erledigten Auftrag hinzufügen (Fälligkeit ab dessen Datum und km; abgewählt
+  = „nicht gemacht“; zu einem älteren Auftrag ohne Wirkung auf die
+  Fälligkeit), Position entfernen (Fälligkeit wie vorher), „Abbrechen“, Mangel
+  hinzufügen (geschlossen mit dem Auftragsdatum, Auswahl nach Datum) und
+  entfernen (wieder offen), „Rückgängig“, geplante Position nur bei neuester
+  Erledigung entfernt, „+ Aufgabe“ und × beim Abschluss eines geplanten
+  Auftrags, „Erledigt eintragen“ an einer Aufgabe (neue Eigenleistung, neue
+  Reparatur, zu erledigtem Auftrag, schon erledigt ausgegraut, „nicht
+  gemacht“ wird „erledigt“, nicht doppelt), Export/Import und „Sicherung
+  prüfen“ unverändert.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.

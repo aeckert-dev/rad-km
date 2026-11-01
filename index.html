@@ -4798,7 +4798,7 @@ function aufgabeErledigen(aufgabeId) {
           '<option value="' + esc(a.id) + '"' + (a === vorgabe ? " selected" : "") + '>' + esc(a.name) + '</option>').join("") + '</select>' +
         '<button type="button" class="primaer" data-action="aufgabe-erledigen-neu" data-id="' + esc(aufgabeId) + '">Weiter</button></div>'
       : '<p class="klein">Bitte zuerst eine Wartungsart „Eigenleistung“ (Auftrag ohne Intervall) anlegen.</p>') +
-    '<h3>Zu erledigtem Auftrag …</h3>' +
+    '<h3 style="margin-top:20px">Zu erledigtem Auftrag …</h3>' +
     (erledigte.length ? '<div class="liste">' + erledigte.map(zeile).join("") + '</div>' : '<p class="klein">Noch keine erledigten Aufträge.</p>') +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button></div>'
   );
