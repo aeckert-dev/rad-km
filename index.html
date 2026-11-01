@@ -417,7 +417,7 @@ const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzt
 // Zuletzt geladene Wetterdaten (Zwischenspeicher, kein Teil der Daten und der Sicherung)
 const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "4e";
+const APP_VERSION = "5a";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
 const DATEN_VERSION = 8;
@@ -835,9 +835,10 @@ function hatFaelligkeit(a) {
 //     „Reparatur“ oder „Eigenleistung“ (Aufträge ohne Fälligkeit), kommen sie dazu.
 //   - Protokoll eines Auftrags → erledigter Auftrag (id des Protokolleintrags).
 //   - Protokoll einer Aufgabe → erledigte Position im erledigten Auftrag vom
-//     selben Datum, sonst in einer erledigten Reparatur dieses Datums. Weichen
-//     Werkstatt oder ein von Hand eingetragener km-Stand ab, stehen sie in der
-//     Notiz der Position.
+//     selben Datum, sonst in einer erledigten Reparatur dieses Datums. Damit die
+//     Fälligkeit gleich bleibt, nur bei gleichem Kilometerstand (beide berechnet
+//     oder beide gleich von Hand eingetragen); sonst eine eigene Reparatur. Eine
+//     abweichende Werkstatt steht in der Notiz der Position.
 //   - Mängel mit protokollId → erledigte Position im daraus entstandenen Auftrag.
 //   - Termin eines Auftrags → geplanter Auftrag. Termin einer Aufgabe → Position
 //     im geplanten Inspektions-Auftrag mit demselben Termin, sonst in einem neuen
@@ -921,19 +922,17 @@ function wartungAusVersion7(alt) {
     ausAuftraegen.push(a);
     maengelDazu(a, p.id);
   });
-  const reparaturAm = new Map(); // Datum → erledigte Reparatur aus Aufgaben
+  const reparaturen = []; // erledigte Reparaturen aus Aufgaben
+  const gleicherKm = (a, p) => a.datum === p.datum && a.kmManuell === p.kmManuell && (!p.kmManuell || a.kmStand === p.kmStand);
   eintraege.filter(p => p.art.typ === "aufgabe").forEach(p => {
-    let ziel = ausAuftraegen.find(a => a.datum === p.datum) || reparaturAm.get(p.datum) || null;
+    let ziel = ausAuftraegen.find(a => gleicherKm(a, p)) || reparaturen.find(a => gleicherKm(a, p)) || null;
     const zusatz = [];
     if (!ziel) {
       ziel = neuerAuftrag(p.id, reparatur, { werkstatt: p.werkstatt, datum: p.datum, kmStand: p.kmStand, kmManuell: p.kmManuell, notiz: "" });
-      reparaturAm.set(p.datum, ziel);
+      reparaturen.push(ziel);
     } else {
       const w = typeof p.werkstatt === "string" ? p.werkstatt.trim() : "";
       if (w && w !== (typeof ziel.werkstatt === "string" ? ziel.werkstatt.trim() : "")) zusatz.push("Werkstatt: " + w);
-      if (p.kmManuell === true && p.kmStand !== null && !(ziel.kmManuell === true && ziel.kmStand === p.kmStand)) {
-        zusatz.push("Kilometerstand: " + (typeof p.kmStand === "number" ? kmText(p.kmStand) + " km" : String(p.kmStand)));
-      }
     }
     const notiz = typeof p.notiz === "string" ? p.notiz : "";
     ziel.positionen.push({ id: "pos-" + p.id, art: "aufgabe", wartungsartId: p.art.id, status: "erledigt",
