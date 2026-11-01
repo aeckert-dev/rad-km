@@ -1,0 +1,379 @@
+/* Rad-km · Aussehen (Farben als Variablen in :root, Dunkelmodus tauscht nur diese) */
+/* =====================================================================
+   AUSSEHEN (CSS)
+   Farben stehen als Variablen oben. Für den Dunkelmodus werden nur die
+   Variablen ausgetauscht – das Betriebssystem entscheidet, welcher gilt.
+   ===================================================================== */
+:root {
+  --bg: #f2f2f7;
+  --karte: #ffffff;
+  --text: #1c1c1e;
+  --text2: #6e6e73;
+  --linie: #d8d8dd;
+  --akzent: #16805c;
+  --akzent-text: #ffffff;
+  --akzent-hell: #e3f3ec;
+  --rot: #c62828;
+  --rot-hell: #fdecea;
+  --orange: #b25e00;
+  --orange-hell: #fff3e0;
+  --feld: #ffffff;
+  --schatten: 0 1px 3px rgba(0,0,0,.08);
+  /* Diagramm: laufendes Jahr hervorgehoben, Vorjahr zurückgenommen (geprüft auf Farbsehschwächen) */
+  --diagramm-jahr: #16805c;
+  --diagramm-vorjahr: #8e8e93;
+  /* Aktiver Reiter: dunkleres Grün, Kontrast mind. 4,5:1 auf Weiß */
+  --reiter-aktiv: #0f6b4c;
+  /* Ampel der Fahrten (immer mit Farbwort daneben) und Stufen der amtlichen Warnungen */
+  --ampel-gruen: #1e9e6a;
+  --ampel-gelb: #e5b000;
+  --ampel-rot: #d32f2f;
+  --warnstufe-1: #e5c100;
+  --warnstufe-2: #f08c00;
+  --warnstufe-3: #d32f2f;
+  --warnstufe-4: #8e24aa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --karte: #1c1c1e;
+    --text: #f2f2f7;
+    --text2: #a1a1a6;
+    --linie: #3a3a3c;
+    --akzent: #34c38f;
+    --akzent-text: #04261a;
+    --akzent-hell: #12352a;
+    --rot: #ff6b6b;
+    --rot-hell: #3b1414;
+    --orange: #ffb547;
+    --orange-hell: #3a2a0f;
+    --feld: #2c2c2e;
+    --schatten: none;
+    --diagramm-jahr: #34c38f;
+    --diagramm-vorjahr: #6e6e73;
+    --reiter-aktiv: #34c38f;
+    --ampel-gruen: #34c38f;
+    --ampel-gelb: #ffd60a;
+    --ampel-rot: #ff5c5c;
+    --warnstufe-1: #ffd60a;
+    --warnstufe-2: #ff9f0a;
+    --warnstufe-3: #ff5c5c;
+    --warnstufe-4: #c77dff;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+header {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg);
+  padding: calc(env(safe-area-inset-top) + 10px) 16px 8px;
+}
+header h1 { margin: 0; font-size: 28px; }
+
+main {
+  padding: 0 16px calc(env(safe-area-inset-bottom) + 96px);
+  max-width: 640px; margin: 0 auto;
+}
+
+h2 { font-size: 20px; margin: 24px 0 8px; }
+h3 { font-size: 17px; margin: 0 0 4px; }
+
+.karte {
+  background: var(--karte);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--schatten);
+}
+.klein { font-size: 15px; color: var(--text2); }
+.zentriert { text-align: center; }
+
+/* Große Kilometerstand-Anzeige */
+.stand-zahl { font-size: 40px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* Hinweise / Warnungen */
+.hinweis { border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.hinweis.warn { background: var(--orange-hell); color: var(--orange); }
+.hinweis.fehler { background: var(--rot-hell); color: var(--rot); }
+.hinweis.info { background: var(--akzent-hell); color: var(--text); }
+.hinweis button { margin-top: 10px; }
+.hinweis button:not(.primaer) { background: var(--karte); }
+
+.status-rot { color: var(--rot); font-weight: 600; }
+.status-orange { color: var(--orange); font-weight: 600; }
+.status-gruen { color: var(--akzent); font-weight: 600; }
+
+/* Schaltflächen */
+button, .knopf {
+  font: inherit;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--akzent-hell);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button.primaer { background: var(--akzent); color: var(--akzent-text); }
+button.gefahr { background: var(--rot-hell); color: var(--rot); }
+button.leise { background: transparent; color: var(--akzent); }
+button.voll { width: 100%; }
+button:active { opacity: .7; }
+button:disabled { opacity: .4; }
+.knopfreihe { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.knopfreihe > button, .knopfreihe > .knopf { flex: 1 1 auto; }
+/* Link, der wie eine Schaltfläche aussieht ("In Karten zeigen") */
+a.knopf { display: flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; text-align: center; }
+a.knopf.voll { width: 100%; }
+a.knopf:active { opacity: .7; }
+a.knopf[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+
+/* Vorlagen-Schnellerfassung */
+.schnell { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.schnell button { min-height: 72px; text-align: left; display: flex; flex-direction: column; justify-content: center; }
+.schnell .km { font-weight: 400; font-size: 15px; opacity: .85; }
+
+/* Summen-Kacheln */
+.summen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.summe { background: var(--karte); border-radius: 12px; padding: 10px 6px; text-align: center; box-shadow: var(--schatten); }
+.summe .wert { font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.summe .titel { font-size: 13px; color: var(--text2); }
+
+/* Listen */
+.liste { background: var(--karte); border-radius: 14px; overflow: hidden; box-shadow: var(--schatten); }
+.zeile { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--linie); }
+.zeile:last-child { border-bottom: none; }
+.zeile .inhalt {
+  flex: 1; min-width: 0;
+  background: none; border-radius: 0; text-align: left; font-weight: 400;
+  padding: 10px 0 10px 16px; display: flex; gap: 10px; align-items: center;
+}
+.zeile .inhalt .text { flex: 1; min-width: 0; }
+.zeile .inhalt .text > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zeile .inhalt .text > div.umbrechen { white-space: normal; }
+.zeile .zahl { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.zeile .symbol { background: none; min-width: 48px; padding: 0; color: var(--text2); font-size: 20px; }
+.zeile .pfeile { display: flex; }
+.leer { padding: 16px; color: var(--text2); text-align: center; }
+
+.zeile.gruppe .inhalt .titel { font-weight: 600; }
+/* Aufklapp-Pfeil: › zu, ⌄ (gedreht) offen; in der Textfarbe für guten Kontrast */
+.chevron {
+  width: 22px; height: 22px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2.75; stroke-linecap: round; stroke-linejoin: round;
+  color: var(--text); transition: transform .15s ease;
+}
+[aria-expanded="true"] > .chevron { transform: rotate(90deg); }
+
+/* Fortschritt zum Jahresziel; der Strich markiert das zeitanteilige Soll */
+.balken { position: relative; height: 12px; border-radius: 99px; background: var(--linie); margin: 8px 0; overflow: hidden; }
+.balken-ist { height: 100%; border-radius: 99px; background: var(--akzent); }
+.balken-soll { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: var(--text); }
+
+/* Einträge mit 0 km ("keine Fahrt") dezent */
+.zeile.keine-fahrt .inhalt { color: var(--text2); }
+.zeile.keine-fahrt .zahl { font-weight: 400; }
+
+/* Fahrtage ohne Eintrag (Startseite) */
+.luecke { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.luecke span { flex: 1; font-weight: 600; }
+.hinweis .luecke button { margin-top: 0; min-height: 44px; padding: 8px 12px; }
+
+/* Auswahl der Fahrtage (Einstellungen) */
+.fahrtage { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text); font-size: 15px; }
+.fahrtag input { width: 26px; height: 26px; min-height: 26px; margin: 0; -webkit-appearance: checkbox; appearance: auto; }
+
+/* Statistik: Diagramm, Legende, Tabellen */
+.legende { display: flex; gap: 16px; font-size: 15px; color: var(--text2); margin-bottom: 6px; }
+.legende span { display: inline-flex; align-items: center; gap: 6px; }
+.farbe { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.farbe.jahr, .diagramm .jahr { background: var(--diagramm-jahr); fill: var(--diagramm-jahr); }
+.farbe.vorjahr, .diagramm .vorjahr { background: var(--diagramm-vorjahr); fill: var(--diagramm-vorjahr); }
+.diagramm { display: block; width: 100%; height: auto; }
+.diagramm .gitter { stroke: var(--linie); stroke-width: 1; }
+.diagramm text { fill: var(--text2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.diagramm .gewaehlt { fill: var(--akzent-hell); }
+.diagramm .treffer { fill: transparent; cursor: pointer; }
+.monatswert { min-height: 44px; margin-top: 6px; }
+.tabelle { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+.tabelle th { font-weight: 600; color: var(--text2); font-size: 13px; text-align: right; padding: 4px 3px; vertical-align: bottom; }
+.tabelle td { text-align: right; padding: 7px 3px; border-top: 1px solid var(--linie); }
+.tabelle th:first-child, .tabelle td:first-child { text-align: left; }
+.tabelle tr.summe-zeile td { font-weight: 700; }
+.aufklappen { background: none; border-radius: 0; width: 100%; padding: 10px 0 0; display: flex; gap: 8px; align-items: center; font-weight: 600; }
+
+/* Wetter: Ampel, Kachel, Zeitleiste der Abfahrt, Warnungen */
+.ampel { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 5px; flex: none; }
+.ampel.gruen, .slot.gruen { background: var(--ampel-gruen); }
+.ampel.gelb, .slot.gelb { background: var(--ampel-gelb); }
+.ampel.rot, .slot.rot { background: var(--ampel-rot); }
+.ampelzeile { margin: 4px 0 2px; }
+/* Wind je Teilstrecke unter der Zeile 🧭, eingerückt: Name klein, darunter weiter eingerückt der Wind */
+.wind-teile { padding-left: 1.6em; }
+.wind-teil { margin-top: 2px; }
+.wind-teil .wind-text { padding-left: 1em; }
+/* Nicht aktuelle oder vergangene Daten zurückgenommen */
+.veraltet .ampel, .veraltet .slot { opacity: .45; }
+.veraltet > :not(h3) { color: var(--text2); }
+.wetter-kachel { display: block; width: 100%; text-align: left; font-weight: 400; color: var(--text); }
+.wetter-kachel:not(.primaer) { background: var(--karte); }
+.kachel-ampeln { display: flex; gap: 18px; margin: 4px 0 2px; font-weight: 600; }
+.zeitleiste { display: flex; gap: 2px; margin-top: 10px; }
+.zeitleiste .slot { flex: 1; height: 16px; border-radius: 3px; }
+.slot.leer { background: var(--linie); }
+.slot.beste { box-shadow: inset 0 0 0 2px var(--text); }
+.zeitachse { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.warnung { border-left: 4px solid var(--warnstufe-1); padding: 4px 0 4px 10px; margin: 10px 0; }
+.warnung.stufe-2 { border-color: var(--warnstufe-2); }
+.warnung.stufe-3 { border-color: var(--warnstufe-3); }
+.warnung.stufe-4 { border-color: var(--warnstufe-4); }
+/* Rückmeldung zur Kleidung, gespeichertes Wetter im Eintrag, Regeln in den Einstellungen, Ampelverteilung */
+.rueckmeldung { display: flex; gap: 6px; margin: 6px 0 4px; }
+.rueckmeldung button { flex: 1; min-height: 44px; padding: 6px 4px; }
+.eintrag-wetter { border-top: 1px solid var(--linie); padding: 8px 0; }
+/* Kleidung je Körperbereich im Reiter Wetter */
+.bereiche { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; }
+.bereiche dt { color: var(--text2); font-size: 15px; }
+.bereiche dd { margin: 0; }
+/* Umschalter "Wohnort / Aktueller Standort" (Wetter außerhalb der Fahrten) */
+.umschalter { display: flex; margin-top: 10px; border: 1px solid var(--linie); border-radius: 12px; overflow: hidden; }
+.umschalter button { flex: 1 1 0; min-height: 44px; border-radius: 0; background: transparent; color: var(--text); font-weight: 500; font-size: 15px; padding: 8px 6px; }
+.umschalter button + button { border-left: 1px solid var(--linie); }
+.umschalter button.aktiv { background: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+/* Umschalter oben in den Reitern Wartung und Fahrten */
+.reiter-umschalter { margin: 8px 0 4px; background: var(--karte); }
+/* Wege zu anderen Stellen („Alle Einträge ›“, „‹ Einstellungen“) */
+button.weg { display: block; padding: 8px 0; min-height: 44px; text-align: left; font-weight: 500; }
+button.zurueck { padding: 8px 0; min-height: 44px; margin-top: 4px; font-weight: 500; }
+/* Kilometerstand auf der Übersicht: ganze Karte führt zur Wartung */
+.stand-kachel { display: block; width: 100%; text-align: left; font-weight: 400; color: var(--text); }
+.stand-kachel:not(.primaer) { background: var(--karte); }
+/* Datensicherung auf der Übersicht: eine Zeile */
+.sicherungszeile { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sicherungszeile button { flex: 0 0 auto; }
+input.kurzfeld { max-width: 140px; }
+.verteilung-zeile { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.verteilung-titel { width: 52px; font-size: 15px; }
+.verteilung { flex: 1 1 120px; display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; }
+.verteilung .gruen { background: var(--ampel-gruen); }
+.verteilung .gelb { background: var(--ampel-gelb); }
+.verteilung .rot { background: var(--ampel-rot); }
+.suchzeile { display: flex; gap: 8px; }
+.suchzeile input { flex: 1; min-width: 0; }
+.suchzeile button { flex: none; }
+
+/* Detailansicht (nur lesen) */
+.details { margin: 0; }
+.details dt { font-size: 15px; color: var(--text2); margin-top: 12px; }
+.details dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.umbrueche { white-space: pre-wrap; }
+
+/* Werkstatt: Positionen und Vorschläge eines Auftrags, Mängel mit Knöpfen */
+.positionen { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--linie); }
+.position { margin: 6px 0; overflow-wrap: anywhere; }
+.position-zeile { border-bottom: 1px solid var(--linie); padding: 4px 0 10px; }
+.position-zeile .knopfreihe { margin-top: 4px; }
+.position-zeile .knopfreihe button, .zeile.mit-knoepfen .knopfreihe button { min-height: 40px; padding: 6px 10px; font-size: 15px; }
+.vorschlag { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--akzent-hell); overflow-wrap: anywhere; }
+.vorschlag button { display: block; margin-top: 8px; min-height: 40px; padding: 6px 12px; background: var(--karte); }
+.zeile.mit-knoepfen { flex-direction: column; align-items: stretch; gap: 0; }
+.zeile.mit-knoepfen .knopfreihe { margin: 0 12px 10px; }
+/* Mängel und Positionen zum Abhaken im Formular „Erledigt eintragen“ */
+.haken { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; color: var(--text); font-size: 17px; }
+.haken-zeile { display: flex; gap: 4px; align-items: flex-start; }
+.haken-zeile .haken { flex: 1; min-width: 0; }
+.haken-zeile .entfernen { flex: none; min-height: 40px; min-width: 40px; padding: 0; font-size: 22px; line-height: 1; }
+.suchzeile select { flex: 1; min-width: 0; }
+.haken input { width: 24px; min-height: 24px; height: 24px; margin: 0; flex: none; -webkit-appearance: checkbox; appearance: auto; }
+
+.abzeichen {
+  display: inline-block; font-size: 12px; font-weight: 700;
+  padding: 2px 8px; border-radius: 99px;
+  background: var(--orange-hell); color: var(--orange);
+  vertical-align: middle; margin-left: 4px;
+}
+
+/* Formulare */
+label { display: block; font-size: 15px; color: var(--text2); margin: 14px 0 4px; }
+input, select, textarea {
+  font: inherit; font-size: 17px; /* ≥16px verhindert das automatische Zoomen auf dem iPhone */
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--linie);
+  border-radius: 10px;
+  background: var(--feld);
+  color: var(--text);
+  -webkit-appearance: none; appearance: none;
+}
+input[type="date"], input[type="time"] { display: block; }
+input:disabled { opacity: .45; }
+input::-webkit-date-and-time-value { text-align: left; }
+select {
+  background-image: linear-gradient(45deg, transparent 50%, var(--text2) 50%), linear-gradient(135deg, var(--text2) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%;
+  background-size: 6px 6px; background-repeat: no-repeat;
+  padding-right: 36px;
+}
+textarea { min-height: 80px; resize: vertical; }
+.feldhinweis { font-size: 14px; color: var(--text2); margin-top: 4px; }
+.feldhinweis.warn { color: var(--orange); }
+
+/* Fenster (Dialoge) */
+dialog {
+  border: none; padding: 0;
+  width: calc(100% - 16px); max-width: 560px;
+  max-height: calc(100% - env(safe-area-inset-top) - 24px);
+  margin: calc(env(safe-area-inset-top) + 12px) auto auto;
+  border-radius: 16px;
+  background: var(--karte); color: var(--text);
+  overflow: auto;
+}
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog .fensterinhalt { padding: 18px 16px 16px; }
+dialog h2 { margin-top: 0; }
+
+/* Untere Navigationsleiste */
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex;
+  background: var(--karte);
+  border-top: 1px solid var(--linie);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+/* Reiter: aktiv grün und fett, sonst grau; in keinem Zustand eine Hintergrundfläche */
+nav button, nav button:active, nav button:focus {
+  flex: 1; background: transparent; border-radius: 0;
+  min-height: 60px; padding: 6px 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: 12px; font-weight: 500; color: var(--text2);
+}
+nav button:focus:not(:focus-visible) { outline: none; }
+nav button .ico { font-size: 22px; line-height: 1; }
+nav button.aktiv { color: var(--reiter-aktiv); font-weight: 700; }
+
+/* Kurze Bestätigung unten ("Gespeichert"), nach dem Löschen mit "Rückgängig" */
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  width: max-content; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--text); color: var(--bg);
+  padding: 10px 18px; border-radius: 24px; font-weight: 600;
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20;
+}
+#toast.sichtbar { opacity: .95; }
+#toast.sichtbar.mit-knopf { opacity: 1; pointer-events: auto; padding-right: 8px; }
+#toast button { min-height: 40px; padding: 6px 14px; flex: none; background: var(--bg); color: var(--text); }

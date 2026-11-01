@@ -3,8 +3,11 @@
 // Spielt in einem echten Browser (Chromium über Playwright) durch, was auf dem
 // iPhone passiert: erster Start, Start ohne Netz, Veröffentlichung einer neuen
 // Version, Hinweis "Neue Version verfügbar", "Neu laden", Wetter mit und ohne
-// Netz, die Ansicht "Jetzt" am aktuellen Standort (mit und ohne Netz) – und
-// prüft dabei jedes Mal, dass die Daten im localStorage unverändert bleiben.
+// Netz, die Ansicht "Jetzt" am aktuellen Standort (mit und ohne Netz), den
+// Übergang von Release 5a.1 (eine Datei) auf die aufgeteilte App – und prüft
+// dabei jedes Mal, dass die Daten im localStorage unverändert bleiben.
+// Die App besteht aus index.html, css/ und js/; der Service Worker hält immer
+// einen vollständigen Satz derselben Version bereit.
 // Die Wetterdienste antworten mit den Aufzeichnungen aus tests/.
 //
 // Aufruf (benötigt Node.js und Playwright):  node tests/offline-update-test.js
@@ -20,20 +23,33 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const { execFileSync } = require("child_process");
 
 const REPO = path.join(__dirname, "..");
 const ORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "radkm-update-"));
-for (const datei of ["index.html", "sw.js"]) fs.copyFileSync(path.join(REPO, datei), path.join(ORDNER, datei));
+// Aktuelle Fassung der App in den Ordner des Webservers kopieren
+function appKopieren() {
+  for (const datei of ["index.html", "sw.js"]) fs.copyFileSync(path.join(REPO, datei), path.join(ORDNER, datei));
+  for (const ordner of ["css", "js"]) fs.cpSync(path.join(REPO, ordner), path.join(ORDNER, ordner), { recursive: true });
+}
+appKopieren();
 fs.cpSync(path.join(REPO, "tests"), path.join(ORDNER, "tests"), { recursive: true });
+// Alle Dateien der App laut sw.js
+const DATEIEN = JSON.parse(/const DATEIEN = (\[[^\]]*\]);/.exec(fs.readFileSync(path.join(REPO, "sw.js"), "utf8"))[1]);
+// Release 5a.1 (letzte Fassung als eine Datei) für den Test des Übergangs
+const ALT_COMMIT = "52cd779";
 
 // Webserver wie GitHub Pages: /rad-km/… , max-age=600, ETag, 304
-const TYPEN = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json" };
+const TYPEN = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json" };
 let server = null;
+// Abrufe der App-Dateien beim Server (ohne Service Worker und Tests)
+const abrufe = [];
 function serverStarten(port) {
   server = http.createServer((anf, ant) => {
     let p = decodeURIComponent(new URL(anf.url, "http://x").pathname);
     if (!p.startsWith("/rad-km/")) { ant.writeHead(404); ant.end(); return; }
     p = p.slice("/rad-km/".length) || "index.html";
+    if (DATEIEN.includes(p)) abrufe.push(p);
     const datei = path.join(ORDNER, p);
     if (!datei.startsWith(ORDNER) || !fs.existsSync(datei)) { ant.writeHead(404); ant.end(); return; }
     const inhalt = fs.readFileSync(datei);
@@ -54,8 +70,11 @@ function pruefe(text, ok, detail) {
 }
 const warten = ms => new Promise(r => setTimeout(r, ms));
 
-// App-Version aus index.html (für den Test einer neuen Version wird sie verändert)
-const VERSION = /const APP_VERSION = "([^"]+)";/.exec(fs.readFileSync(path.join(REPO, "index.html"), "utf8"))[1];
+// App-Version aus js/grundlagen.js (für den Test einer neuen Version wird sie verändert)
+const GRUNDLAGEN = path.join("js", "grundlagen.js");
+const VERSION = /const APP_VERSION = "([^"]+)";/.exec(fs.readFileSync(path.join(REPO, GRUNDLAGEN), "utf8"))[1];
+// Datei im Ordner des Webservers ändern
+const aendern = (datei, fn) => fs.writeFileSync(path.join(ORDNER, datei), fn(fs.readFileSync(path.join(ORDNER, datei), "utf8")));
 
 const BEISPIEL = JSON.stringify({
   version: 3,
@@ -82,6 +101,12 @@ const BEISPIEL = JSON.stringify({
   const version = () => page.evaluate(() => APP_VERSION);
   const hinweis = () => page.evaluate(() => !!document.querySelector('[data-action="neu-laden"]'));
   const kmStand = () => page.evaluate(() => document.querySelector(".stand-zahl").textContent);
+  // Markierung, die der Test für eine neue Version ins CSS schreibt
+  const cssMarke = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--testmarke").trim());
+  // Alle Dateien geladen und angewandt: Farben aus dem CSS, Funktionen aus jeder JS-Datei
+  const alleDateien = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor !== "rgba(0, 0, 0, 0)" &&
+    ["heute", "datenEinlesen", "kmStandAm", "jahresKennzahlen", "werkstattLage", "wetterAnsicht", "meldung", "bildUebersicht", "bildWetter",
+      "bildWartung", "bildEinstellungen", "exportInhalt", "neuLaden"].every(f => typeof window[f] === "function"));
   const nachAntwort = () => warten(800); // Zeit für die Antwort des Service Workers
 
   try {
@@ -102,11 +127,16 @@ const BEISPIEL = JSON.stringify({
     await nachAntwort();
     pruefe("Ohne Netz: App startet aus dem Zwischenspeicher, Daten unverändert",
       (await version()) === VERSION && (await kmStand()) === "114,2 km" && (await daten()) === d0 && !(await hinweis()));
+    pruefe("… alle " + DATEIEN.length + " Dateien (index.html, CSS, JS) kommen aus dem Zwischenspeicher", await alleDateien());
     await serverStarten(port);
+    abrufe.length = 0;
+    await page.reload();
+    await nachAntwort();
+    pruefe("Mit Netz: die App selbst kommt aus dem Zwischenspeicher, nur die Prüfung auf Updates fragt den Server (jede Datei einmal)",
+      DATEIEN.every(d => abrufe.filter(a => a === d).length === 1) && abrufe.length === DATEIEN.length, abrufe.join(", "));
 
-    // 3. Neue Version veröffentlichen
-    const appDatei = path.join(ORDNER, "index.html");
-    fs.writeFileSync(appDatei, fs.readFileSync(appDatei, "utf8").replace('const APP_VERSION = "' + VERSION + '";', 'const APP_VERSION = "' + VERSION + '-neu";'));
+    // 3. Neue Version veröffentlichen (nur eine JS-Datei geändert)
+    aendern(GRUNDLAGEN, t => t.replace('const APP_VERSION = "' + VERSION + '";', 'const APP_VERSION = "' + VERSION + '-neu";'));
     await page.reload();
     await page.waitForSelector('[data-action="neu-laden"]', { timeout: 5000 }).catch(() => {});
     pruefe("Neue Version auf dem Server: die App läuft weiter in der bisherigen Version und zeigt „Neue Version verfügbar“",
@@ -127,8 +157,53 @@ const BEISPIEL = JSON.stringify({
     await serverStoppen();
     await page.reload();
     await nachAntwort();
-    pruefe("Ohne Netz: die neue Version startet aus dem Zwischenspeicher", (await version()) === VERSION + "-neu" && (await daten()) === d0);
+    pruefe("Ohne Netz: die neue Version startet aus dem Zwischenspeicher", (await version()) === VERSION + "-neu" && (await daten()) === d0 && (await alleDateien()));
     await serverStarten(port);
+
+    // 4b. Nur das CSS geändert: ebenfalls eine neue Version; bis „Neu laden“ gilt der
+    //     bisherige Satz vollständig, danach der neue (alle Dateien gemeinsam)
+    aendern(path.join("css", "app.css"), t => t + "\n:root { --testmarke: neu; }\n");
+    aendern(GRUNDLAGEN, t => t.replace('const APP_VERSION = "' + VERSION + '-neu";', 'const APP_VERSION = "' + VERSION + '-neu2";'));
+    aendern(GRUNDLAGEN, t => t.replace('const APP_VERSION = "' + VERSION + '-neu2";', 'const APP_VERSION = "' + VERSION + '-neu";'));
+    await page.reload();
+    await page.waitForSelector('[data-action="neu-laden"]', { timeout: 5000 }).catch(() => {});
+    pruefe("Nur das CSS geändert: „Neue Version verfügbar“, bis dahin weiter das bisherige CSS", (await hinweis()) && (await cssMarke()) === "");
+    await Promise.all([page.waitForNavigation(), page.click('[data-action="neu-laden"]')]);
+    await nachAntwort();
+    pruefe("… nach „Neu laden“ gilt das neue CSS, kein Hinweis, Daten unverändert", (await cssMarke()) === "neu" && !(await hinweis()) && (await daten()) === d0);
+
+    // 4c. Neue Version in CSS und JS gleichzeitig: vor „Neu laden“ nichts davon, danach beides
+    aendern(path.join("css", "app.css"), t => t.replace("--testmarke: neu;", "--testmarke: neu3;"));
+    aendern(GRUNDLAGEN, t => t.replace('const APP_VERSION = "' + VERSION + '-neu";', 'const APP_VERSION = "' + VERSION + '-neu3";'));
+    await page.reload();
+    await page.waitForSelector('[data-action="neu-laden"]', { timeout: 5000 }).catch(() => {});
+    await page.reload();
+    await nachAntwort();
+    pruefe("CSS und JS geändert: vor „Neu laden“ läuft der bisherige Satz vollständig (Version und CSS)",
+      (await hinweis()) && (await version()) === VERSION + "-neu" && (await cssMarke()) === "neu");
+    await Promise.all([page.waitForNavigation(), page.click('[data-action="neu-laden"]')]);
+    await nachAntwort();
+    pruefe("… danach der neue Satz vollständig", (await version()) === VERSION + "-neu3" && (await cssMarke()) === "neu3" && (await daten()) === d0);
+    await serverStoppen();
+    await page.reload();
+    await nachAntwort();
+    pruefe("… auch ohne Netz", (await version()) === VERSION + "-neu3" && (await cssMarke()) === "neu3" && (await alleDateien()));
+    await serverStarten(port);
+
+    // 4d. Fehlt auf dem Server eine Datei, gilt das wie „offline“: kein halber Satz
+    aendern(GRUNDLAGEN, t => t.replace('const APP_VERSION = "' + VERSION + '-neu3";', 'const APP_VERSION = "' + VERSION + '-neu4";'));
+    const weg = path.join(ORDNER, "js", "start.js"), wegInhalt = fs.readFileSync(weg);
+    fs.rmSync(weg);
+    await page.reload();
+    await nachAntwort();
+    pruefe("Eine Datei fehlt auf dem Server: kein Hinweis, die App läuft unverändert weiter",
+      !(await hinweis()) && (await version()) === VERSION + "-neu3" && (await alleDateien()));
+    fs.writeFileSync(weg, wegInhalt);
+    aendern(GRUNDLAGEN, t => t.replace('const APP_VERSION = "' + VERSION + '-neu4";', 'const APP_VERSION = "' + VERSION + '-neu";'));
+    await page.reload();
+    await page.waitForSelector('[data-action="neu-laden"]', { timeout: 5000 }).catch(() => {});
+    await Promise.all([page.waitForNavigation(), page.click('[data-action="neu-laden"]')]);
+    await nachAntwort();
 
     // 5. Geänderter Service Worker: übernimmt, ohne App oder Daten anzutasten
     fs.appendFileSync(path.join(ORDNER, "sw.js"), "\n// geändert\n");
@@ -245,6 +320,74 @@ const BEISPIEL = JSON.stringify({
     pruefe("… die Daten der App bleiben unverändert", (await daten()) === MIT_STANDORT);
     await serverStarten(port);
     pruefe("Keine Fehler in der Seite", seitenFehler.length === 0, seitenFehler.join("; "));
+
+    // 9. Übergang von Release 5a.1 (App in einer Datei, Service Worker nur für
+    //    index.html) auf die aufgeteilte App
+    let alt = null;
+    try {
+      alt = ["index.html", "sw.js"].map(d => execFileSync("git", ["-C", REPO, "show", ALT_COMMIT + ":" + d], { stdio: ["ignore", "pipe", "ignore"] }));
+    } catch (e) { /* kein Git */ }
+    if (!alt) {
+      console.log("– Übergang von 5a.1 übersprungen: Git oder Commit " + ALT_COMMIT + " nicht verfügbar");
+    } else {
+      const altSetzen = () => { fs.writeFileSync(path.join(ORDNER, "index.html"), alt[0]); fs.writeFileSync(path.join(ORDNER, "sw.js"), alt[1]); };
+      // a) Neue App und neuer Service Worker werden gemeinsam veröffentlicht
+      for (const [titel, schritte] of [
+        ["gemeinsam veröffentlicht", ["alles"]],
+        ["erst die App, dann der Service Worker", ["app", "sw"]]
+      ]) {
+        const ctx = await browser.newContext();
+        const p = await ctx.newPage();
+        const fehler = [];
+        p.on("pageerror", e => fehler.push(e.message));
+        const pd = () => p.evaluate(() => localStorage.getItem("radkm-daten"));
+        // Version: 5a.1 (eine Datei) oder die aufgeteilte App (bindet js/start.js ein)
+        const pv = () => p.evaluate(() => document.querySelector('script[src="js/start.js"]') ? APP_VERSION : "5a.1 (eine Datei)");
+        const ph = () => p.evaluate(() => !!document.querySelector('[data-action="neu-laden"]'));
+        appKopieren();
+        altSetzen();
+        await p.goto(url);
+        await p.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 10000 });
+        await p.evaluate(d => localStorage.setItem("radkm-daten", d), BEISPIEL);
+        await p.reload();
+        await warten(800);
+        const dAlt = await pd();
+        const alteVersion = await pv();
+        let ok = alteVersion === "5a.1 (eine Datei)" && !(await ph());
+        for (const schritt of schritte) {
+          if (schritt === "alles") appKopieren();
+          if (schritt === "app") { appKopieren(); fs.writeFileSync(path.join(ORDNER, "sw.js"), alt[1]); }
+          if (schritt === "sw") fs.copyFileSync(path.join(REPO, "sw.js"), path.join(ORDNER, "sw.js"));
+          await p.reload();
+          await p.waitForSelector('[data-action="neu-laden"]', { timeout: 8000 }).catch(() => {});
+          await p.reload();
+          await p.waitForSelector('[data-action="neu-laden"]', { timeout: 8000 }).catch(() => {});
+          if (schritt !== "sw") {
+            ok = ok && (await pv()) === "5a.1 (eine Datei)" && (await ph()) && (await pd()) === dAlt;
+            await Promise.all([p.waitForNavigation(), p.click('[data-action="neu-laden"]')]);
+            await warten(800);
+          }
+        }
+        // Hier übernimmt meist gerade der neue Service Worker; das Neuladen darf
+        // dabei nicht hängen (die App fragt erst den neuen nach Updates)
+        await p.reload();
+        await warten(1500);
+        await p.reload();
+        await warten(800);
+        const neuOk = (await pv()) === VERSION && !(await ph()) && (await pd()) === dAlt;
+        await serverStoppen();
+        await p.reload();
+        await warten(800);
+        const offlineOk = (await pv()) === VERSION && (await pd()) === dAlt &&
+          (await p.evaluate(() => document.querySelector(".stand-zahl").textContent)) === "114,2 km";
+        await serverStarten(port);
+        pruefe("Übergang 5a.1 → " + VERSION + " (" + titel + "): erst „Neue Version verfügbar“ in 5a.1, nach „Neu laden“ die neue Version, " +
+          "danach auch ohne Netz mit allen Dateien; Daten unverändert", ok && neuOk && offlineOk && fehler.length === 0,
+          JSON.stringify({ alteVersion, ok, neuOk, offlineOk, fehler }));
+        await ctx.close();
+      }
+      appKopieren();
+    }
   } catch (e) {
     pruefe("Unerwarteter Fehler: " + e.message, false, e.stack);
   } finally {

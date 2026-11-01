@@ -29,6 +29,8 @@ ist für das iPhone optimiert.
   (z. B. Bremsbeläge, Ölwechsel) und Mängel hängen als **Positionen** daran;
   Fälligkeit nach Intervall (Monate und/oder km), jährlichem Zeitfenster oder
   einmalig, Vorschläge „zu diesem Auftrag nehmen?“
+- Termin eines Auftrags (auf Wunsch mit Uhrzeit) mit einem Tipper in den
+  Kalender des iPhones übernehmen, mit Positionen und Erinnerung am Vortag
 - Mängelliste; Mängel werden einem Auftrag zugeordnet oder als Reparatur angelegt
 - Löschen mit „Rückgängig“
 - Datensicherung als JSON-Datei, die vor dem Teilen geprüft wird; gespeicherte
@@ -36,9 +38,11 @@ ist für das iPhone optimiert.
 - Startet auch ohne Netz (dann mit dem zuletzt geladenen Wetter); neue Versionen werden angekündigt
 - Hell- und Dunkelmodus nach Systemeinstellung
 
-Die ganze App steckt in **einer einzigen Datei: `index.html`**. Dazu kommt nur
-der Service Worker `sw.js`, der die App für den Start ohne Netz bereithält. Es
-gibt keine externen Bibliotheken und keinen Build-Schritt.
+Die App besteht aus `index.html`, dem Aussehen in `css/app.css` und dem
+Programmcode in einigen Dateien unter `js/` (siehe „Dateistruktur“). Dazu
+kommt der Service Worker `sw.js`, der die App für den Start ohne Netz
+bereithält. Es gibt keine externen Bibliotheken und keinen Build-Schritt;
+GitHub Pages liefert die Dateien direkt aus.
 
 ## Wo liegen meine Daten?
 
@@ -53,10 +57,10 @@ Das bedeutet:
   dienen Sicherung und Import.
 - Löschst du die Website-Daten, oder wechselst du das iPhone, sind die Daten
   weg, wenn du keine Sicherung hast. **Sichere deshalb regelmäßig** („Jetzt
-  sichern“ auf der Startseite). Die App erinnert dich, wenn die letzte
+  sichern“ auf der Übersicht oder in den Einstellungen). Die App erinnert dich, wenn die letzte
   Sicherung mehr als 30 Tage zurückliegt.
-- Der Service Worker speichert nur die App selbst (`index.html`), damit sie
-  auch ohne Netz startet. Auf die Daten im `localStorage` hat er keinen
+- Der Service Worker speichert nur die App selbst (`index.html`, `css/` und
+  `js/`), damit sie auch ohne Netz startet. Auf die Daten im `localStorage` hat er keinen
   Zugriff.
 - Nach dem Update auf Datenversion 8 merkt sich die App unter
   `radkm-wartungsarten-pruefen`, dass der Hinweis „Bitte Wartungsarten prüfen“
@@ -141,6 +145,47 @@ Auf dem iPhone:
 
 ## Bedienung
 
+### Aufbau: die fünf Reiter
+
+Unten stehen fünf Reiter. Oben in jedem Reiter steht, was du am häufigsten
+brauchst; Verlauf und Einstellungen kommen weiter unten bzw. auf eigene Seiten.
+
+| Reiter | Inhalt (von oben nach unten) |
+|---|---|
+| 🚲 **Übersicht** | Hinweise (z. B. „Datensicherung fällig“), Wetter-Kachel mit der Ampel, **Heute erfassen** mit den Fahrtagen ohne Eintrag, Kilometerstand mit nächster Wartung und offenen Mängeln, Summen, Jahr (Jahresziel, Prognose), Einträge dieser Woche, Datensicherung in einer Zeile |
+| 🌦️ **Wetter** | Ampel, Kleidung, Wind und Abfahrtszeit für Hin- und Rückfahrt bzw. „Jetzt“, amtliche Warnungen; unten der Weg zu den Wetter-Einstellungen |
+| 🔧 **Wartung** | oben „+ Mangel“, „+ Reparatur“, „+ Eigenleistung“; darunter umschaltbar **Aktuell** (Mängel ohne Auftrag, offene Aufträge, Aufgaben) und **Verlauf** (erledigte Aufträge und Mängel) |
+| 📊 **Fahrten** (bis 5a.1 „Statistik“) | umschaltbar **Einträge** (alle Einträge, zusammengefasst) und **Statistik** (Diagramm, Kennzahlen, Jahresziele, Wetter auf dem Arbeitsweg) |
+| ⚙️ **Einstellungen** | Hauptseite mit Abschnitten; die Zeilen mit „›“ öffnen eine eigene Seite (zurück mit „‹ Einstellungen“ oder erneutem Antippen des Reiters) |
+
+Die Hauptseite der Einstellungen:
+
+- **Fahrrad** → Seite mit allen Angaben und „Ändern“
+- **Datensicherung:** letzte Sicherung und „Jetzt sichern“ direkt; „Sicherung
+  prüfen, Daten importieren“ → eigene Seite
+- **Fahrten:** Vorlagen → Seite; Fahrtage und Hinweis → Seite; Weg zu den
+  Jahreszielen (Fahrten → Statistik)
+- **Wetter:** Orte und Strecke → Seite (Wohn- und Arbeitsort, Wegpunkte,
+  Teilstrecken, weiterer Ort); Wetter außerhalb der Fahrten → Seite; Hinfahrt,
+  Rückfahrt, Kleidung und Ampel-Grenzen öffnen wie bisher ihr Formular
+- **Wartung:** Wartungsarten → Seite
+- **Über Rad-km:** App-Version und Datenversion
+
+Was sich mit Release 5b geändert hat (keine Funktion ist weggefallen, die
+Daten sind unverändert):
+
+| Inhalt | bis 5a.1 | ab 5b |
+|---|---|---|
+| Heute erfassen | Übersicht, nach Kilometerstand und Wetter | Übersicht, direkt unter der Wetter-Kachel |
+| Eintragsliste | Übersicht, ganz unten | Fahrten → Einträge; auf der Übersicht die laufende Woche |
+| Datensicherung | Karte auf der Übersicht und unten in den Einstellungen | Zeile auf der Übersicht; Einstellungen an 2. Stelle |
+| Erledigte Aufträge und Mängel | Wartung, Mitte (Mängel einklappbar) | Wartung → Verlauf |
+| Wartungsarten | Wartung, unten | Einstellungen → Wartungsarten (Weg aus der Wartung) |
+| „+ Mangel / Reparatur / Eigenleistung“ | an verschiedenen Stellen | Wartung, oben |
+| Jahresziele | Einstellungen | Fahrten → Statistik |
+| Wetter-Einstellungen | Einstellungen, ein langer Abschnitt | Einstellungen → Wetter mit eigenen Seiten |
+| Vorlagen, Fahrtage | Einstellungen, oben | Einstellungen → Fahrten |
+
 ### Erster Start
 
 1. Unter **Einstellungen → Fahrrad anlegen** Namen, Startdatum und
@@ -149,10 +194,11 @@ Auf dem iPhone:
    Beginn** des Startdatums.
 2. Unter **Einstellungen → Vorlagen** die Standard-Strecken anlegen, z. B.
    „Arbeit hin und zurück – 14,2 km“. Die km gelten jeweils für den ganzen Tag.
-3. Für das Wetter unter **Einstellungen → Wetter** Wohnort und Arbeitsort
-   festlegen und die Fahrzeiten prüfen (siehe „Wetter“).
+3. Für das Wetter unter **Einstellungen → Orte und Strecke** Wohnort und
+   Arbeitsort festlegen und unter **Einstellungen → Wetter** die Fahrzeiten
+   prüfen (siehe „Wetter“).
 4. Wenn du schon Daten hast, kannst du sie unter **Einstellungen →
-   Daten importieren** einlesen (Format siehe unten).
+   Datensicherung → Daten importieren** einlesen (Format siehe unten).
 
 ### Kilometer erfassen
 
@@ -177,7 +223,13 @@ Auf dem iPhone:
 
 ### Übersicht
 
+Reihenfolge: Hinweise, Wetter-Kachel, Heute erfassen (mit Fahrtagen ohne
+Eintrag), Kilometerstand, Summen, Jahr, Einträge dieser Woche,
+Datensicherung. So sind Ampel und Erfassen auch auf einem kleinen iPhone
+(z. B. 13 mini) ohne Scrollen sichtbar.
+
 - **Kilometerstand** = Start-Kilometerstand + alle Einträge ab dem Startdatum.
+  Antippen der Karte öffnet den Reiter Wartung.
 - **Wetter-Kachel:** die Ampeln der nächsten Hin- und Rückfahrt (desselben
   Tages wie im Reiter Wetter; nach der Hinfahrt nur noch die Rückfahrt) und der
   wichtigste Grund, z. B. „Rückfahrt rot: Gewitter ab 16:45“. Antippen öffnet
@@ -192,7 +244,7 @@ Auf dem iPhone:
   Eintrag, erscheint z. B. „2 Fahrtage ohne Eintrag“ und darunter je Tag eine
   Zeile, z. B. „Di 20.10.“ und „Fr 23.10.“. Der heutige Fahrtag kommt ab 18:00
   dazu (Zeile „heute“), solange der Schalter „Hinweis schon am selben Tag“ an
-  ist; Schalter und Uhrzeit stehen unter Einstellungen → Fahrtage. Jeder Tag
+  ist; Schalter und Uhrzeit stehen unter Einstellungen → Fahrtage und Hinweis. Jeder Tag
   steht nur einmal da. Je Tag gibt es zwei Schaltflächen:
   - **Nachtragen** öffnet die Erfassung für diesen Tag.
   - **Keine Fahrt** legt mit einem Tipper einen Eintrag mit 0 km an (mit
@@ -211,11 +263,14 @@ Auf dem iPhone:
   - Ein Wochen-Eintrag zählt dabei vollständig zu seinem Datum.
 - **Jahr:** Jahresziel mit Fortschritt und Jahresprognose (siehe
   „Prognosen und Jahresziel“) sowie „Kilometerstand für ein Datum …“.
-- **Datensicherung:** Datum der letzten Sicherung und „Jetzt sichern“ (siehe
-  „Datensicherung“).
-- **Liste der Einträge:** die neuesten zuerst, abgeschlossene Zeiträume
-  zusammengefasst (siehe unten). Antippen eines Eintrags öffnet die
-  Detailansicht.
+- **Diese Woche:** die Einträge der laufenden Woche (Montag bis Sonntag), die
+  neuesten zuerst. **Alle Einträge (N) ›** öffnet Fahrten → Einträge.
+- **Datensicherung:** eine Zeile mit dem Datum der letzten Sicherung und
+  „Jetzt sichern“ (siehe „Datensicherung“). Liegt die letzte Sicherung mehr als
+  30 Tage zurück, steht zusätzlich oben der Hinweis „Datensicherung fällig“.
+- **Liste aller Einträge** (Reiter Fahrten → Einträge): die neuesten zuerst,
+  abgeschlossene Zeiträume zusammengefasst (siehe unten), darunter
+  „+ Eintrag“. Antippen eines Eintrags öffnet die Detailansicht.
 - **Markierungen in der Liste:**
   - Importierte Wochensummen tragen das Abzeichen **Woche**.
   - Einträge mit 0 km erscheinen grau als **keine Fahrt**.
@@ -283,7 +338,7 @@ werden sollen. Ohne deine Zustimmung bleiben sie unverändert.
 Der Reiter **Wetter** zeigt für deine Fahrten zur Arbeit, wie das Wetter wird,
 was du anziehen sollst und ob amtliche Warnungen bestehen.
 
-- **Orte** (Einstellungen → Wetter): Wohnort, Arbeitsort und optional ein
+- **Orte** (Einstellungen → Orte und Strecke): Wohnort, Arbeitsort und optional ein
   weiterer Ort (z. B. Urlaub). Antippen öffnet das Formular:
   - **Ort suchen:** Namen eingeben, „Suchen“ (oder Eingabetaste), Treffer
     antippen.
@@ -303,7 +358,7 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - **Weiterer Ort „aktiv“:** Dann zeigt der Reiter das Wetter dort für heute
     und morgen, ohne Hin- und Rückfahrt. Ausschalten mit dem Schalter in den
     Einstellungen oder mit „Zurück zu Wohn- und Arbeitsort“ im Reiter.
-- **Wegpunkte** (Einstellungen → Wetter, zwischen Wohn- und Arbeitsort): bis zu
+- **Wegpunkte** (Einstellungen → Orte und Strecke, zwischen Wohn- und Arbeitsort): bis zu
   3 Punkte auf deinem Weg, in Fahrtrichtung der Hinfahrt. **+ Wegpunkt** öffnet
   dasselbe Formular wie bei den Orten (Suche, Standort oder Koordinaten mit 4
   Nachkommastellen, „In Karten zeigen“); ein neuer Wegpunkt kommt direkt vor den
@@ -357,7 +412,7 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Beispiel mit den Fahrtagen Mo, Di, Fr: Freitag bis 17:00 die Fahrten am
     Freitag; von Freitag 17:00 bis Sonntag 17:00 „Jetzt“; ab Sonntag 17:00 Hin-
     und Rückfahrt am Montag.
-- **Wetter außerhalb der Fahrten** (Einstellungen → Wetter, auch im Reiter per
+- **Wetter außerhalb der Fahrten** (Einstellungen → Wetter außerhalb der Fahrten, auch im Reiter per
   Tipp): **Wohnort** (Standard) oder **aktueller Standort**.
   - Der Standort wird über die Ortung des iPhones bestimmt (es fragt beim ersten
     Mal nach der Erlaubnis) – nur, während die Ansicht „Jetzt“ auf der Übersicht
@@ -598,6 +653,11 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
 Seit Release 5a arbeitet der Reiter Wartung wie eine kleine Werkstatt (angelehnt
 an die Instandhaltung: Auftrag – Vorgang – Meldung).
 
+- **Aufbau des Reiters** (seit Release 5b): oben „+ Mangel“, „+ Reparatur“ und
+  „+ Eigenleistung“, darunter der Umschalter **Aktuell | Verlauf**. „Aktuell“
+  zeigt, was zu tun ist, „Verlauf“ die erledigten Aufträge und Mängel. Ganz
+  unten führt **Wartungsarten verwalten ›** zu Einstellungen → Wartungsarten.
+
 - **Wartungsarten** gibt es in zwei Arten:
   - **Auftrag**, z. B. Erstinspektion (einmalig), Kleine und Große Inspektion
     (mit Intervall bzw. jährlichem Zeitfenster), Reparatur und Eigenleistung
@@ -630,8 +690,32 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
     voneinander: Es zählen nur die erledigten Aufträge derselben Art.
   - Die Texte sind dieselben wie bisher (siehe unten „Fälligkeit mit
     Zeitfenster“ und „Fälligkeit mit Intervall“).
-- **Offene Aufträge:** Status „geplant“, optional mit Termin (Datum),
-  Werkstatt und Notiz.
+- **Offene Aufträge:** Status „geplant“, optional mit Termin (Datum, auf
+  Wunsch mit Uhrzeit), Werkstatt und Notiz.
+  - **Uhrzeit:** Im Formular „Termin planen“ bzw. „Termin ändern“ den Schalter
+    **„Mit Uhrzeit“** einschalten und die Uhrzeit wählen. Ohne Uhrzeit gilt der
+    Termin ganztägig. Angezeigt wird z. B. „Termin am 20.11.2026 um 09:30 Uhr
+    bei Beispiel-Werkstatt“. „Termin entfernen“ und „Erledigt eintragen“
+    entfernen auch die Uhrzeit.
+  - **In Kalender übernehmen:** In der Ansicht eines geplanten Auftrags mit
+    Termin steht der Knopf **„📅 In Kalender übernehmen“**. Er zeigt den Termin
+    (Titel, Tag, ganztägig bzw. Uhrzeit, Erinnerung) und bietet zwei Wege:
+    - **„Im Kalender öffnen“** öffnet die Kalenderdatei (`.ics`); iOS zeigt
+      den Termin, ein Tipper auf **„Hinzufügen“** übernimmt ihn.
+    - **„Als Datei teilen …“** öffnet das Teilen-Menü mit der Datei (z. B. in
+      „Dateien“ sichern und von dort öffnen); ohne Teilen-Menü wird sie
+      heruntergeladen.
+    - Welcher Weg in der App auf dem Home-Bildschirm zuverlässig funktioniert,
+      wird noch auf dem iPhone geprüft; der andere entfällt später.
+    - Inhalt: Titel „Kleine Inspektion – Werkstatt“ (ohne Werkstatt nur der
+      Name), Termin ganztägig bzw. 1 Stunde ab der Uhrzeit (Ortszeit),
+      Beschreibung mit den Positionen (Aufgaben mit Bauteil, Mängel mit Datum),
+      der Notiz und dem erwarteten Kilometerstand, Erinnerung **am Vortag um
+      18:00**. Die Kennung (UID) ist je Auftrag fest. Hast du den Termin schon
+      übernommen und dann geändert, übernimm ihn erneut und lösche im Kalender
+      den alten Eintrag, falls er doppelt erscheint.
+    - Die Kalenderdatei entsteht nur auf dem Gerät; es geht nichts ins Netz,
+      und deine Daten bleiben unverändert.
   - Hat ein Auftrag mit Fälligkeit (Intervall, Zeitfenster oder einmalig) noch
     keinen geplanten Auftrag, zeigt die App trotzdem den nächsten (vorgemerkt,
     ohne Termin). Gespeichert wird er erst, wenn du etwas daran änderst (Termin,
@@ -715,17 +799,20 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
       **„Rückgängig“**; „Abbrechen“ verwirft alle Änderungen im Formular.
 - **Reihenfolge im Reiter Wartung:**
   1. „Bitte Wartungsarten prüfen“ (nur nach der Umwandlung, siehe unten).
-  2. Offene Mängel ohne Auftrag (nur wenn vorhanden).
-  3. Offene Aufträge mit ihren Positionen und Vorschlägen: überfällige zuerst
+  2. „+ Mangel“, „+ Reparatur“, „+ Eigenleistung“ und der Umschalter
+     „Aktuell | Verlauf“. In „Aktuell“:
+  3. Offene Mängel ohne Auftrag (nur wenn vorhanden).
+  4. Offene Aufträge mit ihren Positionen und Vorschlägen: überfällige zuerst
      (am längsten überfällige; auch ein verstrichener Termin), dann
      anstehende nach Termin bzw. Fälligkeit (vor dem Zeitfenster dessen Beginn,
      im Zeitfenster dessen Ende, bei Intervall das (prognostizierte) Datum),
      dann Aufträge mit km-Intervall ohne Prognose, zuletzt solche ohne Datum
      (Reparatur ohne Termin, „Gültig ab Jahr“ noch nicht erreicht).
-  4. Aufgaben mit Fälligkeit (überfällige zuerst) und Hinweis auf ihren Auftrag.
-  5. Historie der erledigten Aufträge (neueste zuerst).
-  6. Mängel („Mangel erfassen“, erledigte Mängel einklappbar) und Wartungsarten
-     (getrennt nach Aufträgen und Aufgaben).
+  5. Aufgaben mit Fälligkeit (überfällige zuerst) und Hinweis auf ihren Auftrag.
+  6. In „Verlauf“: erledigte Aufträge (neueste zuerst), darunter die erledigten
+     Mängel (zuletzt erledigte zuerst).
+  7. Die Wartungsarten (getrennt nach Aufträgen und Aufgaben) stehen unter
+     Einstellungen → Wartungsarten.
 - **Bitte Wartungsarten prüfen:** Nach der Umwandlung auf Datenversion 8
   steht oben im Reiter Wartung dieser Hinweis (kein Fenster beim Start).
   Antippen öffnet den Prüfbildschirm mit allen Wartungsarten (Art, Intervall
@@ -774,11 +861,11 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
 
 ### Mängel
 
-- **Mangel erfassen** im Reiter Wartung: Datum (Standard heute),
+- **Mangel erfassen** („+ Mangel“ oben im Reiter Wartung): Datum (Standard heute),
   Beschreibung und Status „offen“ oder „erledigt“.
 - Offene Mängel ohne Auftrag stehen ganz oben im Reiter Wartung, mit „Zu
   Auftrag …“ und „Reparatur anlegen“; Mängel in einem Auftrag stehen bei
-  dessen Positionen. Erledigte Mängel stehen in einem einklappbaren Bereich.
+  dessen Positionen. Erledigte Mängel stehen unter Wartung → Verlauf.
 - Auf der Übersicht steht die Anzahl offener Mängel, z. B. „3 offene Mängel“.
 - Die Ansicht eines Mangels zeigt seinen Auftrag bzw. den Auftrag, mit dem er
   erledigt wurde.
@@ -795,13 +882,15 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
   Zeit ab dem Startdatum. Einträge vor dem Startdatum zählen nicht mit.
 - Prognosen gibt es erst, wenn seit dem Startdatum mindestens 7 Tage vergangen
   sind. Sie werden immer als „ca.“ angezeigt und auf 10 km gerundet.
-- **Jahresprognose** (Startseite): km des laufenden Jahres bis heute +
+- **Jahresprognose** (Übersicht): km des laufenden Jahres bis heute +
   Durchschnitt × restliche Tage des Jahres.
-- **Kilometerstand für ein Datum** (Startseite): erwarteter Kilometerstand am
+- **Kilometerstand für ein Datum** (Übersicht): erwarteter Kilometerstand am
   Ende eines frei wählbaren Tages. Für heute und vergangene Tage zeigt die App
   den tatsächlichen Stand.
-- **Jahresziel:** unter **Einstellungen → Jahresziele** je Kalenderjahr ein
-  Ziel in km. Die Startseite zeigt für das laufende Jahr:
+- **Jahresziel:** unter **Fahrten → Statistik → Jahresziele** je Kalenderjahr
+  ein Ziel in km (bis 5a.1 unter Einstellungen; von dort führt ein Weg
+  hierher, ebenso „Jahresziel festlegen“ auf der Übersicht). Die Übersicht zeigt
+  für das laufende Jahr:
   - den Fortschritt, z. B. „2.340 von 5.000 km · 47 %“, als Balken; der
     Strich im Balken markiert das zeitanteilige Soll,
   - den Vergleich mit dem zeitanteiligen Soll bis heute (Ziel × vergangene
@@ -812,7 +901,7 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
 
 ### Statistik
 
-Der Reiter **Statistik** zeigt:
+Der Reiter **Fahrten** (bis 5a.1 „Statistik“) zeigt unter **Statistik**:
 
 - **km pro Monat** als Säulendiagramm: das laufende Jahr (grün) neben dem
   Vorjahr (grau). Antippen eines Monats zeigt seine Werte und den
@@ -842,10 +931,12 @@ Der Reiter **Statistik** zeigt:
     Balken mit Zahlen (aus den Wetterwerten, ohne amtliche Warnungen).
   - Darunter **Wetter nachtragen …** mit der Anzahl der Tage, für die es
     möglich ist (siehe „Wetter“).
+- **Jahresziele:** Liste der Ziele je Jahr und „+ Jahresziel“ (siehe
+  „Prognosen und Jahresziel“).
 
 ### Datensicherung
 
-- **Jetzt sichern** (Startseite und Einstellungen):
+- **Jetzt sichern** (Übersicht, Einstellungen und Einstellungen → Datensicherung):
   1. Die App erzeugt die Sicherungsdatei `rad-km-JJJJ-MM-TT-HHMM.json` (mit
      Uhrzeit, damit mehrere Sicherungen am selben Tag eindeutig sind), liest sie
      sofort wieder ein, prüft sie mit denselben Regeln wie beim Import und
@@ -865,7 +956,7 @@ Der Reiter **Statistik** zeigt:
 - **Gespeicherte Sicherung jetzt prüfen:** erscheint direkt nach dem Sichern.
   Wähle die eben gespeicherte Datei aus. Die App liest und prüft sie, **ohne
   etwas zu überschreiben**, und vergleicht sie mit dem aktuellen Stand.
-- **Sicherung prüfen …** (Einstellungen): dasselbe für eine beliebige, auch
+- **Sicherung prüfen …** (Einstellungen → Datensicherung): dasselbe für eine beliebige, auch
   ältere Sicherung. Mögliche Ergebnisse:
   - „Identisch mit dem aktuellen Stand“
   - „Sicherung ist älter: 3 Einträge fehlen (25.–27.10.)“, wenn seitdem nur
@@ -875,7 +966,7 @@ Der Reiter **Statistik** zeigt:
   - „Datei beschädigt bzw. keine Rad-km-Sicherung“ mit dem Grund
   - Dazu Zeitpunkt und Inhalt der Sicherung und ein Hinweis, falls die
     Kurzinfo nicht zum Inhalt passt (Datei nachträglich verändert).
-- **Daten importieren:**
+- **Daten importieren** (Einstellungen → Datensicherung):
   - Eine Sicherungsdatei auswählen.
   - Die App prüft die Datei und zeigt eine Zusammenfassung.
   - Nach deiner Bestätigung **ersetzt** sie alle vorhandenen Daten.
@@ -884,9 +975,12 @@ Der Reiter **Statistik** zeigt:
 
 ### Einstellungen
 
-- Fahrrad, Vorlagen, Fahrtage, Wetter (Orte, Wegpunkte, Wetter außerhalb der
-  Fahrten, Fahrzeiten, Kleidung, Ampel-Grenzen), Jahresziele, Datensicherung.
-- **Fahrtage:** deine üblichen Fahrtage zum Ankreuzen (Voreinstellung
+- Hauptseite mit den Abschnitten Fahrrad, Datensicherung, Fahrten (Vorlagen,
+  Fahrtage und Hinweis), Wetter (Orte und Strecke, Wetter außerhalb der
+  Fahrten, Hinfahrt, Rückfahrt, Kleidung, Ampel-Grenzen), Wartung
+  (Wartungsarten) und Über Rad-km; siehe „Aufbau: die fünf Reiter“. Welche
+  Seite offen ist, merkt sich die App nur, solange sie geöffnet ist.
+- **Fahrtage** (Einstellungen → Fahrtage und Hinweis): deine üblichen Fahrtage zum Ankreuzen (Voreinstellung
   Montag, Dienstag, Freitag). Sie gelten für den Hinweis auf fehlende
   Einträge, die längste Serie und den Reiter Wetter. Änderungen werden sofort
   gespeichert.
@@ -904,7 +998,7 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `8` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `9` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
@@ -1106,6 +1200,7 @@ Reparatur) wird er bei Bedarf angelegt. Die Standard-Wartungsarten (ab Version
 | `wartungsartId` | Text | ja | `id` einer Wartungsart mit `"typ": "auftrag"`. Je Auftrag mit Fälligkeit höchstens ein geplanter Auftrag |
 | `status` | `"geplant"` oder `"erledigt"` | ja | |
 | `termin` | Datum oder `null` | nein | Nur bei geplanten Aufträgen: Termin |
+| `terminZeit` | Uhrzeit `"HH:MM"` oder `null` | nein | Ab Version 9, nur zusammen mit einem Termin: Uhrzeit des Termins; `null` = ganztägig |
 | `werkstatt` | Text | nein | Werkstatt |
 | `datum` | Datum oder `null` | bei erledigten | Datum der Erledigung; bei geplanten `null` |
 | `kmStand` | Zahl oder `null` | nein | Nur bei erledigten: Kilometerstand bei der Erledigung |
@@ -1127,8 +1222,8 @@ Reparatur) wird er bei Bedarf angelegt. Die Standard-Wartungsarten (ab Version
 
 Die Aufgaben, die nur nach der Standard-Zuordnung zu einem geplanten Auftrag
 gehören, stehen nicht in den Daten; die App berechnet sie bei jeder Anzeige.
-Für Kosten und Belege (Release 5b) kommen später Felder an Auftrag und Position
-dazu.
+Für Kosten und Belege kommen in einem späteren Release Felder an Auftrag und
+Position dazu.
 
 ### `maengel[]`
 
@@ -1154,8 +1249,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ```json
 {
-  "version": 8,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5a.1", "eintraege": 4,
+  "version": 9,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5b", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1231,14 +1326,14 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
       "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Bremse vorn", "zuordnung": "grosse-inspektion" }
   ],
   "auftraege": [
-    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "werkstatt": "Beispiel-Werkstatt",
+    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "terminZeit": null, "werkstatt": "Beispiel-Werkstatt",
       "datum": "2025-01-15", "kmStand": 175.5, "kmManuell": true, "notiz": "Bremsen eingestellt",
       "positionen": [
         { "id": "pos1", "art": "aufgabe", "wartungsartId": "kette", "status": "erledigt", "notiz": "" },
         { "id": "pos2", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "nicht-gemacht", "notiz": "noch 2 mm" },
         { "id": "pos3", "art": "mangel", "mangelId": "m1", "status": "erledigt", "notiz": "" }
       ], "ausgeschlossen": [] },
-    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "werkstatt": "Beispiel-Werkstatt",
+    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "terminZeit": "09:30", "werkstatt": "Beispiel-Werkstatt",
       "datum": null, "kmStand": null, "kmManuell": false, "notiz": "",
       "positionen": [
         { "id": "pos4", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "offen", "notiz": "" },
@@ -1356,15 +1451,19 @@ damit nichts verloren geht.
     „Wartung“).
   - Die umgewandelten Daten werden beim nächsten Speichern als Version 8
     abgelegt.
-- Daten aus Version 1 bis 6 werden in einem Schritt über die Zwischenversionen
-  auf Version 8 gebracht.
+- **Version 8 → 9** (Release 5b): Alle Daten bleiben unverändert. Ergänzt wird
+  `terminZeit` (`null`, also ganztägig) bei jedem Auftrag. Die umgewandelten
+  Daten werden beim nächsten Speichern als Version 9 abgelegt; ein Hinweis
+  erscheint nicht.
+- Daten aus Version 1 bis 7 werden in einem Schritt über die Zwischenversionen
+  auf Version 9 gebracht.
 
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1 bis 7 auf Version 8 (`tests/daten-v1.json`
-  bis `tests/daten-v7.json`, erfundene Werte; auch dass geänderte
+- die Umwandlung von Version 1 bis 8 auf Version 9 (`tests/daten-v1.json`
+  bis `tests/daten-v8.json`, erfundene Werte; auch dass geänderte
   Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
   werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
@@ -1463,7 +1562,34 @@ damit nichts verloren geht.
   Auftrags, „Erledigt eintragen“ an einer Aufgabe (neue Eigenleistung, neue
   Reparatur, zu erledigtem Auftrag, schon erledigt ausgegraut, „nicht
   gemacht“ wird „erledigt“, nicht doppelt), Export/Import und „Sicherung
-  prüfen“ unverändert.
+  prüfen“ unverändert,
+- Release 5b, Dateistruktur: `index.html` bindet CSS und JS ein und enthält
+  selbst keinen Code mehr, die Liste `DATEIEN` in `sw.js` stimmt mit den
+  eingebundenen Dateien überein, jede Datei ist vorhanden, gültig und
+  geladen, das CSS gilt,
+- Release 5b, Datenversion 9 und Kalender (D4): die Umwandlung 8 → 9 mit
+  `tests/daten-v8.json` beim Laden und beim Import (alle Daten erhalten,
+  `terminZeit` = `null`, gespeicherte Daten erst beim Speichern geändert, kein
+  Hinweis, „Sicherung prüfen“ identisch, Export → Import), die Prüfung von
+  `terminZeit` (Format, nur mit Termin, nicht bei erledigten), das
+  Termin-Formular (Schalter „Mit Uhrzeit“, gesperrtes Feld, Anzeige mit
+  Uhrzeit, ungültige Uhrzeit, Uhrzeit ohne Datum, „Termin entfernen“,
+  „Erledigt eintragen“) und die Kalenderdatei (Aufbau, ganztägig, mit Uhrzeit
+  auch über Mitternacht, Erinnerung am Vortag um 18:00, Titel mit und ohne
+  Werkstatt, Maskierung, Beschreibung, feste UID, Falten nach 75 Bytes ohne
+  geteilte Zeichen, Dateiname, Knopf nur bei geplanten Aufträgen mit Termin,
+  Fenster, „Im Kalender öffnen“, „Als Datei teilen …“ mit Abbruch und
+  Download, Daten unverändert),
+- Release 5b, Aufteilung der Reiter (IA): Reihenfolge der Übersicht (Wetter,
+  Erfassen mit Fahrtagen ohne Eintrag, Kilometerstand, Summen, Jahr, diese
+  Woche, Sicherungszeile), Ampel und Erfassen ohne Scrollen in der Größe eines
+  iPhone 13 mini (375 × 812), Kilometerstand → Wartung, „Alle Einträge ›“,
+  Fahrten mit „Einträge | Statistik“ und Jahresziele, Wartung mit Knöpfen oben
+  und „Aktuell | Verlauf“, „Wartungsarten verwalten ›“, Einstellungen mit
+  Hauptseite und allen Unterseiten (Titel, „‹ Einstellungen“, Reiter erneut
+  antippen, Unterseite bleibt beim Reiterwechsel), Wege aus Wetter und
+  Übersicht, alle bisherigen Bedienelemente weiter erreichbar, Daten
+  unverändert; die bestehenden Tests gehen die neuen Wege.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -1497,7 +1623,12 @@ Oben steht „Alle … Tests bestanden“ oder die Anzahl der Fehler.
 **Offline und Updates:** `tests/offline-update-test.js` spielt in einem echten
 Browser durch, was der Service Worker tut: erster Start, Start ohne Netz,
 Veröffentlichung einer neuen Version, Hinweis „Neue Version verfügbar“, „Neu
-laden“, geänderter Service Worker, Wetter beim Start und ohne Netz, die Ansicht
+laden“, alle Dateien aus dem Zwischenspeicher, nur eine JS-Datei bzw. nur das
+CSS geändert, vor „Neu laden“ der bisherige und danach der neue Satz
+vollständig, eine auf dem Server fehlende Datei (kein halber Satz), der
+Übergang von 5a.1 (eine Datei) auf die aufgeteilte App (5a.1 holt der Test
+mit Git aus dem Commit `52cd779`; ohne Git wird dieser Teil übersprungen),
+geänderter Service Worker, Wetter beim Start und ohne Netz, die Ansicht
 „Jetzt“ am aktuellen Standort mit und ohne Netz (die Wetterdienste antworten
 dabei mit den Aufzeichnungen aus `tests/`, der Standort ist vorgegeben). Dabei prüft
 er jedes Mal, dass die Daten im `localStorage` unverändert bleiben, und lässt
@@ -1509,36 +1640,45 @@ Node.js und Playwright):
 node tests/offline-update-test.js
 ```
 
-## Aufbau des Codes (für Neugierige)
+## Dateistruktur
 
-`index.html` besteht aus drei Teilen:
+Die App ist auf mehrere Dateien verteilt, damit man für eine Änderung nur die
+betroffenen Dateien lesen muss. Alle JavaScript-Dateien sind normale Skripte
+(keine Module) und teilen sich einen gemeinsamen Bereich: Eine Funktion aus
+`js/daten.js` ist in jeder anderen Datei aufrufbar. `index.html` lädt sie in
+fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
+`js/grundlagen.js`, `js/daten.js` und `js/start.js` (diese zuletzt).
 
-1. **HTML:** das Grundgerüst, also Überschrift, Inhaltsbereich, die untere
-   Navigationsleiste und zwei Fenster (für Formulare und Rückfragen).
-2. **CSS** (`<style>`): das Aussehen. Die Farben stehen als Variablen am
-   Anfang. Für den Dunkelmodus werden nur diese Variablen ausgetauscht.
-3. **JavaScript** (`<script>`): die Logik, in nummerierten Abschnitten:
-   1. Grundeinstellungen
-   2. Hilfsfunktionen für Datum und Zahlen
-   3. Datenmodell: Laden, Prüfen, Umwandeln, Speichern
-   4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit,
-      Werkstatt (offene Aufträge, berechnete Standard-Zuordnung, Vorschläge),
-      Zusammenfassung
-   5. Wetter: Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher,
-      aktueller Standort, Ampel, Glätte, Kleidung, bestes Abfahrtsfenster, Wind,
-      Ansicht „Jetzt“, Wetter je Eintrag und Rückblick
-   6. Fenster, Rückfragen, Meldungen, Rückgängig
-   7. Die fünf Bildschirme (Übersicht, Wetter, Wartung, Statistik,
-      Einstellungen) und ihre Formulare (das Diagramm ist ein SVG, ohne
-      Bibliothek)
-   8. Datensicherung: Export, Prüfung, Import
-   9. Zuordnung der Klicks zu den Funktionen
-   10. Offline und neue Versionen (Anmeldung des Service Workers)
-   11. Start
+| Datei | Inhalt |
+|---|---|
+| `index.html` | Grundgerüst: Überschrift, Inhaltsbereich, untere Reiterleiste, zwei Fenster (Formulare, Rückfragen), Einbindung von CSS und JS |
+| `css/app.css` | Aussehen; die Farben stehen als Variablen in `:root`, für den Dunkelmodus werden nur diese ausgetauscht |
+| `js/grundlagen.js` | Grundeinstellungen (`APP_VERSION`, `DATEN_VERSION`, Speicherschlüssel, Konstanten) und Hilfsfunktionen für Datum, Zahlen, Text |
+| `js/daten.js` | Datenmodell: Standardwerte, Laden, Prüfen, Umwandeln (`MIGRATIONEN`), Speichern |
+| `js/berechnungen.js` | Kilometerstand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
+| `js/statistik.js` | Reiter Fahrten (Einträge \| Statistik): Fahrtage und Kennzahlen, Diagramm (SVG, ohne Bibliothek), Jahresziele mit Formular, Wetter-Statistik und „Wetter nachtragen …“ |
+| `js/wartung.js` | Werkstatt (Berechnung): Fälligkeit (Zeitfenster, Intervall), offene Aufträge, berechnete Standard-Zuordnung, Vorschläge |
+| `js/kalender.js` | Kalenderdatei (`.ics`) zum Termin eines geplanten Auftrags |
+| `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten (für Einstellungen → Wartungsarten): Aufträge, Termin, „In Kalender übernehmen“, Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
+| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung, Wind, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick |
+| `js/wetter-ansicht.js` | Reiter Wetter und Kachel, Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ und „Außerhalb der Fahrten“, Fahrzeiten), Ampel-Grenzen, Kleidungsregeln, Rückmeldung nach der Fahrt |
+| `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (für Fahrten → Einträge), Eintragsformular, Kilometerstand für ein Datum |
+| `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
+| `js/sicherung.js` | Datensicherung: Export, Prüfung vor dem Teilen, Vergleich mit einer Sicherung, Import |
+| `js/oberflaeche.js` | Bausteine der Oberfläche: Fenster, Rückfrage, Meldung, Rückgängig; `zeichnen()`, Reiter, Umschalter, Wege zu den Einstellungen |
+| `js/bedienung.js` | Zuordnung der Klicks und Eingaben (`data-action`, `data-change`) zu den Funktionen |
+| `js/start.js` | Anmeldung des Service Workers, Hinweis „Neue Version verfügbar“, Start der App |
+| `sw.js` | Service Worker (siehe unten) |
+| `tests/` | Testseite, Offline-Test und erfundene Testdateien (siehe „Tests“) |
 
-`sw.js` ist der Service Worker. Er speichert `index.html` für den Start ohne
-Netz, vergleicht sie nach dem Start mit der Fassung auf dem Server und
-übernimmt eine neue Version erst nach „Neu laden“. Eine neue Version erkennt er
-am Inhalt von `index.html`, eine Versionsnummer muss dafür nicht gepflegt
-werden. Abrufe der Wetterdienste gehen an ihm vorbei direkt ins Netz; ohne Netz
-nimmt die App den eigenen Zwischenspeicher `radkm-wetter`.
+Neue Dateien müssen in `index.html` **und** in der Liste `DATEIEN` in `sw.js`
+eingetragen werden; `tests/test.html` prüft, dass beide übereinstimmen.
+
+`sw.js` ist der Service Worker. Er speichert alle Dateien der App als
+vollständigen Satz für den Start ohne Netz, vergleicht sie nach dem Start mit
+den Dateien auf dem Server und übernimmt eine neue Version erst nach „Neu
+laden“ – immer alle Dateien gemeinsam, alte und neue werden nie gemischt.
+Eine neue Version erkennt er am Inhalt der Dateien, eine Versionsnummer muss
+dafür nicht gepflegt werden. Abrufe der Wetterdienste gehen an ihm vorbei
+direkt ins Netz; ohne Netz nimmt die App den eigenen Zwischenspeicher
+`radkm-wetter`.
