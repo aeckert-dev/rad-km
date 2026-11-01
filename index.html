@@ -239,8 +239,10 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .ampel.gelb, .slot.gelb { background: var(--ampel-gelb); }
 .ampel.rot, .slot.rot { background: var(--ampel-rot); }
 .ampelzeile { margin: 4px 0 2px; }
-/* Wind je Teilstrecke unter der Zeile 🧭, eingerückt */
+/* Wind je Teilstrecke unter der Zeile 🧭, eingerückt: Name klein, darunter weiter eingerückt der Wind */
 .wind-teile { padding-left: 1.6em; }
+.wind-teil { margin-top: 2px; }
+.wind-teil .wind-text { padding-left: 1em; }
 /* Nicht aktuelle oder vergangene Daten zurückgenommen */
 .veraltet .ampel, .veraltet .slot { opacity: .45; }
 .veraltet > :not(h3) { color: var(--text2); }
@@ -3739,10 +3741,12 @@ function fahrtKarte(f, alt) {
 }
 
 // Wind: erste Zeile mit Himmelsrichtung und Böen, darunter eingerückt je Teilstrecke,
-// die zählt, eine Zeile mit der Richtung relativ zur Fahrtrichtung
+// die zählt, zweizeilig: der Name klein, darunter eingerückt die Richtung relativ
+// zur Fahrtrichtung in normaler Schrift (W15)
 function windHtml(wind) {
   return '<div>🧭 ' + esc(wind.text) + '</div>' +
-    (wind.teile.length ? '<div class="wind-teile">' + wind.teile.map(t => '<div>' + esc(t.titel) + ': ' + esc(t.text) + '</div>').join("") + '</div>' : "");
+    (wind.teile.length ? '<div class="wind-teile">' + wind.teile.map(t =>
+      '<div class="wind-teil"><div class="klein">' + esc(t.titel) + '</div><div class="wind-text">' + esc(t.text) + '</div></div>').join("") + '</div>' : "");
 }
 // Kleidung je Körperbereich; leere Bereiche entfallen, wegen Regen angepasste sind markiert
 function kleidungBereicheHtml(kl) {

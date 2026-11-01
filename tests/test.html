@@ -1815,7 +1815,7 @@ async function start() {
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
         "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
-        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt: schräg von hinten rechts 5 km/h (schwach)",
+        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt schräg von hinten rechts 5 km/h (schwach)",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
       [ablageR.querySelectorAll(".zeitleiste .slot").length, ablageR.querySelectorAll(".zeitleiste .slot.rot").length, ablageR.querySelectorAll(".zeitleiste .slot.beste").length,
@@ -2700,9 +2700,9 @@ async function start() {
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke: von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: von rechts 20 km/h"]]]);
     ablageB.innerHTML = w.bildWetter(ABEND);
-    wahr("Reiter Wetter: Wind je Teilstrecke als eigene Zeilen unter der Zeile 🧭 (Hin- und Rückfahrt)",
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke: von links 20 km/h Ecke → Beispielstadt: Gegenwind 20 km/h") &&
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke: Rückenwind 20 km/h Ecke → Musterdorf: von rechts 20 km/h"),
+    wahr("Reiter Wetter: Wind je Teilstrecke unter der Zeile 🧭 (Hin- und Rückfahrt; seit 5a Name und Wind zweizeilig)",
+      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke von links 20 km/h Ecke → Beispielstadt Gegenwind 20 km/h") &&
+      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke Rückenwind 20 km/h Ecke → Musterdorf von rechts 20 km/h"),
       ohneTags(ablageB.innerHTML));
     om = drei(ruhig());
     aendern(om, "apparent_temperature", D, "06:00", "07:00", 2, 1);
@@ -3108,7 +3108,7 @@ async function start() {
       const d = w.document.createElement("div");
       d.innerHTML = w.bildWetter(ABEND);
       return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ({ titel: ohneTags(k.querySelector("h3").innerHTML), text: ohneTags(k.innerHTML),
-        teile: [...k.querySelectorAll(".wind-teile > div")].map(z => ohneTags(z.innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
+        teile: [...k.querySelectorAll(".wind-teile > .wind-teil")].map(z => ohneTags(z.querySelector(".klein").innerHTML) + ": " + ohneTags(z.querySelector(".wind-text").innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
     };
     const windVorhersage = (jeOrt, richtung, boeen) => {
       const om = drei(ruhig());
@@ -3133,9 +3133,19 @@ async function start() {
     const teileStil = ablage51.querySelector(".wind-teile");
     w.document.body.appendChild(ablage51);
     const stil = w.getComputedStyle(ablage51.querySelector(".wind-teile"));
-    gleich("Teilstrecken-Zeilen in normaler Schrift (nicht „klein“), eingerückt, jede eine eigene Zeile",
-      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, stil.fontSize === w.getComputedStyle(ablage51.querySelector(".karte")).fontSize, teileStil.children.length],
-      [false, true, true, 2]);
+    gleich("Teilstrecken eingerückt, je Teilstrecke ein eigener Block",
+      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, teileStil.children.length, [...teileStil.children].every(z => z.classList.contains("wind-teil"))],
+      [false, true, 2, true]);
+    // W15 (Release 5a): je Teilstrecke zweizeilig, Name klein, darunter eingerückt der Wind in normaler Schrift
+    const teil1 = teileStil.children[0], name1 = teil1.children[0], wind1 = teil1.children[1];
+    const schrift = el => w.getComputedStyle(el).fontSize, links = el => el.getBoundingClientRect().left;
+    gleich("W15: zwei Zeilen je Teilstrecke: Name der Teilstrecke klein, darunter die Windangabe",
+      [teil1.children.length, name1.className, name1.textContent, wind1.textContent], [2, "klein", "Musterdorf → Ecke", "schräg von hinten rechts 16 km/h"]);
+    gleich("W15: Windangabe in normaler Schrift (wie die Karte), größer als der Name, unter dem Namen und weiter eingerückt",
+      [schrift(wind1) === schrift(ablage51.querySelector(".karte")), parseFloat(schrift(wind1)) > parseFloat(schrift(name1)),
+        wind1.getBoundingClientRect().top >= name1.getBoundingClientRect().bottom - 1, links(wind1) + parseFloat(w.getComputedStyle(wind1).paddingLeft) > links(name1),
+        links(name1) > links(teileStil.previousElementSibling)],
+      [true, true, true, true, true]);
     ablage51.remove();
 
     // Schwacher Wind, die erste Teilstrecke zählt nicht
