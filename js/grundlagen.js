@@ -18,7 +18,7 @@ const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 const APP_VERSION = "5a.1";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 8;
+const DATEN_VERSION = 9;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;

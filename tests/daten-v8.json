@@ -1,0 +1,59 @@
+{
+  "version": 8,
+  "kurzinfo": { "zeitpunkt": "2026-11-01T18:00:00.000Z", "appVersion": "5a.1", "eintraege": 3,
+                "kmSumme": 38.4, "kmStand": 1238.9, "wartungen": 1, "maengel": 2 },
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5,
+               "rahmennummer": "TST 0008", "beschreibung": "Blau, 28 Zoll" },
+  "einstellungen": {
+    "fahrtage": [1, 2, 5],
+    "jahresziele": [{ "jahr": 2026, "km": 3000 }],
+    "hinweisHeuteAn": true,
+    "hinweisHeuteAb": "18:00"
+  },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2, "arbeitsweg": true }
+  ],
+  "eintraege": [
+    { "id": "e-tag1", "datum": "2026-10-26", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true, "wetter": null },
+    { "id": "e-tag2", "datum": "2026-10-27", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true, "wetter": null },
+    { "id": "e-tag3", "datum": "2026-10-30", "km": 10, "vorlage": null, "notiz": "Runde „Süd“", "typ": "tag", "arbeitsweg": false, "wetter": null }
+  ],
+  "wartungsarten": [
+    { "id": "erstinspektion", "name": "Erstinspektion", "typ": "auftrag", "intervallMonate": 3, "intervallKm": 300,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": true, "bauteil": null, "zuordnung": null },
+    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "typ": "auftrag", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": 2026, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "typ": "auftrag", "intervallMonate": null, "intervallKm": 3000,
+      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "reparatur", "name": "Reparatur", "typ": "auftrag", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "eigenleistung", "name": "Eigenleistung", "typ": "auftrag", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "bremse", "name": "Bremsbeläge wechseln", "typ": "aufgabe", "intervallMonate": null, "intervallKm": 5000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Bremse vorn", "zuordnung": "naechste-inspektion" },
+    { "id": "kette", "name": "Kette wechseln", "typ": "aufgabe", "intervallMonate": null, "intervallKm": 3000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Kette", "zuordnung": "naechste-inspektion" },
+    { "id": "reifen-hinten", "name": "Reifen wechseln", "typ": "aufgabe", "intervallMonate": null, "intervallKm": 4000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Hinterrad", "zuordnung": "naechste-inspektion" }
+  ],
+  "auftraege": [
+    { "id": "a-erst", "wartungsartId": "erstinspektion", "status": "erledigt", "termin": null, "werkstatt": "Beispiel-Werkstatt",
+      "datum": "2025-04-10", "kmStand": 1500, "kmManuell": true, "notiz": "Speichen nachgezogen",
+      "positionen": [{ "id": "pos-m-1", "art": "mangel", "mangelId": "m-1", "status": "erledigt", "notiz": "" }], "ausgeschlossen": [] },
+    { "id": "a-klein", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2026-11-20", "werkstatt": "Rad & Co, Süd; Filiale",
+      "datum": null, "kmStand": null, "kmManuell": false, "notiz": "Schlüssel abgeben\nRückruf erbeten",
+      "positionen": [
+        { "id": "pos-bremse", "art": "aufgabe", "wartungsartId": "bremse", "status": "offen", "notiz": "nur vorn" },
+        { "id": "pos-m-3", "art": "mangel", "mangelId": "m-3", "status": "offen", "notiz": "" }
+      ], "ausgeschlossen": ["kette"] },
+    { "id": "a-rep", "wartungsartId": "reparatur", "status": "geplant", "termin": "2026-12-05", "werkstatt": "",
+      "datum": null, "kmStand": null, "kmManuell": false, "notiz": "",
+      "positionen": [{ "id": "pos-reifen", "art": "aufgabe", "wartungsartId": "reifen-hinten", "status": "offen", "notiz": "" }], "ausgeschlossen": [] },
+    { "id": "a-gross", "wartungsartId": "grosse-inspektion", "status": "geplant", "termin": null, "werkstatt": "",
+      "datum": null, "kmStand": null, "kmManuell": false, "notiz": "", "positionen": [], "ausgeschlossen": [] }
+  ],
+  "maengel": [
+    { "id": "m-1", "datum": "2025-04-01", "beschreibung": "Speiche locker", "status": "erledigt", "erledigtAm": "2025-04-10" },
+    { "id": "m-3", "datum": "2026-10-29", "beschreibung": "Klingel klemmt, scheppert", "status": "offen", "erledigtAm": null }
+  ]
+}

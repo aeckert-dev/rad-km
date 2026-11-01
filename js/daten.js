@@ -244,6 +244,13 @@ const MIGRATIONEN = {
     delete d.wartungsprotokoll;
     delete d.termine;
     return d;
+  },
+  // Version 8 → 9: optionale Uhrzeit am Termin eines geplanten Auftrags
+  // (terminZeit, bei allen vorhandenen Aufträgen leer = ganztägig)
+  8: alt => {
+    const d = Object.assign({}, alt, { version: 9 });
+    if (Array.isArray(alt.auftraege)) d.auftraege = alt.auftraege.map(a => istObjekt(a) ? Object.assign({}, a, { terminZeit: null }) : a);
+    return d;
   }
 };
 
@@ -824,6 +831,8 @@ function pruefen(d) {
     const erledigt = x.status === "erledigt";
     const termin = x.termin ?? null;
     if (termin !== null && (erledigt || !istGueltigesDatum(termin))) fehler(wo + ": termin muss bei geplanten Aufträgen ein Datum (JJJJ-MM-TT) oder null sein, bei erledigten null.");
+    const terminZeit = x.terminZeit ?? null;
+    if (terminZeit !== null && (termin === null || !istUhrzeit(terminZeit))) fehler(wo + ": terminZeit muss eine Uhrzeit im Format HH:MM oder null sein (nur zusammen mit einem Termin).");
     const datum = x.datum ?? null;
     if (erledigt ? !istGueltigesDatum(datum) : datum !== null) fehler(wo + ": datum muss bei erledigten Aufträgen ein gültiges Datum (JJJJ-MM-TT) sein, bei geplanten null.");
     if (erledigt) wo += " vom " + datumText(datum);
@@ -884,7 +893,7 @@ function pruefen(d) {
     });
     if (new Set(ausgeschlossen).size !== ausgeschlossen.length) fehler(wo + ": ausgeschlossen enthält eine Aufgabe doppelt.");
     return {
-      id, wartungsartId: art.id, status: x.status, termin, werkstatt: optText(x.werkstatt, wo + " (werkstatt)"),
+      id, wartungsartId: art.id, status: x.status, termin, terminZeit, werkstatt: optText(x.werkstatt, wo + " (werkstatt)"),
       datum, kmStand: ks === null ? null : runden(ks), kmManuell: manuell && ks !== null, notiz: optText(x.notiz, wo + " (notiz)"),
       positionen, ausgeschlossen
     };

@@ -33,6 +33,7 @@ const DATEIEN = [
   "js/berechnungen.js",
   "js/statistik.js",
   "js/wartung.js",
+  "js/kalender.js",
   "js/wetter.js",
   "js/oberflaeche.js",
   "js/uebersicht.js",

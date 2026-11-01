@@ -15,6 +15,9 @@ const AKTIONEN = {
     if (aktiverTab === "uebersicht" || aktiverTab === "wetter") wetterBeiBedarf();
   },
   "fenster-zu": () => fensterSchliessen(),
+  "kalender": el => kalenderFenster(el.dataset.key),
+  "kalender-oeffnen": el => kalenderOeffnen(el.dataset.key),
+  "kalender-teilen": el => kalenderTeilen(el.dataset.key),
   "gruppe": el => gruppeUmschalten(el.dataset.key),
 
   "vorlage-erfassen": el => {
@@ -140,6 +143,7 @@ const AENDERUNGEN = {
   "art-typ": () => artTypGeaendert(),
   "fahrtag": () => fahrtageGeaendert(),
   "hinweis-heute-an": el => hinweisHeuteAnGeaendert(el.checked),
+  "termin-zeit-an": el => { document.getElementById("t-zeit").disabled = !el.checked; },
   "hinweis-heute-ab": el => hinweisHeuteAbGeaendert(el.value),
   "fahrt-abfahrt-an": el => { const f = document.getElementById("fz-abfahrt"); if (f) f.disabled = !el.checked; },
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),

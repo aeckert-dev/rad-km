@@ -17,7 +17,7 @@ function auftragFestlegen(key) {
   // Eine Auftragsart mit Fälligkeit hat höchstens einen geplanten Auftrag
   const geplant = hatFaelligkeit(art) && daten.auftraege.find(a => a.status === "geplant" && a.wartungsartId === artId);
   if (geplant) return geplant;
-  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
+  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, terminZeit: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
     notiz: "", positionen: [], ausgeschlossen: [] };
   daten.auftraege.push(a);
   return a;
@@ -240,6 +240,7 @@ function auftragAnsicht(key) {
     '<div class="' + o.klasse + '">' + esc(o.text) + '</div>' +
     (o.regel && o.termin && o.regel.datum ? '<div class="klein">Ohne Termin: ' + esc(o.regel.text) + '</div>' : "") +
     (o.auftrag.notiz ? '<div class="klein umbrueche">' + esc(o.auftrag.notiz) + '</div>' : "") +
+    (o.auftrag.id && o.termin ? '<div class="knopfreihe"><button type="button" data-action="kalender" data-key="' + k + '">📅 In Kalender übernehmen</button></div>' : "") +
     '<h3>Positionen</h3>' + (zeilen || '<div class="klein">Noch keine Positionen.</div>') +
     o.vorschlaege.map(x => vorschlagHtml(x, o)).join("") +
     (aufgabenWahl.length ? '<label for="ap-aufgabe">Aufgabe hinzufügen</label><div class="suchzeile"><select id="ap-aufgabe">' +
@@ -328,10 +329,14 @@ function auftragTerminFormular(key) {
   const o = neu ? null : offenerVon(key);
   const art = neu ? artVon(key.slice(8)) : o && o.art;
   if (!art) return;
-  const a = o ? o.auftrag : { termin: null, werkstatt: "", notiz: "" };
+  const a = o ? o.auftrag : { termin: null, terminZeit: null, werkstatt: "", notiz: "" };
   fensterOeffnen(
     '<h2>' + (neu ? "Neuer Auftrag: " : "Termin: ") + esc(art.name) + '</h2>' +
     '<label for="t-datum">Termin' + (neu ? " (optional)" : "") + '</label><input type="date" id="t-datum" value="' + (a.termin || "") + '">' +
+    // Schalter und Uhrzeit (das Uhrzeitfeld lässt sich auf dem iPhone nicht leeren)
+    '<label class="haken"><input type="checkbox" id="t-zeit-an" data-change="termin-zeit-an"' + (a.terminZeit ? " checked" : "") + '><span>Mit Uhrzeit</span></label>' +
+    '<label for="t-zeit">Uhrzeit</label><input type="time" id="t-zeit" value="' + (a.terminZeit || "09:00") + '"' + (a.terminZeit ? "" : " disabled") + '>' +
+    '<div class="feldhinweis">Ohne Uhrzeit gilt der Termin ganztägig, auch im Kalender.</div>' +
     '<label for="t-werkstatt">Werkstatt</label><input type="text" id="t-werkstatt" value="' + esc(a.werkstatt) + '">' +
     '<label for="t-notiz">Notiz</label><textarea id="t-notiz">' + esc(a.notiz) + '</textarea>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
@@ -343,9 +348,13 @@ function auftragTerminSpeichern(key) {
   const datum = wert("t-datum");
   if (datum !== "" && !istGueltigesDatum(datum)) { alert("Bitte ein gültiges Datum wählen."); return; }
   if (!key.startsWith("anlegen:") && datum === "") { alert("Bitte ein Datum wählen. Ohne Termin: „Termin entfernen“."); return; }
+  const mitZeit = document.getElementById("t-zeit-an").checked;
+  const zeit = wert("t-zeit");
+  if (mitZeit && datum === "") { alert("Eine Uhrzeit geht nur zusammen mit einem Termin."); return; }
+  if (mitZeit && !istUhrzeit(zeit)) { alert("Bitte eine gültige Uhrzeit eingeben, z. B. 09:30."); return; }
   const a = auftragFestlegen(key);
   if (!a) return;
-  Object.assign(a, { termin: datum || null, werkstatt: wert("t-werkstatt").trim(), notiz: wert("t-notiz").trim() });
+  Object.assign(a, { termin: datum || null, terminZeit: mitZeit ? zeit : null, werkstatt: wert("t-werkstatt").trim(), notiz: wert("t-notiz").trim() });
   if (!speichern()) return;
   zeichnen();
   if (key.startsWith("anlegen:")) { auftragAnsicht(a.id); meldung(artName(a.wartungsartId) + " angelegt"); }
@@ -356,6 +365,7 @@ async function auftragTerminEntfernen(key) {
   const a = auftragFestlegen(key);
   if (!a) return;
   a.termin = null;
+  a.terminZeit = null;
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 async function auftragLoeschen(key) {
@@ -366,6 +376,68 @@ async function auftragLoeschen(key) {
     (m ? "<br><br>" + (m === 1 ? "Der Mangel steht" : "Die " + m + " Mängel stehen") + " danach wieder ohne Auftrag oben im Reiter Wartung." : ""),
     "Löschen", "Abbrechen", true)) return;
   mitRueckgaengig(() => { daten.auftraege = daten.auftraege.filter(x => x !== a); }, "Auftrag gelöscht");
+}
+
+// ---------- Termin in den Kalender (Kalenderdatei .ics, siehe kalender.js) ----------
+// Zwei Wege, weil nicht sicher ist, welcher aus der App auf dem Home-Bildschirm
+// zuverlässig in die Kalender-App führt: öffnen (iOS zeigt die Datei mit
+// „Hinzufügen“) oder teilen (wie bei der Sicherung).
+function kalenderFenster(key) {
+  const o = offenerVon(key);
+  if (!o || !o.auftrag.id || !o.termin) return;
+  const a = o.auftrag;
+  const wann = WOCHENTAGE[new Date(a.termin + "T12:00:00").getDay()] + ". " + datumText(a.termin) +
+    (a.terminZeit ? ", " + a.terminZeit + " Uhr (1 Stunde)" : ", ganztägig");
+  const k = esc(key);
+  fensterOeffnen('<h2>In Kalender übernehmen</h2>' +
+    '<div class="karte"><div><strong>' + esc(kalenderTitel(o)) + '</strong></div><div>' + esc(wann) + '</div>' +
+    '<div class="klein">Erinnerung am Vortag um ' + KALENDER_ERINNERUNG + ' Uhr · ' + (o.positionen.length ? positionenText(o.positionen.length) : "noch keine Positionen") + '</div></div>' +
+    '<button type="button" class="primaer voll" data-action="kalender-oeffnen" data-key="' + k + '">Im Kalender öffnen</button>' +
+    '<p class="klein">Öffnet die Kalenderdatei; tippe dort auf „Hinzufügen“.</p>' +
+    '<button type="button" class="voll" data-action="kalender-teilen" data-key="' + k + '">Als Datei teilen …</button>' +
+    '<p class="klein">Falls das Öffnen nicht klappt: Datei z. B. in „Dateien“ sichern und von dort öffnen.</p>' +
+    '<p class="klein">Hast du den Termin schon einmal übernommen und dann geändert, übernimm ihn erneut und lösche im Kalender den alten Eintrag, falls er doppelt erscheint.</p>' +
+    '<div class="knopfreihe"><button type="button" data-action="auftrag-ansehen" data-key="' + k + '">Zurück</button></div>');
+}
+// Kalenderdatei als Blob bzw. Datei; ohne vorheriges "await" (iPhone: Teilen nur direkt nach einem Tipper)
+function kalenderInhalt(key) {
+  const o = offenerVon(key);
+  if (!o || !o.auftrag.id || !o.termin) return null;
+  return { text: kalenderDatei(o), dateiname: kalenderDateiname(o) };
+}
+function kalenderOeffnen(key) {
+  const k = kalenderInhalt(key);
+  if (!k) return;
+  const url = URL.createObjectURL(new Blob([k.text], { type: "text/calendar;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+async function kalenderTeilen(key) {
+  const k = kalenderInhalt(key);
+  if (!k) return;
+  let datei = null;
+  try { datei = new File([k.text], k.dateiname, { type: "text/calendar" }); } catch (e) { /* ohne File: herunterladen */ }
+  if (datei && navigator.canShare && navigator.canShare({ files: [datei] })) {
+    try {
+      await navigator.share({ files: [datei] });
+      return;
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      if (err && err.name === "NotAllowedError") { meldung("Bitte noch einmal auf „Als Datei teilen …“ tippen"); return; }
+    }
+  }
+  const url = URL.createObjectURL(new Blob([k.text], { type: "text/calendar;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = k.dateiname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 // ---------- Erledigt eintragen (Abschluss) und erledigte Aufträge ----------
@@ -572,7 +644,7 @@ function abschlussSpeichern() {
     if (p.art === "aufgabe") pos.wartungsartId = p.wartungsartId; else pos.mangelId = p.mangelId;
     return pos;
   }).concat(weitere.map(id => ({ id: neueId(), art: "mangel", mangelId: id, status: "erledigt", notiz: "" })));
-  const satz = { status: "erledigt", termin: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
+  const satz = { status: "erledigt", termin: null, terminZeit: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
     notiz: wert("p-notiz").trim(), positionen, ausgeschlossen: [] };
   const key = formAuftrag.key, artId = formAuftrag.artId;
 
