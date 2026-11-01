@@ -1858,7 +1858,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5a, Datenversion 8 (Release 5a)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5a", 8]);
+    gleich("App-Version 5a.1, Datenversion 8 (Release 5a.1)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5a.1", 8]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -3610,12 +3610,13 @@ async function start() {
       [JSON.stringify(w.eval("daten.auftraege").find(a => a.id === kleinId)) === fest, fensterText5()],
       [true, "Kleine Inspektion Datum Sa, 31.10.2026 Werkstatt Beispiel-Werkstatt Kilometerstand 3.040 km (berechnet) Erledigte Positionen ✓ Mangel: Klingel klemmt ✓ Kette " +
         "Nicht gemacht – Bremsbeläge wechseln Schließen Ändern"]);
-    // Ändern: Mangel abwählen → wieder offen; weiteren Mangel abhaken
+    // Ändern: Mangel abwählen → wieder offen; weiteren Mangel mit „+ Mangel“ hinzufügen
     w.erledigterAuftragAendern(kleinId);
     w.document.querySelectorAll('input[name="p-position"]')[1].checked = false;
-    w.document.querySelector('input[name="p-mangel"][value="m-licht"]').checked = true;
+    w.document.getElementById("p-mangel-neu").value = "m-licht";
+    w.document.querySelector('#fensterinhalt [data-action="abschluss-mangel-dazu"]').click();
     w.abschlussSpeichern();
-    gleich("Ändern: abgewählter Mangel wieder offen (Position „nicht gemacht“), weiterer Mangel als erledigte Position",
+    gleich("Ändern: abgewählter Mangel wieder offen (Position „nicht gemacht“), weiterer Mangel mit „+ Mangel“ als erledigte Position",
       [w.eval("daten.auftraege").find(a => a.id === kleinId).positionen.map(p => [p.wartungsartId || p.mangelId, p.status]),
         w.eval("daten.maengel").map(m => [m.id, m.status, m.erledigtAm])],
       [[["bremse", "nicht-gemacht"], ["m-klingel", "nicht-gemacht"], ["kette", "erledigt"], ["m-licht", "erledigt"]], [["m-klingel", "offen", null], ["m-licht", "erledigt", "2026-10-31"]]]);
@@ -3632,8 +3633,9 @@ async function start() {
     w.aufgabeAnsicht("bremse");
     wahr("Ansicht einer Aufgabe: Bauteil, Regel, Fälligkeit, Auftrag, „Zu Auftrag …“, „Erledigt eintragen“ (Eigenleistung)",
       fensterText5().startsWith("Bremsbeläge wechseln Bauteil Bremse vorn Regel Intervall: 3.200 km · Bremse vorn · Standard: Große Inspektion Fälligkeit fällig ca. im November 2026") &&
-      fensterText5().includes("Auftrag Kleine Inspektion (fällig bis 30.11.)") && fensterText5().includes("legt eine erledigte Eigenleistung"), fensterText5());
+      fensterText5().includes("Auftrag Kleine Inspektion (fällig bis 30.11.)") && fensterText5().includes("als neuer Auftrag (z. B. Eigenleistung"), fensterText5());
     w.document.querySelector('#fensterinhalt [data-action="aufgabe-erledigen"]').click();
+    w.document.querySelector('#fensterinhalt [data-action="aufgabe-erledigen-neu"]').click();
     gleich("„Erledigt eintragen“ an der Aufgabe: Formular einer Eigenleistung mit dieser Position", [w.document.querySelector("#fensterinhalt h2").textContent,
       [...w.document.querySelectorAll('input[name="p-position"]')].map(el => ohneTags(el.parentElement.innerHTML))], ["Erledigt: Eigenleistung", ["🔧 Bremsbeläge wechseln"]]);
     w.abschlussSpeichern();
@@ -3657,6 +3659,230 @@ async function start() {
     wahr("Ansicht eines offenen Mangels: „noch keinem Auftrag zugeordnet“ und „Zu Auftrag …“", fensterText5().includes("Im Auftrag noch keinem Auftrag zugeordnet") &&
       fensterText5().includes("Zu Auftrag …"), fensterText5());
     w.fensterSchliessen();
+
+    // -------------------------------------------------------------
+    // 56a. Positionen in erledigten Aufträgen (Release 5a.1, W16)
+    // -------------------------------------------------------------
+    abschnitt("56a. Positionen in erledigten Aufträgen (W16): + Aufgabe, + Mangel, × je Position, „Rückgängig“; „Erledigt eintragen“ an einer Aufgabe mit Auswahl");
+    const MAENGEL56 = [...kopie(MAENGEL5),
+      { id: "m-blech", datum: "2026-03-01", beschreibung: "Schutzblech klappert", status: "offen", erledigtAm: null },
+      { id: "m-speiche", datum: "2026-04-01", beschreibung: "Speiche lose", status: "offen", erledigtAm: null },
+      { id: "m-geplant", datum: "2026-02-01", beschreibung: "Sattel knarzt", status: "offen", erledigtAm: null }];
+    const werkstatt56 = (aend = {}) => werkstatt5(Object.assign({ maengel: kopie(MAENGEL56), auftraege: [
+      auftragV8({ id: "a-gi", wartungsartId: "gross", datum: "2026-03-06", werkstatt: "Beispiel-Werkstatt", notiz: "Ölwechsel Nabe, Kette geölt", positionen: [] }),
+      auftragV8({ id: "a-rep", wartungsartId: "rep", datum: "2026-08-01", positionen: [pos("r1", "aufgabe", "kette", "erledigt")] }),
+      auftragV8({ id: "a-gep", wartungsartId: "rep", status: "geplant", positionen: [pos("g1", "mangel", "m-geplant", "offen")] })] }, aend));
+    const auftrag56 = id => w.eval("daten.auftraege").find(a => a.id === id);
+    const posKurz = a => a.positionen.map(p => [p.wartungsartId || p.mangelId, p.status]);
+    const optionen = id => [...w.document.querySelectorAll("#" + id + " option")].map(o => o.value);
+    const klick = aktion => w.document.querySelector('#fensterinhalt [data-action="' + aktion + '"]').click();
+    const toast56 = () => [w.document.getElementById("toast-text").textContent, !w.document.getElementById("toast-knopf").hidden];
+    werkstatt56();
+    const kmGi = w.kmStandAm("2026-03-06");
+    const oelVorher = lage5().aufgabeVon("oel").st;
+    gleich("Ausgangslage: Ölwechsel nur in der Notiz der Großen Inspektion → gilt als nie durchgeführt (fällig ab Startdatum)",
+      [oelVorher.letzte, oelVorher.datum, oelVorher.text], [null, "2027-01-01", "fällig in 61 Tagen (01.01.2027)"]);
+
+    // + Aufgabe im erledigten Auftrag
+    w.erledigterAuftragAnsicht(auftrag56("a-gi"));
+    klick("erledigt-aendern");
+    gleich("„Auftrag bearbeiten“: „+ Aufgabe“ mit allen Aufgaben; „+ Mangel“ nur offene Mängel ohne Auftrag bis zum Auftragsdatum; keine Liste „Weitere offene Mängel“",
+      [w.document.querySelector("#fensterinhalt h2").textContent, optionen("p-aufgabe-neu"), optionen("p-mangel-neu"), w.document.querySelectorAll('input[name="p-mangel"]').length],
+      ["Auftrag bearbeiten: Große Inspektion", ["bremse", "oel", "kette", "licht"], ["m-blech"], 0]);
+    w.document.getElementById("p-werkstatt").value = "Beispiel-Werkstatt Nord";
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    gleich("Aufgabe hinzugefügt: Position „erledigt“ abgehakt, mit ×; nicht mehr in der Auswahl; Eingaben bleiben erhalten",
+      [[...w.document.querySelectorAll('input[name="p-position"]')].map(el => [el.checked, ohneTags(el.parentElement.innerHTML)]),
+        w.document.querySelectorAll('[data-action="abschluss-position-entfernen"]').length, optionen("p-aufgabe-neu"), w.document.getElementById("p-werkstatt").value],
+      [[[true, "🔧 Ölwechsel Nabe"]], 1, ["bremse", "kette", "licht"], "Beispiel-Werkstatt Nord"]);
+    w.document.getElementById("p-werkstatt").value = "Beispiel-Werkstatt";
+    let vor56 = JSON.stringify(w.eval("daten"));
+    w.abschlussSpeichern();
+    let oel = lage5().aufgabeVon("oel").st;
+    gleich("Gespeichert mit „Rückgängig“; Ölwechsel erledigt mit Datum und km-Stand der Großen Inspektion, nächste Fälligkeit 06.03.2027",
+      [toast56(), posKurz(auftrag56("a-gi")), oel.letzte.datum, oel.letzte.kmStand, oel.datum, oel.text],
+      [["Auftrag gespeichert", true], [["oel", "erledigt"]], "2026-03-06", kmGi, "2027-03-06", "fällig in 125 Tagen (06.03.2027)"]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“: Daten wie vorher, Ölwechsel wieder nie durchgeführt",
+      [JSON.stringify(w.eval("daten")) === vor56, lage5().aufgabeVon("oel").st.letzte], [true, null]);
+    // Nicht gemacht (Haken weg) zählt nicht
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    w.document.querySelector('input[name="p-position"]').checked = false;
+    w.abschlussSpeichern();
+    gleich("Hinzugefügte Aufgabe abgewählt: Position „nicht gemacht“, Fälligkeit unverändert",
+      [posKurz(auftrag56("a-gi")), lage5().aufgabeVon("oel").st.text], [[["oel", "nicht-gemacht"]], oelVorher.text]);
+    // Position entfernen → Fälligkeit wie vorher
+    werkstatt56();
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    w.abschlussSpeichern();
+    w.erledigterAuftragAendern("a-gi");
+    klick("abschluss-position-entfernen");
+    gleich("× entfernt die Position im Formular (noch nichts gespeichert); die Aufgabe ist wieder wählbar",
+      [w.document.querySelectorAll('input[name="p-position"]').length, optionen("p-aufgabe-neu").includes("oel"), posKurz(auftrag56("a-gi"))],
+      [0, true, [["oel", "erledigt"]]]);
+    w.abschlussSpeichern();
+    oel = lage5().aufgabeVon("oel").st;
+    gleich("Position entfernt und gespeichert: Fälligkeit wie vorher; mit „Rückgängig“",
+      [posKurz(auftrag56("a-gi")), oel.letzte, oel.datum, oel.text, toast56()], [[], null, oelVorher.datum, oelVorher.text, ["Auftrag gespeichert", true]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“ nach dem Entfernen: Ölwechsel wieder erledigt", lage5().aufgabeVon("oel").st.letzte.datum, "2026-03-06");
+    // Abbrechen verwirft hinzugefügte und entfernte Positionen
+    vor56 = JSON.stringify(w.eval("daten"));
+    w.erledigterAuftragAendern("a-gi");
+    klick("abschluss-position-entfernen");
+    w.document.getElementById("p-aufgabe-neu").value = "kette";
+    klick("abschluss-aufgabe-dazu");
+    w.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"]').click();
+    gleich("„Abbrechen“ verwirft die Änderungen im Formular", JSON.stringify(w.eval("daten")) === vor56, true);
+
+    // + Mangel → mit dem Datum des Auftrags geschlossen; × → wieder offen
+    werkstatt56();
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-mangel-neu").value = "m-blech";
+    klick("abschluss-mangel-dazu");
+    gleich("Mangel hinzugefügt: Position „erledigt“, nicht mehr in der Auswahl (danach keine weitere)",
+      [[...w.document.querySelectorAll('input[name="p-position"]')].map(el => [el.checked, ohneTags(el.parentElement.innerHTML)]), !!w.document.getElementById("p-mangel-neu")],
+      [[[true, "⚠️ Schutzblech klappert"]], false]);
+    w.abschlussSpeichern();
+    const blech = () => (({ status, erledigtAm }) => [status, erledigtAm])(w.eval("daten.maengel").find(m => m.id === "m-blech"));
+    gleich("Gespeichert: Mangel mit dem Datum des Auftrags geschlossen; nicht mehr unter den offenen Mängeln ohne Auftrag",
+      [posKurz(auftrag56("a-gi")), blech(), lage5().maengelOhneAuftrag.map(m => m.id).includes("m-blech")], [[["m-blech", "erledigt"]], ["erledigt", "2026-03-06"], false]);
+    w.mangelAnsicht("m-blech");
+    wahr("Ansicht des Mangels: erledigt mit der Großen Inspektion", fensterText5().includes("Große Inspektion"), fensterText5());
+    w.erledigterAuftragAendern("a-gi");
+    klick("abschluss-position-entfernen");
+    w.abschlussSpeichern();
+    gleich("Mangel-Position entfernt: Mangel wieder offen (wie beim Löschen des Auftrags), wieder ohne Auftrag; mit „Rückgängig“",
+      [posKurz(auftrag56("a-gi")), blech(), lage5().maengelOhneAuftrag.map(m => m.id).includes("m-blech"), toast56()],
+      [[], ["offen", null], true, ["Auftrag gespeichert", true]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“: Mangel wieder erledigt mit der Großen Inspektion", [posKurz(auftrag56("a-gi")), blech()], [[["m-blech", "erledigt"]], ["erledigt", "2026-03-06"]]);
+    // Auswahl „+ Mangel“ folgt dem Datum im Formular
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-datum").value = "2026-04-02";
+    w.protokollDatumGeaendert();
+    gleich("Datum im Formular auf 02.04.2026 geändert: „+ Mangel“ bietet jetzt auch den am 01.04. erfassten Mangel an; Position bleibt",
+      [optionen("p-mangel-neu"), w.document.querySelectorAll('input[name="p-position"]:checked').length, w.document.getElementById("p-km").value],
+      [["m-speiche"], 1, w.kmFeld(w.kmStandAm("2026-04-02"))]);
+    w.fensterSchliessen();
+
+    // Geplante Position nur entfernen, wenn dieser Auftrag die neueste Erledigung ist
+    werkstatt56();
+    w.aufgabeZuAuftrag("neu:klein", "oel");
+    w.speichern();
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    w.abschlussSpeichern();
+    gleich("Aufgabe zu erledigtem Auftrag (neueste Erledigung): aus dem geplanten Auftrag entfernt",
+      w.eval("daten.auftraege").filter(a => a.status === "geplant" && a.wartungsartId === "klein").map(posKurz), [[]]);
+    werkstatt56();
+    w.eval(`daten.auftraege.find(a => a.id === "a-rep").positionen.push({ id: "r2", art: "aufgabe", wartungsartId: "oel", status: "erledigt", notiz: "" })`);
+    w.aufgabeZuAuftrag("neu:klein", "oel");
+    w.speichern();
+    const oelRep = lage5().aufgabeVon("oel").st;
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    w.abschlussSpeichern();
+    gleich("Aufgabe zu einem älteren erledigten Auftrag (spätere Erledigung vorhanden): bleibt im geplanten Auftrag, Fälligkeit unverändert",
+      [w.eval("daten.auftraege").filter(a => a.status === "geplant" && a.wartungsartId === "klein").map(posKurz), lage5().aufgabeVon("oel").st.letzte.datum, lage5().aufgabeVon("oel").st.text === oelRep.text],
+      [[[["oel", "offen"]]], "2026-08-01", true]);
+
+    // Abschluss eines geplanten Auftrags: + Aufgabe und ×, Mängel-Liste bleibt
+    werkstatt5();
+    w.aufgabeZuAuftrag("neu:klein", "bremse");
+    w.speichern();
+    w.auftragErledigen(w.eval("daten.auftraege[0].id"));
+    klick("abschluss-position-entfernen");
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    gleich("Abschluss: Position entfernt, Aufgabe hinzugefügt; „+ Mangel“ nicht, dafür die Liste weiterer offener Mängel",
+      [[...w.document.querySelectorAll('input[name="p-position"]')].map(el => [el.checked, ohneTags(el.parentElement.innerHTML)]),
+        !!w.document.getElementById("p-mangel-neu"), [...w.document.querySelectorAll('input[name="p-mangel"]')].map(el => el.value)],
+      [[[true, "🔧 Kette"], [true, "🔧 Ölwechsel Nabe"]], false, ["m-klingel"]]);
+    w.document.querySelector('input[name="p-mangel"]').checked = true;
+    klick("abschluss-position-entfernen");
+    gleich("Abgehakter weiterer Mangel bleibt nach × abgehakt", w.document.querySelector('input[name="p-mangel"]').checked, true);
+    w.abschlussSpeichern();
+    gleich("Abschluss gespeichert: genau die angezeigten Positionen (entfernte nicht); die entfernte Kette und die Bremse stehen nach Standard wieder in der Großen Inspektion",
+      [posKurz(w.eval("daten.auftraege").find(a => a.status === "erledigt")), offenKurz(lage5()).find(o => o[0] === "gross")[4]],
+      [[["oel", "erledigt"], ["m-klingel", "erledigt"]], ["kette*", "bremse*"]]);
+
+    // „Erledigt eintragen“ an einer Aufgabe: Auswahl
+    werkstatt56();
+    w.aufgabeAnsicht("oel");
+    klick("aufgabe-erledigen");
+    gleich("Auswahl: neuer Auftrag (Auftragsarten ohne Intervall, Eigenleistung vorgewählt) oder erledigter Auftrag (neueste zuerst, mit Datum, Art und km)",
+      [w.document.querySelector("#fensterinhalt h2").textContent, optionen("ae-art"), w.document.getElementById("ae-art").value,
+        [...w.document.querySelectorAll('[data-action="aufgabe-zu-erledigtem"]')].map(el => [el.dataset.id, ohneTags(el.innerHTML), el.disabled])],
+      ["Erledigt: Ölwechsel Nabe", ["rep", "eigen"], "eigen",
+        [["a-rep", "01.08.2026 · Reparatur " + w.kmText(w.kmStandAm("2026-08-01")) + " km ›", false], ["a-gi", "06.03.2026 · Große Inspektion " + w.kmText(kmGi) + " km ›", false]]]);
+    klick("aufgabe-erledigen-neu");
+    gleich("Neue Eigenleistung: Formular mit dieser Position", [w.document.querySelector("#fensterinhalt h2").textContent,
+      [...w.document.querySelectorAll('input[name="p-position"]')].map(el => [el.checked, ohneTags(el.parentElement.innerHTML)])], ["Erledigt: Eigenleistung", [[true, "🔧 Ölwechsel Nabe"]]]);
+    w.abschlussSpeichern();
+    let neu56 = w.eval("daten.auftraege").slice(-1)[0];
+    gleich("Erledigte Eigenleistung gespeichert (heute), Ölwechsel neu ab heute", [neu56.wartungsartId, neu56.status, neu56.datum, posKurz(neu56), lage5().aufgabeVon("oel").st.letzte.datum],
+      ["eigen", "erledigt", H5, [["oel", "erledigt"]], H5]);
+    werkstatt56();
+    w.aufgabeErledigen("bremse");
+    w.document.getElementById("ae-art").value = "rep";
+    klick("aufgabe-erledigen-neu");
+    gleich("Neue Reparatur gewählt: Formular „Erledigt: Reparatur“", w.document.querySelector("#fensterinhalt h2").textContent, "Erledigt: Reparatur");
+    w.abschlussSpeichern();
+    neu56 = w.eval("daten.auftraege").slice(-1)[0];
+    gleich("Erledigte Reparatur mit der Bremse gespeichert", [neu56.wartungsartId, neu56.status, posKurz(neu56)], ["rep", "erledigt", [["bremse", "erledigt"]]]);
+    werkstatt56();
+    w.aufgabeErledigen("oel");
+    w.document.querySelector('[data-action="aufgabe-zu-erledigtem"][data-id="a-gi"]').click();
+    gleich("Zu erledigtem Auftrag: „Auftrag bearbeiten“ mit der Aufgabe als erledigte Position (noch nicht gespeichert)",
+      [w.document.querySelector("#fensterinhalt h2").textContent, [...w.document.querySelectorAll('input[name="p-position"]')].map(el => [el.checked, ohneTags(el.parentElement.innerHTML)]),
+        posKurz(auftrag56("a-gi"))], ["Auftrag bearbeiten: Große Inspektion", [[true, "🔧 Ölwechsel Nabe"]], []]);
+    vor56 = JSON.stringify(w.eval("daten"));
+    w.abschlussSpeichern();
+    gleich("Gespeichert: Position im erledigten Auftrag, Fälligkeit ab dessen Datum und km; mit „Rückgängig“",
+      [posKurz(auftrag56("a-gi")), lage5().aufgabeVon("oel").st.letzte.datum, lage5().aufgabeVon("oel").st.letzte.kmStand, toast56()],
+      [[["oel", "erledigt"]], "2026-03-06", kmGi, ["Auftrag gespeichert", true]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“", JSON.stringify(w.eval("daten")) === vor56, true);
+    // Nicht doppelt: schon erledigt → ausgegraut; nicht gemacht → wählbar und wird erledigt
+    werkstatt56();
+    w.eval(`daten.auftraege.find(a => a.id === "a-gi").positionen.push({ id: "n1", art: "aufgabe", wartungsartId: "kette", status: "nicht-gemacht", notiz: "" })`);
+    w.speichern();
+    w.aufgabeErledigen("kette");
+    gleich("Kette: in der Reparatur schon erledigt (ausgegraut), in der Großen Inspektion „nicht gemacht“ (wählbar)",
+      [...w.document.querySelectorAll('[data-action="aufgabe-zu-erledigtem"]')].map(el => [el.dataset.id, el.disabled, ohneTags(el.innerHTML).includes("schon erledigt"), ohneTags(el.innerHTML).includes("dort nicht gemacht")]),
+      [["a-rep", true, true, false], ["a-gi", false, false, true]]);
+    w.document.querySelector('[data-action="aufgabe-zu-erledigtem"][data-id="a-gi"]').click();
+    w.abschlussSpeichern();
+    gleich("„Nicht gemacht“ wird „erledigt“, die Aufgabe steht nicht doppelt im Auftrag", posKurz(auftrag56("a-gi")), [["kette", "erledigt"]]);
+    w.erledigterAuftragAendern("a-rep", "kette");
+    gleich("Aufgabe, die im Auftrag schon erledigt ist, wird nicht doppelt eingetragen", w.document.querySelectorAll('input[name="p-position"]').length, 1);
+    w.fensterSchliessen();
+
+    // Export/Import und „Sicherung prüfen“ unverändert
+    werkstatt56();
+    const sich56 = w.exportInhalt();
+    w.erledigterAuftragAendern("a-gi");
+    w.document.getElementById("p-aufgabe-neu").value = "oel";
+    klick("abschluss-aufgabe-dazu");
+    w.document.getElementById("p-mangel-neu").value = "m-blech";
+    klick("abschluss-mangel-dazu");
+    w.abschlussSpeichern();
+    const nach56 = w.exportInhalt();
+    const wieder56 = w.eval("datenEinlesen(" + JSON.stringify(nach56) + ")");
+    gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 8)",
+      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 8]);
+    gleich("„Sicherung prüfen“: frische Sicherung identisch", w.sicherungAuswerten(nach56, w.eval("daten"), H5).status, "identisch");
+    const alt56 = w.sicherungAuswerten(sich56, w.eval("daten"), H5);
+    gleich("„Sicherung prüfen“: Sicherung von vorher weicht ab (Auftrag geändert, Mangel geändert)", [alt56.status, alt56.titel, alt56.details],
+      ["abweichend", "Sicherung weicht vom aktuellen Stand ab", ["1 Auftrag geändert", "1 Mangel geändert"]]);
 
     // -------------------------------------------------------------
     // 57. Wartungsarten: Art, Bauteil, Standard-Zuordnung, Wechsel nur unbenutzt
