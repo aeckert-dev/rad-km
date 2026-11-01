@@ -1,0 +1,72 @@
+{
+  "version": 7,
+  "kurzinfo": { "zeitpunkt": "2026-11-01T18:00:00.000Z", "appVersion": "4e", "eintraege": 4,
+                "kmSumme": 52.6, "kmStand": 1253.1, "wartungen": 7, "maengel": 4 },
+  "fahrrad": { "name": "Test-Rad", "startdatum": "2025-03-01", "startKm": 1200.5,
+               "rahmennummer": "TST 0007", "beschreibung": "Grau, 28 Zoll\nNabenschaltung" },
+  "einstellungen": {
+    "fahrtage": [1, 2, 5],
+    "jahresziele": [{ "jahr": 2026, "km": 4000 }],
+    "hinweisHeuteAn": true,
+    "hinweisHeuteAb": "18:00"
+  },
+  "vorlagen": [
+    { "id": "v-arbeit", "name": "Arbeit hin und zurück", "km": 14.2, "arbeitsweg": true }
+  ],
+  "eintraege": [
+    { "id": "e-woche1", "datum": "2025-03-03", "km": 10, "vorlage": null, "notiz": "aus Excel", "typ": "woche", "arbeitsweg": false, "wetter": null },
+    { "id": "e-tag1", "datum": "2026-10-26", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true, "wetter": null },
+    { "id": "e-tag2", "datum": "2026-10-27", "km": 14.2, "vorlage": "Arbeit hin und zurück", "notiz": "", "typ": "tag", "arbeitsweg": true, "wetter": null },
+    { "id": "e-tag3", "datum": "2026-10-30", "km": 14.2, "vorlage": null, "notiz": "Umweg 🚲 <b>&</b> „Zitat“", "typ": "tag", "arbeitsweg": false, "wetter": null }
+  ],
+  "wartungsarten": [
+    { "id": "erstinspektion", "name": "Erstinspektion", "intervallMonate": 3, "intervallKm": 300,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": true },
+    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": 2026, "einmalig": false },
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": null, "intervallKm": 3000,
+      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027, "einmalig": false },
+    { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "bremse", "name": "Bremsbeläge wechseln", "intervallMonate": null, "intervallKm": 5000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "oel", "name": "Ölwechsel Nabe", "intervallMonate": 24, "intervallKm": 5000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "kette", "name": "Kette", "intervallMonate": null, "intervallKm": 3000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
+    { "id": "reifen-hinten", "name": "Reifen und Schlauch wechseln hinten", "intervallMonate": null, "intervallKm": 4000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false }
+  ],
+  "wartungsprotokoll": [
+    { "id": "p-erst", "datum": "2025-04-10", "wartungsartId": "erstinspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1500, "kmManuell": true, "notiz": "Speichen nachgezogen" },
+    { "id": "p-klein", "datum": "2025-10-20", "wartungsartId": "kleine-inspektion", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1210.5, "kmManuell": false, "notiz": "" },
+    { "id": "p-bremse", "datum": "2025-10-20", "wartungsartId": "bremse", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1210.5, "kmManuell": false, "notiz": "vorn und hinten" },
+    { "id": "p-oel", "datum": "2025-10-20", "wartungsartId": "oel", "werkstatt": "Zweiradladen Muster",
+      "kmStand": 1890, "kmManuell": true, "notiz": "" },
+    { "id": "p-kette", "datum": "2026-05-02", "wartungsartId": "kette", "werkstatt": "",
+      "kmStand": 1210.5, "kmManuell": false, "notiz": "selbst gewechselt" },
+    { "id": "p-reifen", "datum": "2026-05-02", "wartungsartId": "reifen-hinten", "werkstatt": "",
+      "kmStand": 1210.5, "kmManuell": false, "notiz": "" },
+    { "id": "p-rep", "datum": "2026-07-01", "wartungsartId": "reparatur", "werkstatt": "Beispiel-Werkstatt",
+      "kmStand": 1210.5, "kmManuell": false, "notiz": "Speiche ersetzt" }
+  ],
+  "termine": [
+    { "wartungsartId": "kleine-inspektion", "datum": "2026-11-20", "werkstatt": "Beispiel-Werkstatt" },
+    { "wartungsartId": "kette", "datum": "2026-11-20", "werkstatt": "Beispiel-Werkstatt" },
+    { "wartungsartId": "oel", "datum": "2027-04-10", "werkstatt": "Zweiradladen Muster" },
+    { "wartungsartId": "reifen-hinten", "datum": "2026-12-05", "werkstatt": "" }
+  ],
+  "maengel": [
+    { "id": "m-1", "datum": "2025-10-01", "beschreibung": "Bremse quietscht", "status": "erledigt",
+      "erledigtAm": "2025-10-20", "protokollId": "p-klein" },
+    { "id": "m-2", "datum": "2026-04-28", "beschreibung": "Kette springt", "status": "erledigt",
+      "erledigtAm": "2026-05-02", "protokollId": "p-kette" },
+    { "id": "m-3", "datum": "2026-10-29", "beschreibung": "Klingel klemmt", "status": "offen",
+      "erledigtAm": null, "protokollId": null },
+    { "id": "m-4", "datum": "2026-06-01", "beschreibung": "Licht hinten wackelt", "status": "erledigt",
+      "erledigtAm": "2026-06-03", "protokollId": null }
+  ]
+}

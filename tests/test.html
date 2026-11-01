@@ -70,6 +70,22 @@ const fahrzeitV7 = f => f.abfahrt === null ? Object.assign({}, f, { abfahrtAn: f
 // Wetter-Einstellungen bis Version 6 → ab Version 7: Fahrzeiten mit Schalter, Wetter außerhalb der Fahrten am Wohnort
 const wetterV7 = wt => Object.assign({}, wt, { ortAusserhalb: "wohnort", hinfahrt: fahrzeitV7(wt.hinfahrt), rueckfahrt: fahrzeitV7(wt.rueckfahrt) });
 const warten = ms => new Promise(r => setTimeout(r, ms));
+// Ab Version 8 (Release 5a): Wartungsart aus einer Art bis Version 7 mit Art, Bauteil und Standard-Zuordnung
+const artV8 = (a, typ) => Object.assign({ fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false }, a,
+  { typ, bauteil: null, zuordnung: typ === "aufgabe" ? "naechste-inspektion" : null });
+// Die Umwandlung 7 → 8 ergänzt „Eigenleistung“ (Auftrag ohne Intervall)
+const EIGENLEISTUNG = { id: "eigenleistung", name: "Eigenleistung", typ: "auftrag", intervallMonate: null, intervallKm: null, fensterVon: null,
+  fensterBis: null, gueltigAbJahr: null, einmalig: false, bauteil: null, zuordnung: null };
+// Auftrag ab Version 8; aus einem Protokolleintrag bzw. Termin bis Version 7 (Kennungen daraus abgeleitet)
+const auftragV8 = felder => Object.assign({ status: "erledigt", termin: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false, notiz: "",
+  positionen: [], ausgeschlossen: [] }, felder);
+const ausProtokoll = (p, positionen = []) => auftragV8({ id: p.id, wartungsartId: p.wartungsartId, datum: p.datum, werkstatt: p.werkstatt || "",
+  kmStand: p.kmStand ?? null, kmManuell: p.kmManuell ?? (p.kmStand !== undefined && p.kmStand !== null), notiz: p.notiz || "", positionen });
+const ausTermin = (t, positionen = []) => auftragV8({ id: "termin-" + t.wartungsartId, wartungsartId: t.wartungsartId, status: "geplant", termin: t.datum,
+  werkstatt: t.werkstatt || "", positionen });
+const REPARATUR_NEU = Object.assign({}, EIGENLEISTUNG, { id: "reparatur", name: "Reparatur" });
+const posMangel = id => ({ id: "pos-" + id, art: "mangel", mangelId: id, status: "erledigt", notiz: "" });
+const ohneProtokollId = m => { const { protokollId, ...rest } = m; return rest; };
 
 // index.html im unsichtbaren Rahmen laden und auf den Start warten
 function appLaden() {
@@ -113,10 +129,11 @@ async function start() {
     gleich("Beim Laden: Version-2-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v2Text);
     w2.frameElement.remove();
     pruefeUmwandlungV2(kopie(w.datenEinlesen(v2Text)), v2, "Beim Import");
-    gleich("Version 2 ohne „wartungsarten“: Standardarten mit Zeitfenster, nicht einmalig",
+    gleich("Version 2 ohne „wartungsarten“: Standardarten bis Version 7 mit Zeitfenster, nicht einmalig, als Aufträge; Eigenleistung ergänzt",
       w.datenEinlesen(JSON.stringify(Object.assign({}, v2, { wartungsarten: undefined, wartungsprotokoll: [], termine: [], maengel: [] }))).wartungsarten
-        .map(a => [a.id, a.fensterVon, a.fensterBis, a.einmalig]),
-      [["grosse-inspektion", 10, 11, false], ["kleine-inspektion", 3, 4, false], ["reparatur", null, null, false]]);
+        .map(a => [a.id, a.typ, a.fensterVon, a.fensterBis, a.einmalig]),
+      [["grosse-inspektion", "auftrag", 10, 11, false], ["kleine-inspektion", "auftrag", 3, 4, false], ["reparatur", "auftrag", null, null, false],
+        ["eigenleistung", "auftrag", null, null, false]]);
 
     // -------------------------------------------------------------
     // 3. Import, Export → Import, fehlerhafte Daten
@@ -126,7 +143,7 @@ async function start() {
     pruefeUmwandlungV1(imp, v1);
     const exportText = w.exportInhalt("2026-10-25T12:00:00.000Z");
     const exp = JSON.parse(exportText);
-    gleich("Export: version 3, Kurzinfo am Anfang", Object.keys(exp).slice(0, 3), ["version", "kurzinfo", "fahrrad"]);
+    gleich("Export: version, Kurzinfo am Anfang", Object.keys(exp).slice(0, 3), ["version", "kurzinfo", "fahrrad"]);
     gleich("Export: Kurzinfo mit Zeitpunkt, App-Version, Anzahl Einträge, km-Summe, Kilometerstand, Wartungen, Mängel", exp.kurzinfo,
       { zeitpunkt: "2026-10-25T12:00:00.000Z", appVersion: w.eval("APP_VERSION"), eintraege: 6, kmSumme: 110.7, kmStand: 1306.2, wartungen: 3, maengel: 0 });
     gleich("Export enthält die neuen Felder (Einstellungen, Arbeitsweg, einmalig)",
@@ -134,7 +151,7 @@ async function start() {
       [stdEinstellungen(), true, true, true]);
     gleich("Export → Import ergibt dieselben Daten (die Kurzinfo wird beim Import nicht übernommen)", kopie(w.datenEinlesen(exportText)), d);
 
-    // Version-3-Daten mit allen neuen Feldern: Export → Import verlustfrei
+    // Daten mit allen Feldern (bis Release 5a): Export → Import verlustfrei
     const v3 = kopie(d);
     v3.fahrrad.rahmennummer = "WAW 12345";
     v3.fahrrad.beschreibung = "Blau, 28 Zoll\nNabenschaltung";
@@ -142,15 +159,21 @@ async function start() {
     v3.vorlagen[0].arbeitsweg = true;
     v3.eintraege[3].arbeitsweg = true;
     v3.wartungsarten[1].fensterVon = 3; v3.wartungsarten[1].fensterBis = 4; v3.wartungsarten[1].gueltigAbJahr = 2027;
-    v3.wartungsarten[3].einmalig = true;
+    v3.wartungsarten[0].einmalig = true;
+    Object.assign(v3.wartungsarten[3], { bauteil: "Kette", zuordnung: "grosse-inspektion" });
     v3.maengel = [
-      { id: "m-1", datum: "2026-10-01", beschreibung: "Licht hinten wackelt", status: "offen", erledigtAm: null, protokollId: null },
-      { id: "m-2", datum: "2025-03-10", beschreibung: "Bremse quietscht", status: "erledigt", erledigtAm: "2025-03-15", protokollId: "p-1" }
+      { id: "m-1", datum: "2026-10-01", beschreibung: "Licht hinten wackelt", status: "offen", erledigtAm: null },
+      { id: "m-2", datum: "2025-03-10", beschreibung: "Bremse quietscht", status: "erledigt", erledigtAm: "2025-03-15" }
     ];
-    gleich("Version-3-Daten mit Jahreszielen, Fahrtagen, Arbeitsweg, einmalig, Mängeln: Import → Export → Import verlustfrei",
+    v3.auftraege[0].positionen.push(posMangel("m-2"));
+    v3.auftraege[3].positionen.push({ id: "pos-a", art: "aufgabe", wartungsartId: "kette", status: "offen", notiz: "vorziehen" },
+      { id: "pos-b", art: "mangel", mangelId: "m-1", status: "offen", notiz: "" });
+    v3.auftraege.push(auftragV8({ id: "rep-geplant", wartungsartId: "reparatur", status: "geplant", werkstatt: "W", notiz: "ohne Termin", ausgeschlossen: ["kette"] }));
+    v3.auftraege[1].positionen.push({ id: "pos-c", art: "aufgabe", wartungsartId: "kette", status: "nicht-gemacht", notiz: "keine Zeit" });
+    gleichInhalt("Daten mit Jahreszielen, Fahrtagen, Arbeitsweg, einmalig, Bauteil, Zuordnung, Aufträgen mit Positionen, Mängeln: Import → Export → Import verlustfrei",
       kopie(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v3))))), v3);
     const ohneEinst = kopie(v3); delete ohneEinst.einstellungen;
-    gleich("Version 3 ohne „einstellungen“: Standardwerte (Mo, Di, Fr; keine Jahresziele)",
+    gleich("Ohne „einstellungen“: Standardwerte (Mo, Di, Fr; keine Jahresziele)",
       w.datenEinlesen(JSON.stringify(ohneEinst)).einstellungen, stdEinstellungen());
 
     // Fehlt "wartungsarten" in einer Version-1-Datei: Standardarten ohne Zeitfenster
@@ -160,16 +183,23 @@ async function start() {
     delete ohneArten.termine;
     gleich("Version 1 ohne „wartungsarten“: Standardarten ohne Zeitfenster",
       w.datenEinlesen(JSON.stringify(ohneArten)).wartungsarten.map(a => [a.id, a.intervallMonate, a.fensterVon, a.fensterBis, a.einmalig]),
-      [["grosse-inspektion", 12, null, null, false], ["kleine-inspektion", null, null, null, false], ["reparatur", null, null, null, false]]);
-    gleich("Neuinstallation: Standardarten mit Beispiel-Zeitfenstern, Standard-Fahrtage",
-      [w.leereDaten().wartungsarten.map(a => [a.id, a.fensterVon, a.fensterBis, a.gueltigAbJahr, a.einmalig]), w.leereDaten().einstellungen],
-      [[["grosse-inspektion", 10, 11, null, false], ["kleine-inspektion", 3, 4, null, false], ["reparatur", null, null, null, false]], stdEinstellungen()]);
+      [["grosse-inspektion", 12, null, null, false], ["kleine-inspektion", null, null, null, false], ["reparatur", null, null, null, false],
+        ["eigenleistung", null, null, null, false]]);
+    gleich("Neuinstallation (ab Release 5a): Erstinspektion (einmalig), Kleine und Große Inspektion mit Beispiel-Zeitfenstern, Reparatur, Eigenleistung; " +
+      "keine Aufgaben, keine Aufträge; Standard-Fahrtage",
+      [w.leereDaten().wartungsarten.map(a => [a.id, a.name, a.typ, a.intervallMonate, a.intervallKm, a.fensterVon, a.fensterBis, a.gueltigAbJahr, a.einmalig, a.bauteil, a.zuordnung]),
+        w.leereDaten().auftraege, "wartungsprotokoll" in w.leereDaten(), w.leereDaten().einstellungen],
+      [[["erstinspektion", "Erstinspektion", "auftrag", 3, 300, null, null, null, true, null, null],
+        ["kleine-inspektion", "Kleine Inspektion", "auftrag", null, null, 3, 4, null, false, null, null],
+        ["grosse-inspektion", "Große Inspektion", "auftrag", 12, null, 10, 11, null, false, null, null],
+        ["reparatur", "Reparatur", "auftrag", null, null, null, null, null, false, null, null],
+        ["eigenleistung", "Eigenleistung", "auftrag", null, null, null, null, null, false, null, null]], [], false, stdEinstellungen()]);
 
     // Fehlerhafte Daten werden abgelehnt
     const mit = aend => JSON.stringify(Object.assign(kopie(v3), aend));
-    const art = aend => [Object.assign({}, v3.wartungsarten[0], aend)];
-    const nurArt = aend => mit({ wartungsarten: art(aend), wartungsprotokoll: [], termine: [], maengel: [] });
-    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 8 })), "neueren App-Version");
+    const art = aend => [Object.assign({}, v3.wartungsarten[0], { einmalig: false }, aend)];
+    const nurArt = aend => mit({ wartungsarten: art(aend), auftraege: [], maengel: [] });
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 9 })), "neueren App-Version");
     wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 11, fensterBis: 2 })), "Jahreswechsel");
     wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 3, fensterBis: null })), "beide");
     wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 })), "gueltigAbJahr");
@@ -182,7 +212,8 @@ async function start() {
     wirft("Doppelter Fahrtag wird abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { fahrtage: [2, 2] } })), "doppelt");
     wirft("Zwei Jahresziele für dasselbe Jahr werden abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { jahresziele: [{ jahr: 2026, km: 1 }, { jahr: 2026, km: 2 }] } })), "mehr als ein Jahresziel");
     wirft("Jahresziel mit 0 km wird abgelehnt", () => w.datenEinlesen(mit({ einstellungen: { jahresziele: [{ jahr: 2026, km: 0 }] } })), "km muss");
-    wirft("Mangel mit unbekannter protokollId wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "erledigt", protokollId: "gibt-es-nicht" }] })), "protokollId");
+    wirft("Version 2: Mangel mit unbekannter protokollId wird abgelehnt", () => w.datenEinlesen(JSON.stringify(Object.assign({}, v2,
+      { maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "erledigt", protokollId: "gibt-es-nicht" }] }))), "protokollId");
     wirft("Mangel mit falschem Status wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: "x", status: "kaputt" }] })), "status");
     wirft("Mangel ohne Beschreibung wird abgelehnt", () => w.datenEinlesen(mit({ maengel: [{ datum: "2026-10-01", beschreibung: " " }] })), "Beschreibung");
 
@@ -301,15 +332,28 @@ async function start() {
     saison("Gültig ab 2027: Nachholung", klein2027, ["2027-06-01"], "2027-06-02", ["erledigt (nachgeholt), nächste ab 01.03.2028", G]);
     saison("Gültig ab 2027: im ersten Fenster erledigt", klein2027, ["2027-03-20"], "2027-12-01", ["erledigt, nächste ab 01.03.2028", G]);
 
+    // Status einer Wartungsart wie im Reiter Wartung: Aufgabe mit ihrer Fälligkeit, Auftrag als offener
+    // (gespeicherter oder vorgemerkter) Auftrag, sonst die Fälligkeit der Auftragsart (z. B. einmalig erledigt)
+    const ws = (id, h = H) => {
+      const art = w.eval("daten.wartungsarten").find(a => a.id === id);
+      if (art.typ === "aufgabe") { const st = w.aufgabeStatus(art, h); return { text: st.text, klasse: st.klasse, datum: st.datum, regel: st, seitKm: st.seitKm }; }
+      const o = w.werkstattLage(h).offene.find(o => o.art.id === id);
+      if (!o) { const st = w.auftragsartStatus(art, h); return { erledigt: st.erledigt, text: st.text, klasse: st.klasse, datum: st.datum, regel: st, termin: null, erwartet: null, offen: null }; }
+      return { erledigt: false, text: o.text, klasse: o.klasse, datum: o.datum, regel: o.regel, seitKm: o.regel && o.regel.seitKm, erwartet: o.erwartet, termin: o.termin, offen: o };
+    };
+    // Auftrag ab Version 8 direkt in die Daten der App
+    const auftragDazu = felder => w.eval("daten.auftraege.push(" + JSON.stringify(auftragV8(felder)) + ")");
+
     // Geplanter Termin hat Vorrang, Intervall ohne Zeitfenster bleibt erhalten
     w.eval(`daten = leereDaten();
       daten.fahrrad = { name: "T", startdatum: "2026-06-01", startKm: 0, rahmennummer: "", beschreibung: "" };
-      daten.wartungsarten[0].fensterVon = null; daten.wartungsarten[0].fensterBis = null;
-      daten.wartungsprotokoll.push({ id: "x", datum: "2025-10-20", wartungsartId: "grosse-inspektion", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" });
-      daten.termine.push({ wartungsartId: "kleine-inspektion", datum: "2026-11-05", werkstatt: "W" });`);
-    const stGross = w.wartungsStatus(w.eval("daten.wartungsarten[0]"), "2026-10-24");
+      Object.assign(daten.wartungsarten.find(a => a.id === "grosse-inspektion"), { fensterVon: null, fensterBis: null });`);
+    auftragDazu({ id: "x", wartungsartId: "grosse-inspektion", datum: "2025-10-20" });
+    auftragDazu({ id: "t", wartungsartId: "kleine-inspektion", status: "geplant", termin: "2026-11-05", werkstatt: "W" });
+    let H = "2026-10-24";
+    const stGross = ws("grosse-inspektion");
     gleich("Ohne Zeitfenster: Intervall in Monaten wird weiter ausgewertet", stGross.text, "überfällig seit 4 Tagen (20.10.2026)");
-    const stKlein = w.wartungsStatus(w.eval("daten.wartungsarten[1]"), "2026-10-24");
+    const stKlein = ws("kleine-inspektion");
     gleich("Geplanter Termin hat Vorrang vor dem Zeitfenster",
       [stKlein.text, stKlein.datum, stKlein.regel.text], ["Termin am 05.11.2026 bei W (in 12 Tagen)", "2026-11-05", "fällig ab 01.03.2027"]);
 
@@ -324,7 +368,7 @@ async function start() {
     // 01.01.–28.02.2026 jeden Tag 10 km: am 01.03.2026 sind es 590 km, Rate 10 km pro Tag
     const zehnProTag = [];
     for (let d = "2026-01-01"; d <= "2026-02-28"; d = w.plusTage(d, 1)) zehnProTag.push(E(d, 10));
-    const H = "2026-03-01";
+    H = "2026-03-01";
 
     // -------------------------------------------------------------
     // 6. Prognosen
@@ -406,18 +450,20 @@ async function start() {
       A("hand", { intervallKm: 150 }),
       A("monate-ab-start", { intervallMonate: 1 })
     ], wartungsprotokoll: [P("p-bald", "2026-02-01", "bald", 310), P("p-hand", "2026-02-01", "hand", 400)] });
-    const ws = (id, h = H) => w.wartungsStatus(w.eval("daten.wartungsarten").find(a => a.id === id), h);
     gleich("Grundlage: 590 km in 59 Tagen = 10 km pro Tag", w.prognoseGrundlage(H).rate, 10);
     let s = ws("km-zuerst");
+    gleich("Verschleißteile sind Aufgaben (ohne Zeitfenster, nicht einmalig, kein „Inspektion“ im Namen); Reparatur und Eigenleistung ergänzt",
+      w.eval("daten.wartungsarten").map(a => [a.name, a.typ]), [...["km-zuerst", "zeit-zuerst", "bald", "km-ueberfaellig", "zeit-ueberfaellig", "hand", "monate-ab-start"]
+        .map(n => [n, "aufgabe"]), ["Reparatur", "auftrag"], ["Eigenleistung", "auftrag"]]);
     gleich("km zuerst (1.000 km / 12 Monate): ohne Durchführung ab Startdatum; 410 km Rest ÷ 10 km pro Tag = 41 Tage",
-      [s.text, s.klasse, s.datum, s.regel.restKm, s.regel.abStart, s.erwartet],
-      ["fällig ca. im April 2026 bei ca. 1.000 km", "status-gruen", "2026-04-11", 410, true, null]);
+      [s.text, s.klasse, s.datum, s.regel.restKm, s.regel.abStart],
+      ["fällig ca. im April 2026 bei ca. 1.000 km", "status-gruen", "2026-04-11", 410, true]);
     s = ws("zeit-zuerst");
-    gleich("Zeit zuerst (5.000 km / 3 Monate): fällig nach Monaten, mit erwartetem Kilometerstand und Rest-km",
-      [s.text, s.klasse, s.datum, s.regel.restKm, s.erwartet],
-      ["fällig in 31 Tagen (01.04.2026)", "status-gruen", "2026-04-01", 4410, { datum: "2026-04-01", km: 900 }]);
+    gleich("Zeit zuerst (5.000 km / 3 Monate): fällig nach Monaten, mit Rest-km",
+      [s.text, s.klasse, s.datum, s.regel.restKm],
+      ["fällig in 31 Tagen (01.04.2026)", "status-gruen", "2026-04-01", 4410]);
     s = ws("bald");
-    gleich("Nach Durchführung (310 km am 01.02.): noch 20 km, in 2 Tagen fällig", [s.text, s.klasse, s.datum, s.regel.restKm, s.seitKm],
+    gleich("Nach Erledigung (310 km am 01.02., als Reparatur umgewandelt): noch 20 km, in 2 Tagen fällig", [s.text, s.klasse, s.datum, s.regel.restKm, s.seitKm],
       ["fällig ca. im März 2026 bei ca. 610 km", "status-orange", "2026-03-03", 20, 280]);
     s = ws("km-ueberfaellig");
     gleich("km-Grenze überschritten: Tag des Erreichens aus den Einträgen", [s.text, s.klasse, s.datum],
@@ -426,7 +472,7 @@ async function start() {
     gleich("Beides überschritten: es zählt, was zuerst erreicht wurde (Monate am 01.02. vor km am 24.02.)", [s.text, s.datum],
       ["überfällig seit 28 Tagen (01.02.2026)", "2026-02-01"]);
     s = ws("hand");
-    gleich("Von Hand eingetragener Kilometerstand bei der Durchführung wird berücksichtigt", [s.text, s.datum, s.regel.grenzeKm],
+    gleich("Von Hand eingetragener Kilometerstand bei der Erledigung wird berücksichtigt (eigene Reparatur, weil der km-Stand vom selben Tag abweicht)", [s.text, s.datum, s.regel.grenzeKm],
       ["überfällig: km-Grenze (550 km) um 40 km überschritten", "2026-02-24", 550]);
     s = ws("monate-ab-start");
     gleich("Nur Monatsintervall ohne Durchführung: zählt ab Startdatum", [s.text, s.regel.abStart], ["überfällig seit 28 Tagen (01.02.2026)", true]);
@@ -449,37 +495,44 @@ async function start() {
     s = ws("erst", "2026-01-15");
     gleich("Vor der Durchführung: normale Fälligkeit ab Startdatum, Termin hat Vorrang", [s.erledigt, s.text, s.regel.text],
       [false, "Termin am 28.01.2026 bei W (in 13 Tagen)", "fällig ca. im Januar 2026 bei ca. 300 km"]);
-    w.eval(`daten.wartungsprotokoll.push(
-      { id: "p-e2", datum: "2026-02-10", wartungsartId: "erst", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" },
-      { id: "p-e1", datum: "2026-01-29", wartungsartId: "erst", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" })`);
+    auftragDazu({ id: "p-e2", wartungsartId: "erst", datum: "2026-02-10" });
+    auftragDazu({ id: "p-e1", wartungsartId: "erst", datum: "2026-01-29" });
+    w.eval(`daten.auftraege = daten.auftraege.filter(a => a.status === "erledigt")`);
     s = ws("erst");
-    gleich("Nach der ersten Durchführung: nur „erledigt am“ mit dem Datum der ersten Durchführung, keine Fälligkeit",
-      [s.erledigt, s.text, s.klasse, s.datum, s.termin, s.erwartet], [true, "erledigt am 29.01.2026", "status-gruen", null, null, null]);
-    gleich("Erledigte einmalige Wartungen stehen am Ende der Liste", w.wartungsKarten(H).map(s => s.art.id), ["gross", "lenker", "erst"]);
-    gleich("Nächste Wartung auf der Startseite: erledigte einmalige zählt nicht", w.naechsteWartung(H).art.id, "gross");
+    gleich("Nach der ersten Erledigung: nur „erledigt am“ mit dem Datum der ersten Erledigung, kein offener Auftrag mehr",
+      [s.erledigt, s.text, s.klasse, s.datum, s.offen], [true, "erledigt am 29.01.2026", "status-gruen", null, null]);
+    gleich("Offene Aufträge: die erledigte einmalige zählt nicht (Lenker: einmalig ohne Intervall, ohne Datum)",
+      w.werkstattLage(H).offene.map(o => [o.art.id, o.vorgemerkt]), [["gross", true], ["lenker", true]]);
+    gleich("Nächster Auftrag auf der Startseite: erledigte einmalige zählt nicht", w.naechsterAuftrag(w.werkstattLage(H), H).art.id, "gross");
     w.eval("aktiverTab = 'wartung'; zeichnen()");
-    const karteErst = [...w.document.querySelectorAll("#inhalt > .karte")].find(k => k.querySelector("h3").textContent === "Erstinspektion");
-    gleich("Karte zeigt nur „erledigt am“, ohne „Termin planen“ und „Erledigt eintragen“",
-      [karteErst.textContent, karteErst.querySelectorAll("button").length], ["Erstinspektionerledigt am 29.01.2026", 0]);
-    gleich("Reihenfolge der Karten im Reiter Wartung", [...w.document.querySelectorAll("#inhalt > .karte h3")].map(h => h.textContent),
-      ["Große Inspektion", "Lenker tauschen", "Erstinspektion"]);
-    w.eval(`daten.wartungsprotokoll = []; daten.termine = [{ wartungsartId: "erst", datum: "2026-01-28", werkstatt: "W" }]`);
-    w.protokollFormular({ id: null, datum: "2026-02-01", wartungsartId: "erst", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" }, false);
-    w.protokollSpeichern();
-    gleich("Einmalige Wartung eingetragen, ohne den Termin zu übernehmen: der Termin entfällt",
-      [w.eval("daten.termine.length"), w.eval("daten.wartungsprotokoll.length")], [0, 1]);
+    gleich("Reiter Wartung: Karten der offenen Aufträge ohne die erledigte Erstinspektion; sie steht in den erledigten Aufträgen",
+      [[...w.document.querySelectorAll("#inhalt > .karte h3")].map(h => h.textContent),
+        [...w.document.querySelectorAll('#inhalt [data-action="auftrag-ansehen"] .text > div:first-child')].map(d => d.textContent)],
+      [["Große Inspektion", "Lenker tauschen"], ["10.02.2026 · Erstinspektion", "29.01.2026 · Erstinspektion"]]);
+    w.eval(`daten.auftraege = []`);
+    auftragDazu({ id: "t-erst", wartungsartId: "erst", status: "geplant", termin: "2026-01-28", werkstatt: "W" });
+    w.auftragErledigen("t-erst");
+    gleich("Erledigt eintragen: Datum = Termin (liegt vor heute), Werkstatt aus dem Auftrag", [w.document.getElementById("p-datum").value, w.document.getElementById("p-werkstatt").value],
+      ["2026-01-28", "W"]);
+    w.document.getElementById("p-datum").value = "2026-02-01";
+    w.abschlussSpeichern();
+    gleich("Einmaliger Auftrag erledigt: aus dem geplanten wird der erledigte Auftrag (Termin entfällt), kein neuer offener",
+      [w.eval("daten.auftraege").map(a => [a.id, a.status, a.termin, a.datum, a.werkstatt]), w.werkstattLage("2026-02-02").offene.map(o => o.art.id)],
+      [[["t-erst", "erledigt", null, "2026-02-01", "W"]], ["gross", "lenker"]]);
     alerts.length = 0;
     w.artFormular(null);
     w.document.getElementById("a-name").value = "X";
+    w.document.getElementById("a-typ").value = "auftrag";
     w.document.getElementById("a-einmalig").checked = true;
     w.document.getElementById("a-von").value = "10";
     w.document.getElementById("a-bis").value = "11";
     w.artSpeichern(null);
-    wahr("Formular: einmalig mit Zeitfenster wird abgelehnt", alerts.length === 1 && alerts[0].includes("einmalige Wartung") && w.eval("daten.wartungsarten.length") === 3, alerts.join("\n"));
+    const anzahlArten = w.eval("daten.wartungsarten.length");
+    wahr("Formular: einmalig mit Zeitfenster wird abgelehnt", alerts.length === 1 && alerts[0].includes("einmalige Wartung") && anzahlArten === 5, alerts.join("\n"));
     w.document.getElementById("a-von").value = "";
     w.document.getElementById("a-bis").value = "";
     w.artSpeichern(null);
-    gleich("Formular: einmalige Wartung ohne Zeitfenster wird gespeichert", w.eval("daten.wartungsarten[3]").einmalig, true);
+    gleich("Formular: einmaliger Auftrag ohne Zeitfenster wird gespeichert", [w.eval("daten.wartungsarten[5]").typ, w.eval("daten.wartungsarten[5]").einmalig], ["auftrag", true]);
 
     // -------------------------------------------------------------
     // 10. Erwarteter Kilometerstand
@@ -488,7 +541,7 @@ async function start() {
     setze({ fahrrad: F("2026-01-01", 0), eintraege: zehnProTag, wartungsarten: [
       A("rep", { name: "Reparatur" }),
       A("fenster", { name: "Frühjahrsinspektion", fensterVon: 5, fensterBis: 6 }),
-      A("alt", { name: "Alter Termin" })
+      A("alt", { name: "Alte Reparatur" })
     ], termine: [{ wartungsartId: "rep", datum: "2026-03-11", werkstatt: "" }, { wartungsartId: "alt", datum: "2026-02-20", werkstatt: "" }] });
     gleich("Geplanter Termin: erwarteter Kilometerstand am Termin (590 + 10 × 10)", ws("rep").erwartet, { datum: "2026-03-11", km: 690 });
     s = ws("fenster");
@@ -520,11 +573,11 @@ async function start() {
     w.document.getElementById("toast-knopf").click();
     gleich("„Rückgängig“ stellt den Eintrag wieder her (Daten und Speicher wie vorher)",
       [datenText() === vorher, localStorage.getItem(TEST_SCHLUESSEL) === speicherVorher, toast()], [true, true, ["Wiederhergestellt", false]]);
-    await w.protokollLoeschen("p-1");
-    gleich("Wartung gelöscht: verknüpfter Mangel wieder offen", [w.eval("daten.wartungsprotokoll.length"), w.eval("daten.maengel.find(m => m.id === 'm-1').status"), toast()],
-      [1, "offen", ["Wartung gelöscht", true]]);
+    await w.erledigtLoeschen("p-1");
+    gleich("Erledigter Auftrag gelöscht: erledigter Mangel daraus wieder offen", [w.eval("daten.auftraege.length"), w.eval("daten.maengel.find(m => m.id === 'm-1').status"), toast()],
+      [2, "offen", ["Auftrag gelöscht", true]]);
     w.rueckgaengig();
-    gleich("„Rückgängig“: Wartung und Verknüpfung des Mangels wieder da", [datenText() === vorher, w.eval("daten.maengel.find(m => m.id === 'm-1').protokollId")], [true, "p-1"]);
+    gleich("„Rückgängig“: Auftrag und erledigter Mangel als Position wieder da", [datenText() === vorher, w.eval("daten.maengel.find(m => m.id === 'm-1').status")], [true, "erledigt"]);
     await w.mangelLoeschen("m-2");
     gleich("Mangel gelöscht", [w.eval("daten.maengel.length"), toast()], [1, ["Mangel gelöscht", true]]);
     w.rueckgaengig();
@@ -663,18 +716,18 @@ async function start() {
     w.eval(`["2026-10-25", "2026-10-26", "2026-10-27"].forEach(d => daten.eintraege.push({ id: "neu" + d, datum: d, km: 14.2, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }))`);
     erg = auswerten(sicherung);
     gleich("Danach 3 Einträge erfasst: „Sicherung ist älter: 3 Einträge fehlen (25.–27.10.)“", [erg.status, erg.titel, erg.details], ["aelter", "Sicherung ist älter: 3 Einträge fehlen (25.–27.10.)", []]);
-    w.eval(`daten.wartungsprotokoll.push({ id: "p-neu", datum: "2026-10-27", wartungsartId: "reparatur", werkstatt: "", kmStand: null, kmManuell: false, notiz: "" })`);
-    gleich("Zusätzlich eine Wartung eingetragen", auswerten(sicherung).titel, "Sicherung ist älter: 3 Einträge fehlen (25.–27.10.), 1 Wartung fehlt");
+    auftragDazu({ id: "p-neu", wartungsartId: "reparatur", datum: "2026-10-27" });
+    gleich("Zusätzlich ein Auftrag erledigt", auswerten(sicherung).titel, "Sicherung ist älter: 3 Einträge fehlen (25.–27.10.), 1 Auftrag fehlt");
     const anders = JSON.parse(sicherung);
     anders.eintraege.find(e => e.datum === "2026-10-20").km = 20;
     anders.eintraege.push({ id: "x", datum: "2026-09-01", km: 3 });
     erg = auswerten(JSON.stringify(anders));
     gleich("Sicherung mit anderen Werten: „weicht ab“ mit Einzelheiten", [erg.status, erg.titel, erg.details],
-      ["abweichend", "Sicherung weicht vom aktuellen Stand ab", ["3 Einträge fehlen (25.–27.10.)", "1 Wartung fehlt", "1 Eintrag nur in der Sicherung (01.09.)", "1 Eintrag geändert (20.10.)"]]);
+      ["abweichend", "Sicherung weicht vom aktuellen Stand ab", ["3 Einträge fehlen (25.–27.10.)", "1 Auftrag fehlt", "1 Eintrag nur in der Sicherung (01.09.)", "1 Eintrag geändert (20.10.)"]]);
     gleich("Nachträglich veränderte Datei: Kurzinfo passt nicht zum Inhalt", erg.kurzinfoPasst, false);
-    w.eval(`daten.eintraege = daten.eintraege.filter(e => !e.id.startsWith("neu")); daten.wartungsprotokoll = daten.wartungsprotokoll.filter(p => p.id !== "p-neu")`);
+    w.eval(`daten.eintraege = daten.eintraege.filter(e => !e.id.startsWith("neu")); daten.auftraege = daten.auftraege.filter(a => a.id !== "p-neu")`);
     erg = auswerten(v2Text);
-    gleich("Ältere Sicherung (Version 2, ohne Kurzinfo) desselben Stands: identisch; berechnete km-Stände im Protokoll zählen nicht",
+    gleich("Ältere Sicherung (Version 2, ohne Kurzinfo) desselben Stands: identisch (Kennungen der Aufträge aus dem Protokoll abgeleitet); berechnete km-Stände zählen nicht",
       [erg.status, erg.kurzinfoPasst, erg.identischStreng], ["identisch", null, false]);
     erg = auswerten(sicherung.slice(0, 200));
     gleich("Abgeschnittene Datei: beschädigt", [erg.status, erg.titel, erg.details], ["defekt", "Datei beschädigt bzw. keine Rad-km-Sicherung", ["Die Datei ist keine gültige JSON-Datei."]]);
@@ -682,7 +735,7 @@ async function start() {
     gleich("Andere JSON-Datei: keine Rad-km-Sicherung", [erg.status, erg.details], ["defekt", ["Die Versionsnummer („version“) fehlt oder ist ungültig."]]);
     erg = auswerten("\u0089PNG\r\n\u001a\n");
     gleich("Bild statt Sicherung: beschädigt bzw. keine Rad-km-Sicherung", erg.status, "defekt");
-    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 8 })));
+    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 9 })));
     gleich("Sicherung einer neueren App-Version wird erkannt", [erg.status, erg.details[0].includes("neueren App-Version")], ["defekt", true]);
     gleich("Datumsbereiche: zusammenhängende Tage, Monats- und Jahreswechsel, andere Jahre, Kürzung",
       [w.datumsBereiche(["2026-10-27", "2026-10-25", "2026-10-26"], HP), w.datumsBereiche(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], HP),
@@ -706,7 +759,7 @@ async function start() {
     abschnitt("14. Oberfläche");
     w.eval("aktiverTab = 'einstellungen'; zeichnen()");
     const einst = w.document.getElementById("inhalt");
-    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion7"), einst.textContent);
+    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion8"), einst.textContent);
     wahr("Einstellungen: „Jetzt sichern“, „Sicherung prüfen …“, „Daten importieren …“",
       ["sichern", "sicherung-pruefen", "import"].every(a => einst.querySelector('[data-action="' + a + '"]')));
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
@@ -941,57 +994,60 @@ async function start() {
     const HR = "2026-10-28";
     const zehnImOktober = [];
     for (let d = "2026-10-01"; d <= "2026-10-27"; d = w.plusTage(d, 1)) zehnImOktober.push(E(d, 10));
-    // Absichtlich vermischte Reihenfolge der Wartungsarten
+    // Absichtlich vermischte Reihenfolge der Wartungsarten (Version 3; die Namen bestimmen Auftrag bzw. Aufgabe)
     setze({ fahrrad: F("2025-01-01", 0), eintraege: zehnImOktober,
       wartungsarten: [
-        A("reparatur", { name: "Reparatur" }),                                                     // ohne Fälligkeit
+        A("reparatur", { name: "Reparatur" }),                                                     // ohne Fälligkeit, kein offener Auftrag
         A("erst", { name: "Erstinspektion", einmalig: true, intervallMonate: 3 }),                 // einmalig, erledigt
-        A("kette", { name: "Kette", intervallKm: 300 }),                                           // km: prognostiziert 08.12.2026
+        A("kette", { name: "Kette", intervallKm: 300 }),                                           // Aufgabe, km: prognostiziert 08.12.2026
         A("fenster-ende", { name: "Herbstcheck", fensterVon: 10, fensterBis: 12, gueltigAbJahr: 2026 }), // im Fenster: bis 31.12.
         A("klein", { name: "Kleine Inspektion", fensterVon: 3, fensterBis: 4, gueltigAbJahr: 2028 }),   // noch nicht gültig
-        A("termin", { name: "Licht", }),                                                           // Termin 05.11.2026
+        A("termin", { name: "Reparatur Licht" }),                                                  // Termin 05.11.2026
         A("gross", { name: "Große Inspektion", fensterVon: 10, fensterBis: 11 }),                  // überfällig seit 30.11.2025
-        A("heute", { name: "Reifendruck", intervallMonate: 1 }),                                   // heute fällig
+        A("heute", { name: "Monatsinspektion", intervallMonate: 1 }),                              // heute fällig
         A("fenster-beginn", { name: "Winterreifen", fensterVon: 12, fensterBis: 12, gueltigAbJahr: 2026 }), // vor dem Fenster: ab 01.12.
-        A("alt-termin", { name: "Bremsen", }),                                                     // Termin 20.10.2026 verstrichen
-        A("monate", { name: "Schaltung", intervallMonate: 6 })                                     // überfällig seit 01.09.2026
+        A("alt-termin", { name: "Reparatur Bremsen" }),                                            // Termin 20.10.2026 verstrichen
+        A("monate", { name: "Halbjahresinspektion", intervallMonate: 6 })                          // überfällig seit 01.09.2026
       ],
       wartungsprotokoll: [P("p-erst", "2025-04-01", "erst", null), P("p-heute", "2026-09-28", "heute", null), P("p-monate", "2026-03-01", "monate", null)],
       termine: [{ wartungsartId: "termin", datum: "2026-11-05", werkstatt: "" }, { wartungsartId: "alt-termin", datum: "2026-10-20", werkstatt: "" }],
       maengel: [{ id: "m-offen", datum: "2026-10-10", beschreibung: "Licht hinten wackelt", status: "offen" },
         { id: "m-erledigt", datum: "2026-05-01", beschreibung: "Bremse quietscht", status: "erledigt", erledigtAm: "2026-05-10" }] });
-    const karten = w.wartungsKarten(HR);
-    gleich("Maßgebliche Daten und Gruppen", karten.map(s => [s.art.id, s.datum, w.wartungsGruppe(s, HR)]), [
-      ["gross", "2025-11-30", 1], ["monate", "2026-09-01", 1], ["alt-termin", "2026-10-20", 1],
-      ["heute", "2026-10-28", 2], ["termin", "2026-11-05", 2], ["fenster-beginn", "2026-12-01", 2], ["kette", "2026-12-08", 2], ["fenster-ende", "2026-12-31", 2],
-      ["reparatur", null, 4], ["klein", null, 4],
-      ["erst", null, 5]]);
-    gleich("Überfällig (am längsten zuerst), anstehend nach Datum (Termin, Beginn bzw. Ende des Zeitfensters, km-Prognose), " +
-      "ohne Fälligkeit bzw. noch nicht gültig, einmalig erledigt",
-      karten.map(s => s.art.name), ["Große Inspektion", "Schaltung", "Bremsen", "Reifendruck", "Licht", "Winterreifen", "Kette", "Herbstcheck",
-        "Reparatur", "Kleine Inspektion", "Erstinspektion"]);
-    gleich("Startseite: nächste Wartung = am längsten überfällige", w.naechsteWartung(HR).art.id, "gross");
+    const lageR = w.werkstattLage(HR);
+    gleich("Offene Aufträge: maßgebliche Daten und Gruppen (Reparatur ohne Termin, erledigte einmalige und die Aufgabe zählen nicht)",
+      lageR.offene.map(o => [o.art.id, o.datum, o.gruppe, o.vorgemerkt]), [
+      ["gross", "2025-11-30", 1, true], ["monate", "2026-09-01", 1, true], ["alt-termin", "2026-10-20", 1, false],
+      ["heute", "2026-10-28", 2, true], ["termin", "2026-11-05", 2, false], ["fenster-beginn", "2026-12-01", 2, true], ["fenster-ende", "2026-12-31", 2, true],
+      ["klein", null, 4, true]]);
+    gleich("Überfällig (am längsten zuerst), anstehend nach Datum (Termin, Beginn bzw. Ende des Zeitfensters, Intervall), noch nicht gültig",
+      lageR.offene.map(o => o.art.name), ["Große Inspektion", "Halbjahresinspektion", "Reparatur Bremsen", "Monatsinspektion", "Reparatur Licht", "Winterreifen",
+        "Herbstcheck", "Kleine Inspektion"]);
+    gleich("Zieldatum für Positionen: überfällig und heute → heute, Termin, Ende des Zeitfensters, noch nicht gültig → Ende des ersten Fensters",
+      lageR.offene.map(o => o.ziel), ["2026-10-28", "2026-10-28", "2026-10-28", "2026-10-28", "2026-11-05", "2026-12-31", "2026-12-31", "2028-04-30"]);
+    gleich("Aufgabe Kette (km, 08.12.2026) nach Standard „nächste Inspektion“: die früheste Inspektion, bis zu deren Zieldatum sie fällig wird (Winterreifen bis 31.12.)",
+      [lageR.aufgaben.map(x => [x.art.id, x.st.datum, x.offen && x.offen.art.id, x.berechnet])], [[["kette", "2026-12-08", "fenster-beginn", true]]]);
+    gleich("Startseite: nächster Auftrag = der am längsten überfällige", w.naechsterAuftrag(lageR, HR).art.id, "gross");
     const seiteWartung = () => {
       const ablage = w.document.createElement("div");
       ablage.innerHTML = w.bildWartung(HR);
       return [...ablage.querySelectorAll(":scope > h2, :scope > .karte > h3")].map(el => (el.tagName === "H2" ? "## " : "") + el.textContent);
     };
-    gleich("Seite: offene Mängel ganz oben, dann die Wartungen, dann erledigte Mängel, Wartungsprotokoll und Wartungsarten", seiteWartung(), [
-      "## Offene Mängel (1)",
-      "Große Inspektion", "Schaltung", "Bremsen", "Reifendruck", "Licht", "Winterreifen", "Kette", "Herbstcheck", "Reparatur", "Kleine Inspektion", "Erstinspektion",
-      "## Mängel", "## Wartungsprotokoll", "## Wartungsarten"]);
+    gleich("Seite: offene Mängel ohne Auftrag ganz oben, dann die offenen Aufträge, die Aufgaben, die erledigten Aufträge, Mängel und Wartungsarten", seiteWartung(), [
+      "## Offene Mängel ohne Auftrag (1)", "## Offene Aufträge",
+      "Große Inspektion", "Halbjahresinspektion", "Reparatur Bremsen", "Monatsinspektion", "Reparatur Licht", "Winterreifen", "Herbstcheck", "Kleine Inspektion",
+      "## Aufgaben", "## Erledigte Aufträge", "## Mängel", "## Wartungsarten"]);
     w.eval("daten.maengel = daten.maengel.filter(m => m.status === 'erledigt')");
     const ohneOffene = w.document.createElement("div");
     ohneOffene.innerHTML = w.bildWartung(HR);
-    gleich("Ohne offene Mängel: kein Block oben; „+ Mangel erfassen“ und erledigte Mängel unter den Wartungen",
+    gleich("Ohne offene Mängel: kein Block oben; „+ Mangel erfassen“ und erledigte Mängel unter den erledigten Aufträgen",
       [seiteWartung()[0], seiteWartung()[11], ohneOffene.querySelectorAll('[data-action="mangel-neu"]').length, !!ohneOffene.querySelector('[data-action="maengel-erledigt-umschalten"]')],
-      ["Große Inspektion", "## Mängel", 1, true]);
+      ["## Offene Aufträge", "## Mängel", 1, true]);
     setze({ fahrrad: F("2026-01-01", 0), eintraege: [], wartungsarten: [
-      A("reparatur", { name: "Reparatur" }), A("kette", { name: "Kette", intervallKm: 500 }), A("monate", { name: "Inspektion", intervallMonate: 12 })] });
-    gleich("Ohne Fahrten (keine km-Prognose): km-Intervall nach den Wartungen mit Datum, vor denen ohne Fälligkeit",
-      w.wartungsKarten(HR).map(s => [s.art.id, w.wartungsGruppe(s, HR)]), [["monate", 2], ["kette", 3], ["reparatur", 4]]);
+      A("reparatur", { name: "Reparatur" }), A("kette", { name: "Ketten-Inspektion", intervallKm: 500 }), A("monate", { name: "Inspektion", intervallMonate: 12 })] });
+    gleich("Ohne Fahrten (keine km-Prognose): Auftrag mit km-Intervall nach denen mit Datum",
+      w.werkstattLage(HR).offene.map(o => [o.art.id, o.gruppe]), [["monate", 2], ["kette", 3]]);
     w.eval("daten.wartungsarten = daten.wartungsarten.filter(a => a.id !== 'monate')");
-    gleich("Startseite: ohne Datum ist die km-Grenze die nächste Wartung", w.naechsteWartung(HR).text, "fällig bei ca. 500 km");
+    gleich("Startseite: ohne Datum ist die km-Grenze der nächste Auftrag", w.naechsterAuftrag(w.werkstattLage(HR), HR).text, "fällig bei ca. 500 km");
 
     // =============================================================
     // Release 4a: Wetter. Die Antworten der Wetterdienste stammen aus
@@ -1086,10 +1142,11 @@ async function start() {
     const v3Text = await (await fetch("daten-v3.json", { cache: "no-store" })).text();
     const v3d = JSON.parse(v3Text);
     const pruefeV3 = (d, wo) => {
-      gleich(wo + ": version = 7", d.version, 7);
-      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Protokoll, Termine und Mängel unverändert",
-        [d.fahrrad, d.vorlagen, d.wartungsarten, d.wartungsprotokoll, d.termine, d.maengel],
-        [v3d.fahrrad, v3d.vorlagen, v3d.wartungsarten, v3d.wartungsprotokoll, v3d.termine, v3d.maengel]);
+      gleich(wo + ": version = 8", d.version, 8);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten (alle Aufträge, Eigenleistung ergänzt), Protokoll und Termine (als Aufträge) und Mängel erhalten",
+        [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
+        [v3d.fahrrad, v3d.vorlagen, [...v3d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG],
+          [ausProtokoll(v3d.wartungsprotokoll[0], [posMangel("m-1")]), ausProtokoll(v3d.wartungsprotokoll[1]), ausTermin(v3d.termine[0])], v3d.maengel.map(ohneProtokollId)]);
       gleichInhalt(wo + ": Einträge vollständig erhalten (Arbeitsweg, 0 km, Wochensumme, Sonderzeichen), Wetter leer",
         d.eintraege, v3d.eintraege.map(e => Object.assign({}, e, { wetter: null })));
       gleichInhalt(wo + ": Fahrtage und Jahresziele erhalten, Wetter mit Standardwerten ergänzt",
@@ -1758,7 +1815,7 @@ async function start() {
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
         "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
-        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt: schräg von hinten rechts 5 km/h (schwach)",
+        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt schräg von hinten rechts 5 km/h (schwach)",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
       [ablageR.querySelectorAll(".zeitleiste .slot").length, ablageR.querySelectorAll(".zeitleiste .slot.rot").length, ablageR.querySelectorAll(".zeitleiste .slot.beste").length,
@@ -1801,7 +1858,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 4e, Datenversion 7 (unverändert)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["4e", 7]);
+    gleich("App-Version 5a, Datenversion 8 (Release 5a)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5a", 8]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -1814,10 +1871,11 @@ async function start() {
     // Erwartete Empfehlung einer Fahrt: Text, wie 4b ihn angezeigt hat (im Feld Oberkörper), und ob Regenkleidung galt
     const mitEmpfehlung = (f, text, regen) => f && Object.assign({}, f, { empfehlung: text === null ? null : OK(text), regenkleidung: regen });
     const pruefeV4 = (d, wo) => {
-      gleich(wo + ": version = 7", d.version, 7);
-      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung und Mängel unverändert",
-        [d.fahrrad, d.vorlagen, d.wartungsarten, d.wartungsprotokoll, d.termine, d.maengel],
-        [v4d.fahrrad, v4d.vorlagen, v4d.wartungsarten, v4d.wartungsprotokoll, v4d.termine, v4d.maengel]);
+      gleich(wo + ": version = 8", d.version, 8);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
+        [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
+        [v4d.fahrrad, v4d.vorlagen, [...v4d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v4d.wartungsprotokoll.map(p => ausProtokoll(p)),
+          v4d.maengel.map(ohneProtokollId)]);
       const e4 = kopie(v4d.eintraege);
       e4[1].wetter.hin = mitEmpfehlung(e4[1].wetter.hin, "Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme Handschuhe", false);
       e4[1].wetter.rueck = mitEmpfehlung(e4[1].wetter.rueck, "Jacke, lange Hose, leichter Pullover + Regenjacke, Regenhose", true);
@@ -1871,10 +1929,11 @@ async function start() {
     const v5Text = await (await fetch("daten-v5.json", { cache: "no-store" })).text();
     const v5d = JSON.parse(v5Text);
     const pruefeV5 = (d, wo) => {
-      gleich(wo + ": version = 7", d.version, 7);
-      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung und Mängel unverändert",
-        [d.fahrrad, d.vorlagen, d.wartungsarten, d.wartungsprotokoll, d.termine, d.maengel],
-        [v5d.fahrrad, v5d.vorlagen, v5d.wartungsarten, v5d.wartungsprotokoll, v5d.termine, v5d.maengel]);
+      gleich(wo + ": version = 8", d.version, 8);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
+        [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
+        [v5d.fahrrad, v5d.vorlagen, [...v5d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v5d.wartungsprotokoll.map(p => ausProtokoll(p)),
+          v5d.maengel.map(ohneProtokollId)]);
       const e5 = kopie(v5d.eintraege);
       e5[1].wetter.hin = mitEmpfehlung(e5[1].wetter.hin, "Jacke, leichter und warmer Pullover, Mütze, kleiner Schal, warme Handschuhe", false);
       e5[1].wetter.rueck = mitEmpfehlung(e5[1].wetter.rueck, "Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal + Regenjacke, Regenhose", true);
@@ -1930,10 +1989,14 @@ async function start() {
     const v6Text = await (await fetch("daten-v6.json", { cache: "no-store" })).text();
     const v6d = JSON.parse(v6Text);
     const pruefeV6 = (d, wo) => {
-      gleich(wo + ": version = 7", d.version, 7);
-      gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge (mit Wetter, Empfehlung und Rückmeldung), Wartung, Termine und Mängel unverändert",
-        [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.wartungsprotokoll, d.termine, d.maengel],
-        [v6d.fahrrad, v6d.vorlagen, v6d.eintraege, v6d.wartungsarten, v6d.wartungsprotokoll, v6d.termine, v6d.maengel]);
+      gleich(wo + ": version = 8", d.version, 8);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge (mit Wetter, Empfehlung und Rückmeldung), Wartung, Termine und Mängel erhalten; der Termin der Aufgabe Kette (20.11.) " +
+        "kommt in einen geplanten Auftrag der Großen Inspektion (Zeitfenster Oktober–November)",
+        [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.auftraege, d.maengel],
+        [v6d.fahrrad, v6d.vorlagen, v6d.eintraege, [artV8(v6d.wartungsarten[0], "auftrag"), artV8(v6d.wartungsarten[1], "aufgabe"), REPARATUR_NEU, EIGENLEISTUNG],
+          [ausProtokoll(v6d.wartungsprotokoll[0]), auftragV8({ id: "termin-grosse-inspektion", wartungsartId: "grosse-inspektion", status: "geplant", termin: "2026-11-20",
+            werkstatt: "Beispiel-Werkstatt", positionen: [{ id: "pos-termin-kette", art: "aufgabe", wartungsartId: "kette", status: "offen", notiz: "" }] })],
+          v6d.maengel.map(ohneProtokollId)]);
       gleichInhalt(wo + ": Fahrtage und Jahresziele erhalten; Hinweis für heute null (nie am selben Tag) → aus, Uhrzeit 18:00 für das spätere Einschalten",
         [d.einstellungen.fahrtage, d.einstellungen.jahresziele, d.einstellungen.hinweisHeuteAn, d.einstellungen.hinweisHeuteAb],
         [v6d.einstellungen.fahrtage, v6d.einstellungen.jahresziele, false, "18:00"]);
@@ -1950,7 +2013,7 @@ async function start() {
     pruefeV6(kopie(w6d.eval("daten")), "Beim Laden");
     gleich("Beim Laden: Version-6-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v6Text);
     const exp6 = w6d.exportInhalt("2026-10-31T19:00:00.000Z");
-    gleich("Umgewandelte Daten: Export als Version 7, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [7, kopie(w6d.eval("daten"))]);
+    gleich("Umgewandelte Daten: Export als Version 8, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [8, kopie(w6d.eval("daten"))]);
     const fr6 = "2026-10-23"; // Freitag, Fahrtag ohne Eintrag
     const fehltAm = minuten => w6d.fehlendeFahrtage(fr6, minuten).includes(fr6);
     const ausFr6 = [fehltAm(23 * 60 + 59), w6d.fehlendeFahrtage("2026-10-24", 0).includes(fr6)];
@@ -2637,9 +2700,9 @@ async function start() {
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke: von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: von rechts 20 km/h"]]]);
     ablageB.innerHTML = w.bildWetter(ABEND);
-    wahr("Reiter Wetter: Wind je Teilstrecke als eigene Zeilen unter der Zeile 🧭 (Hin- und Rückfahrt)",
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke: von links 20 km/h Ecke → Beispielstadt: Gegenwind 20 km/h") &&
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke: Rückenwind 20 km/h Ecke → Musterdorf: von rechts 20 km/h"),
+    wahr("Reiter Wetter: Wind je Teilstrecke unter der Zeile 🧭 (Hin- und Rückfahrt; seit 5a Name und Wind zweizeilig)",
+      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke von links 20 km/h Ecke → Beispielstadt Gegenwind 20 km/h") &&
+      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke Rückenwind 20 km/h Ecke → Musterdorf von rechts 20 km/h"),
       ohneTags(ablageB.innerHTML));
     om = drei(ruhig());
     aendern(om, "apparent_temperature", D, "06:00", "07:00", 2, 1);
@@ -3045,7 +3108,7 @@ async function start() {
       const d = w.document.createElement("div");
       d.innerHTML = w.bildWetter(ABEND);
       return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ({ titel: ohneTags(k.querySelector("h3").innerHTML), text: ohneTags(k.innerHTML),
-        teile: [...k.querySelectorAll(".wind-teile > div")].map(z => ohneTags(z.innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
+        teile: [...k.querySelectorAll(".wind-teile > .wind-teil")].map(z => ohneTags(z.querySelector(".klein").innerHTML) + ": " + ohneTags(z.querySelector(".wind-text").innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
     };
     const windVorhersage = (jeOrt, richtung, boeen) => {
       const om = drei(ruhig());
@@ -3070,9 +3133,19 @@ async function start() {
     const teileStil = ablage51.querySelector(".wind-teile");
     w.document.body.appendChild(ablage51);
     const stil = w.getComputedStyle(ablage51.querySelector(".wind-teile"));
-    gleich("Teilstrecken-Zeilen in normaler Schrift (nicht „klein“), eingerückt, jede eine eigene Zeile",
-      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, stil.fontSize === w.getComputedStyle(ablage51.querySelector(".karte")).fontSize, teileStil.children.length],
-      [false, true, true, 2]);
+    gleich("Teilstrecken eingerückt, je Teilstrecke ein eigener Block",
+      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, teileStil.children.length, [...teileStil.children].every(z => z.classList.contains("wind-teil"))],
+      [false, true, 2, true]);
+    // W15 (Release 5a): je Teilstrecke zweizeilig, Name klein, darunter eingerückt der Wind in normaler Schrift
+    const teil1 = teileStil.children[0], name1 = teil1.children[0], wind1 = teil1.children[1];
+    const schrift = el => w.getComputedStyle(el).fontSize, links = el => el.getBoundingClientRect().left;
+    gleich("W15: zwei Zeilen je Teilstrecke: Name der Teilstrecke klein, darunter die Windangabe",
+      [teil1.children.length, name1.className, name1.textContent, wind1.textContent], [2, "klein", "Musterdorf → Ecke", "schräg von hinten rechts 16 km/h"]);
+    gleich("W15: Windangabe in normaler Schrift (wie die Karte), größer als der Name, unter dem Namen und weiter eingerückt",
+      [schrift(wind1) === schrift(ablage51.querySelector(".karte")), parseFloat(schrift(wind1)) > parseFloat(schrift(name1)),
+        wind1.getBoundingClientRect().top >= name1.getBoundingClientRect().bottom - 1, links(wind1) + parseFloat(w.getComputedStyle(wind1).paddingLeft) > links(name1),
+        links(name1) > links(teileStil.previousElementSibling)],
+      [true, true, true, true, true]);
     ablage51.remove();
 
     // Schwacher Wind, die erste Teilstrecke zählt nicht
@@ -3158,12 +3231,499 @@ async function start() {
       "Nimm z. B. eine Strecke durch ein Wohngebiet heraus.");
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
+
+    // =============================================================
+    // Release 5a: Werkstatt (Aufträge – Positionen – Mängel), Datenversion 8
+    // =============================================================
+
+    // -------------------------------------------------------------
+    // 52. Umwandlung 7 → 8 mit tests/daten-v7.json
+    // -------------------------------------------------------------
+    abschnitt("52. Umwandlung einer Version-7-Datei auf Version 8 (Werkstatt): Aufträge, Aufgaben, Positionen");
+    const v7Text = await (await fetch("daten-v7.json", { cache: "no-store" })).text();
+    const v7d = JSON.parse(v7Text);
+    const PRUEF = "radkm-test-wartungsarten-pruefen";
+    const pos = (id, art, ref, status, notiz = "") => Object.assign({ id, art, status, notiz }, art === "aufgabe" ? { wartungsartId: ref } : { mangelId: ref });
+    const pp = id => v7d.wartungsprotokoll.find(p => p.id === id);
+    const AUFTRAEGE_V7 = [
+      ausProtokoll(pp("p-erst")),
+      ausProtokoll(pp("p-klein"), [posMangel("m-1"), pos("pos-p-bremse", "aufgabe", "bremse", "erledigt", "vorn und hinten")]),
+      auftragV8({ id: "p-oel", wartungsartId: "reparatur", datum: "2025-10-20", werkstatt: "Zweiradladen Muster", kmStand: 1890, kmManuell: true,
+        positionen: [pos("pos-p-oel", "aufgabe", "oel", "erledigt")] }),
+      auftragV8({ id: "p-kette", wartungsartId: "reparatur", datum: "2026-05-02", kmStand: 1210.5,
+        positionen: [pos("pos-p-kette", "aufgabe", "kette", "erledigt", "selbst gewechselt"), posMangel("m-2"), pos("pos-p-reifen", "aufgabe", "reifen-hinten", "erledigt")] }),
+      ausProtokoll(pp("p-rep")),
+      auftragV8({ id: "termin-kleine-inspektion", wartungsartId: "kleine-inspektion", status: "geplant", termin: "2026-11-20", werkstatt: "Beispiel-Werkstatt",
+        positionen: [pos("pos-termin-kette", "aufgabe", "kette", "offen")] }),
+      auftragV8({ id: "termin-grosse-inspektion", wartungsartId: "grosse-inspektion", status: "geplant", termin: "2027-04-10", werkstatt: "Zweiradladen Muster",
+        positionen: [pos("pos-termin-oel", "aufgabe", "oel", "offen")] }),
+      auftragV8({ id: "termin-reifen-hinten", wartungsartId: "reparatur", status: "geplant", termin: "2026-12-05",
+        positionen: [pos("pos-termin-reifen-hinten", "aufgabe", "reifen-hinten", "offen")] })
+    ];
+    const pruefeV7 = (d, wo) => {
+      gleich(wo + ": version = 8, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [8, false, false]);
+      gleichInhalt(wo + ": Fahrrad, Einstellungen (Wetter mit Standardwerten), Vorlagen und Einträge unverändert", [d.fahrrad, d.vorlagen, d.eintraege, d.einstellungen.jahresziele],
+        [v7d.fahrrad, v7d.vorlagen, v7d.eintraege, v7d.einstellungen.jahresziele]);
+      gleich(wo + ": Einordnung: Zeitfenster, einmalig, „Inspektion“ oder „Reparatur“ im Namen → Auftrag, sonst Aufgabe (ohne Bauteil, Standard „nächste Inspektion“); Eigenleistung ergänzt",
+        d.wartungsarten.map(a => [a.id, a.typ, a.bauteil, a.zuordnung]), [["erstinspektion", "auftrag", null, null], ["kleine-inspektion", "auftrag", null, null],
+          ["grosse-inspektion", "auftrag", null, null], ["reparatur", "auftrag", null, null], ["bremse", "aufgabe", null, "naechste-inspektion"],
+          ["oel", "aufgabe", null, "naechste-inspektion"], ["kette", "aufgabe", null, "naechste-inspektion"], ["reifen-hinten", "aufgabe", null, "naechste-inspektion"],
+          ["eigenleistung", "auftrag", null, null]]);
+      gleichInhalt(wo + ": Intervalle, Zeitfenster, gültig ab und einmalig unverändert", d.wartungsarten.slice(0, 8).map(a => [a.intervallMonate, a.intervallKm, a.fensterVon, a.fensterBis, a.gueltigAbJahr, a.einmalig]),
+        v7d.wartungsarten.map(a => [a.intervallMonate, a.intervallKm, a.fensterVon, a.fensterBis, a.gueltigAbJahr, a.einmalig]));
+      gleichInhalt(wo + ": Protokoll → erledigte Aufträge (Reihenfolge wie im Protokoll); Aufgaben vom selben Tag mit gleichem km-Stand als Position (Bremse in der Kleinen Inspektion), " +
+        "mit abweichendem km-Stand (Öl, von Hand 1.890 km) und ohne Auftrag am selben Tag (Kette, Reifen) in einer Reparatur dieses Tages; Mängel mit protokollId als Position " +
+        "(auch zu einer Aufgabe); Termine → geplante Aufträge: Kleine Inspektion mit dem Termin der Kette (selber Tag), Öl in einer neuen Großen Inspektion " +
+        "(Termin im Zeitfenster März–April), Reifen in einer geplanten Reparatur", d.auftraege, AUFTRAEGE_V7);
+      gleichInhalt(wo + ": Mängel ohne protokollId, sonst unverändert; der offene bleibt ohne Auftrag", d.maengel, v7d.maengel.map(ohneProtokollId));
+    };
+    pruefeV7(kopie(w.datenEinlesen(v7Text)), "Beim Import");
+    localStorage.removeItem(PRUEF);
+    localStorage.setItem(TEST_SCHLUESSEL, v7Text);
+    const wV7 = await appLaden();
+    gleich("Beim Laden: kein Ladefehler", wV7.eval("ladeFehler"), null);
+    pruefeV7(kopie(wV7.eval("daten")), "Beim Laden");
+    gleich("Beim Laden: Version-7-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v7Text);
+    gleich("Nach der Umwandlung ist der Hinweis „Bitte Wartungsarten prüfen“ vorgemerkt; beim Start öffnet sich kein Fenster",
+      [localStorage.getItem(PRUEF), wV7.eval("fenster.open")], ["ja", false]);
+    gleich("Gleiche Umwandlung bei jedem Laden (Kennungen aus den alten abgeleitet)", kopie(wV7.datenEinlesen(v7Text)), kopie(wV7.eval("daten")));
+    let erg7 = wV7.sicherungAuswerten(v7Text, wV7.eval("daten"), "2026-11-01");
+    gleich("„Sicherung prüfen“ mit der Version-7-Datei: identisch, Kurzinfo passt (7 Wartungen im alten Protokoll)", [erg7.status, erg7.kurzinfoPasst], ["identisch", true]);
+    const ki7 = JSON.parse(wV7.exportInhalt("2026-11-01T12:00:00.000Z")).kurzinfo;
+    gleich("Kurzinfo ab Version 8: „wartungen“ = Anzahl erledigter Aufträge (5)", ki7.wartungen, 5);
+    erg7 = wV7.sicherungAuswerten(wV7.exportInhalt(), wV7.eval("daten"), "2026-11-01");
+    gleich("Neue Sicherung: identisch, Kurzinfo passt", [erg7.status, erg7.kurzinfoPasst], ["identisch", true]);
+    wV7.eval("aktiverTab = 'wartung'; zeichnen()");
+    const inhalt7 = () => wV7.document.getElementById("inhalt");
+    wahr("Reiter Wartung: Hinweis „Bitte Wartungsarten prüfen“ ganz oben", inhalt7().firstElementChild.textContent.startsWith("Bitte Wartungsarten prüfen"), inhalt7().firstElementChild.textContent);
+    inhalt7().querySelector('[data-action="pruefung-oeffnen"]').click();
+    const pruefText = ohneTags(wV7.document.getElementById("fensterinhalt").innerHTML);
+    gleich("Antippen öffnet den Prüfbildschirm mit allen Wartungsarten: Art, Intervall bzw. Zeitfenster, Bauteil und Standard-Zuordnung",
+      [wV7.document.querySelector("#fensterinhalt h2").textContent, [...wV7.document.querySelectorAll('#fensterinhalt [data-action="pruefung-art"] .text')].map(t => ohneTags(t.innerHTML))],
+      ["Bitte Wartungsarten prüfen", ["Erstinspektion · Auftrag einmalig · Intervall: 3 Monate oder 300 km", "Kleine Inspektion · Auftrag Zeitfenster: Oktober–November, ab 2026",
+        "Große Inspektion · Auftrag Zeitfenster: März–April, ab 2027 (Hinweis bei 3.000 km)", "Reparatur · Auftrag ohne Intervall, bei Bedarf",
+        "Bremsbeläge wechseln · Aufgabe Intervall: 5.000 km · Standard: nächste Inspektion", "Ölwechsel Nabe · Aufgabe Intervall: 24 Monate oder 5.000 km · Standard: nächste Inspektion",
+        "Kette · Aufgabe Intervall: 3.000 km · Standard: nächste Inspektion", "Reifen und Schlauch wechseln hinten · Aufgabe Intervall: 4.000 km · Standard: nächste Inspektion",
+        "Eigenleistung · Auftrag ohne Intervall, bei Bedarf"]]);
+    wahr("Prüfbildschirm erklärt Auftrag und Aufgabe", pruefText.includes("Aufträge mit Termin") && pruefText.includes("Aufgaben"), pruefText);
+    wV7.document.querySelector('#fensterinhalt [data-action="pruefung-art"][data-id="bremse"]').click();
+    gleich("Antippen einer Art öffnet ihr Formular (Aufgabe: Bauteil und Standard-Zuordnung sichtbar)",
+      [wV7.document.getElementById("a-name").value, wV7.document.getElementById("a-typ").value, wV7.document.getElementById("a-aufgabe-feld").hidden,
+        wV7.document.getElementById("a-auftrag-feld").hidden, [...wV7.document.querySelectorAll("#a-zuordnung option")].map(o => o.textContent)],
+      ["Bremsbeläge wechseln", "aufgabe", false, true, ["nächste Inspektion", "Erstinspektion", "Kleine Inspektion", "Große Inspektion", "Reparatur", "Eigenleistung"]]);
+    wV7.document.getElementById("a-bauteil").value = "Bremse vorn";
+    wV7.document.getElementById("a-zuordnung").value = "grosse-inspektion";
+    wV7.artSpeichern("bremse");
+    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 8 gespeichert",
+      [wV7.document.querySelector("#fensterinhalt h2").textContent, wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").bauteil,
+        wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").zuordnung, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version],
+      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 8]);
+    wV7.document.querySelector('#fensterinhalt [data-action="fenster-zu"]').click();
+    gleich("„Später“: Fenster zu, Hinweis bleibt", [wV7.eval("fenster.open"), inhalt7().textContent.includes("Bitte Wartungsarten prüfen")], [false, true]);
+    inhalt7().querySelector('[data-action="pruefung-oeffnen"]').click();
+    wV7.document.querySelector('#fensterinhalt [data-action="pruefung-fertig"]').click();
+    gleich("„Alles geprüft“: Hinweis weg, nicht mehr vorgemerkt (auch nicht nach erneutem Laden)",
+      [inhalt7().textContent.includes("Bitte Wartungsarten prüfen"), localStorage.getItem(PRUEF)], [false, null]);
+    wV7.frameElement.remove();
+    const wV7b = await appLaden();
+    wV7b.eval("aktiverTab = 'wartung'; zeichnen()");
+    gleich("Nach erneutem Laden (Daten schon Version 8): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
+    wV7b.sicherungAuswerten(v7Text, wV7b.eval("daten"), "2026-11-01");
+    gleich("„Sicherung prüfen“ mit einer Version-7-Datei merkt nichts vor und ändert nichts", localStorage.getItem(PRUEF), null);
+    wV7b.frage = async () => true;
+    await wV7b.importDateiGewaehlt(new wV7b.File([v7Text], "alt.json", { type: "application/json" }));
+    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [8, "ja"]);
+    wV7b.frameElement.remove();
+    localStorage.removeItem(PRUEF);
+
+    // -------------------------------------------------------------
+    // 53. Datenversion 8 prüfen
+    // -------------------------------------------------------------
+    abschnitt("53. Datenversion 8 prüfen: Wartungsarten, Aufträge, Positionen");
+    const basis8 = kopie(w.datenEinlesen(v7Text));
+    const mit8 = aend => JSON.stringify(Object.assign(kopie(basis8), aend));
+    const artAend = (id, aend) => mit8({ wartungsarten: basis8.wartungsarten.map(a => a.id === id ? Object.assign({}, a, aend) : a) });
+    const auftragAend = (id, aend) => mit8({ auftraege: basis8.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) });
+    gleichInhalt("Version 8: Export → Import verlustfrei", kopie(w.datenEinlesen(JSON.stringify(basis8))), basis8);
+    wirft("typ fehlt", () => w.datenEinlesen(artAend("bremse", { typ: undefined })), "typ muss „auftrag“ oder „aufgabe“");
+    wirft("Aufgabe mit Zeitfenster", () => w.datenEinlesen(artAend("bremse", { fensterVon: 3, fensterBis: 4 })), "Aufgabe kann kein Zeitfenster");
+    wirft("Aufgabe einmalig", () => w.datenEinlesen(artAend("bremse", { einmalig: true })), "Aufgabe kann nicht einmalig");
+    wirft("Bauteil bei einem Auftrag", () => w.datenEinlesen(artAend("reparatur", { bauteil: "Rahmen" })), "Bauteil gibt es nur bei Aufgaben");
+    wirft("Zuordnung bei einem Auftrag", () => w.datenEinlesen(artAend("reparatur", { zuordnung: "naechste-inspektion" })), "zuordnung");
+    wirft("Zuordnung auf eine unbekannte Art", () => w.datenEinlesen(artAend("bremse", { zuordnung: "gibt-es-nicht" })), "ist kein Auftrag");
+    wirft("Zuordnung auf eine Aufgabe", () => w.datenEinlesen(artAend("bremse", { zuordnung: "kette" })), "ist kein Auftrag");
+    gleich("Bauteil wird getrimmt, leer = null", [w.datenEinlesen(artAend("bremse", { bauteil: "  Bremse vorn " })).wartungsarten[4].bauteil,
+      w.datenEinlesen(artAend("bremse", { bauteil: " " })).wartungsarten[4].bauteil], ["Bremse vorn", null]);
+    wirft("Auftrag mit einer Aufgabe als Art", () => w.datenEinlesen(auftragAend("p-rep", { wartungsartId: "kette" })), "ist kein Auftrag");
+    wirft("Auftrag mit falschem Status", () => w.datenEinlesen(auftragAend("p-rep", { status: "offen" })), "status muss „geplant“ oder „erledigt“");
+    wirft("Erledigter Auftrag mit Termin", () => w.datenEinlesen(auftragAend("p-rep", { termin: "2026-07-01" })), "termin");
+    wirft("Erledigter Auftrag ohne Datum", () => w.datenEinlesen(auftragAend("p-rep", { datum: null })), "datum muss bei erledigten");
+    wirft("Geplanter Auftrag mit Datum", () => w.datenEinlesen(auftragAend("termin-reifen-hinten", { datum: "2026-12-05" })), "bei geplanten null");
+    wirft("Geplanter Auftrag mit Kilometerstand", () => w.datenEinlesen(auftragAend("termin-reifen-hinten", { kmStand: 100 })), "kmStand");
+    wirft("Zwei geplante Aufträge einer Inspektion", () => w.datenEinlesen(mit8({ auftraege: [...basis8.auftraege,
+      auftragV8({ id: "zweite", wartungsartId: "kleine-inspektion", status: "geplant" })] })), "nur ein geplanter Auftrag");
+    gleich("Mehrere geplante Reparaturen sind erlaubt", w.datenEinlesen(mit8({ auftraege: [...basis8.auftraege,
+      auftragV8({ id: "zweite", wartungsartId: "reparatur", status: "geplant" })] })).auftraege.length, 9);
+    wirft("Position mit falschem Status im geplanten Auftrag", () => w.datenEinlesen(auftragAend("termin-reifen-hinten",
+      { positionen: [pos("x", "aufgabe", "reifen-hinten", "erledigt")] })), "status muss „offen“");
+    wirft("Position mit falschem Status im erledigten Auftrag", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "aufgabe", "kette", "offen")] })),
+      "„erledigt“ oder „nicht-gemacht“");
+    wirft("Position mit unbekannter Art", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [{ id: "x", art: "teil", status: "erledigt" }] })), "art muss");
+    wirft("Aufgaben-Position mit einem Auftrag als Art", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "aufgabe", "reparatur", "erledigt")] })), "ist keine Aufgabe");
+    wirft("Mangel-Position mit unbekanntem Mangel", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "mangel", "m-9", "erledigt")] })), "unbekannte mangelId");
+    wirft("Aufgabe doppelt im Auftrag", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "aufgabe", "kette", "erledigt"), pos("y", "aufgabe", "kette", "erledigt")] })), "doppelt im Auftrag");
+    wirft("Aufgabe in zwei geplanten Aufträgen", () => w.datenEinlesen(auftragAend("termin-reifen-hinten",
+      { positionen: [pos("x", "aufgabe", "kette", "offen")] })), "schon in einem anderen geplanten Auftrag");
+    wirft("Erledigter Mangel in einem geplanten Auftrag", () => w.datenEinlesen(auftragAend("termin-reifen-hinten", { positionen: [pos("x", "mangel", "m-4", "offen")] })),
+      "kann nicht in einem geplanten Auftrag stehen");
+    wirft("Mangel als erledigte Position, aber noch offen", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "mangel", "m-3", "erledigt")] })), "noch offen");
+    gleich("Offener Mangel als „nicht gemacht“ in einem erledigten Auftrag ist erlaubt",
+      w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "mangel", "m-3", "nicht-gemacht")] })).auftraege.find(a => a.id === "p-rep").positionen[0].status, "nicht-gemacht");
+    wirft("Mangel mit zwei Aufträgen erledigt", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [posMangel("m-1")] })), "pos-m-1");
+    wirft("Mangel mit zwei Aufträgen erledigt (andere Kennung)", () => w.datenEinlesen(auftragAend("p-rep", { positionen: [pos("x", "mangel", "m-1", "erledigt")] })), "schon mit einem anderen Auftrag erledigt");
+    wirft("„ausgeschlossen“ im erledigten Auftrag", () => w.datenEinlesen(auftragAend("p-rep", { ausgeschlossen: ["kette"] })), "ausgeschlossen");
+    wirft("„ausgeschlossen“ mit einer Aufgabe, die im Auftrag steht", () => w.datenEinlesen(auftragAend("termin-reifen-hinten", { ausgeschlossen: ["reifen-hinten"] })), "ausgeschlossen");
+    wirft("Doppelte Kennung eines Auftrags", () => w.datenEinlesen(mit8({ auftraege: [...basis8.auftraege, Object.assign({}, basis8.auftraege[0])] })), "kommt doppelt vor");
+    wirft("Doppelte Kennung eines Mangels", () => w.datenEinlesen(mit8({ maengel: [...basis8.maengel, Object.assign({}, basis8.maengel[0])] })), "kommt doppelt vor");
+
+    // -------------------------------------------------------------
+    // 54. Fälligkeit, Standard-Zuordnung (nur berechnet) und Vorschläge
+    // -------------------------------------------------------------
+    abschnitt("54. Fälligkeit, Standard-Zuordnung (nur berechnet) und Vorschläge (Stichtag So 01.11.2026, 10 km pro Tag)");
+    const echtHeute = w.heute;
+    const H5 = "2026-11-01";
+    w.heute = () => H5;
+    const setze8 = d => w.eval("daten = datenEinlesen(" + JSON.stringify(JSON.stringify(Object.assign({ version: 8 }, d))) + ")");
+    const AA = (id, name, aend) => Object.assign({ id, name, typ: "auftrag", intervallMonate: null, intervallKm: null, fensterVon: null, fensterBis: null,
+      gueltigAbJahr: null, einmalig: false, bauteil: null, zuordnung: null }, aend);
+    const AU = (id, name, aend) => Object.assign(AA(id, name), { typ: "aufgabe", zuordnung: "naechste-inspektion" }, aend);
+    const zehn2026 = [];
+    for (let d = "2026-01-01"; d <= "2026-10-31"; d = w.plusTage(d, 1)) zehn2026.push(E(d, 10));
+    const ARTEN5 = [
+      AA("klein", "Kleine Inspektion", { fensterVon: 10, fensterBis: 11 }),
+      AA("gross", "Große Inspektion", { fensterVon: 3, fensterBis: 4, gueltigAbJahr: 2027, intervallKm: 4000 }),
+      AA("rep", "Reparatur"), AA("eigen", "Eigenleistung"),
+      AU("bremse", "Bremsbeläge wechseln", { intervallKm: 3200, bauteil: "Bremse vorn", zuordnung: "gross" }),
+      AU("oel", "Ölwechsel Nabe", { intervallMonate: 12, bauteil: "Nabe" }),
+      AU("kette", "Kette", { intervallKm: 3000 }),
+      AU("licht", "Licht prüfen", { intervallMonate: 6, zuordnung: "rep" })
+    ];
+    const MAENGEL5 = [{ id: "m-klingel", datum: "2026-10-29", beschreibung: "Klingel klemmt", status: "offen", erledigtAm: null }];
+    const werkstatt5 = (aend = {}) => { setze8(Object.assign({ fahrrad: F("2026-01-01", 0), eintraege: zehn2026, wartungsarten: kopie(ARTEN5), auftraege: [], maengel: kopie(MAENGEL5) }, aend)); w.speichern(); };
+    werkstatt5();
+    const lage5 = () => w.werkstattLage(H5);
+    const offenKurz = l => l.offene.map(o => [o.art.id, o.vorgemerkt, o.datum, o.ziel, o.positionen.map(p => p.art === "aufgabe" ? p.wartungsartId + (p.berechnet ? "*" : "") : p.mangelId),
+      o.vorschlaege.map(x => x.art.id)]);
+    let l5 = lage5();
+    gleich("Aufgaben mit Fälligkeit (km oder Monate, was zuerst eintritt), überfällige zuerst",
+      l5.aufgaben.map(x => [x.art.id, x.st.text]), [
+        ["licht", "überfällig seit 123 Tagen (01.07.2026)"], ["kette", "überfällig: km-Grenze (3.000 km) um 40 km überschritten"],
+        ["bremse", "fällig ca. im November 2026 bei ca. 3.200 km"], ["oel", "fällig in 61 Tagen (01.01.2027)"]]);
+    gleich("Offene Aufträge (vorgemerkt, nichts gespeichert): Kleine Inspektion bis 30.11. mit der überfälligen Kette (nächste Inspektion); Große Inspektion " +
+      "(gültig ab 2027, Fenster März–April) mit Bremse (Standard Große Inspektion) und Öl (fällig 01.01.2027, erst bis zur Großen); Vorschläge: Licht (ohne Auftrag), " +
+      "Bremse zur Kleinen (sonst erst zur Großen)", offenKurz(l5), [
+        ["klein", true, "2026-11-30", "2026-11-30", ["kette*"], ["licht", "bremse"]],
+        ["gross", true, null, "2027-04-30", ["bremse*", "oel*"], ["licht"]]]);
+    gleich("Licht prüfen: Standard Reparatur, aber keine offene Reparatur → ohne Auftrag", [l5.aufgabeVon("licht").offen, w.eval("daten.auftraege.length")], [null, 0]);
+    const g5 = l5.offene[1].regel;
+    gleich("Mit Zeitfenster gilt das Fenster (gültig ab 2027, Zieldatum Ende des ersten Fensters); km vorher erreicht → nur ein Hinweis", [l5.offene[1].text, g5.kmHinweis],
+      ["noch nicht fällig (gültig ab 2027)", "km-Grenze (ca. 4.000 km) voraussichtlich schon im Februar 2027 erreicht"]);
+    w.eval("aktiverTab = 'wartung'; zeichnen()");
+    const karte5 = name => [...w.document.querySelectorAll("#inhalt > .karte")].find(k => k.querySelector("h3").textContent === name);
+    const vorschlagText = ohneTags(karte5("Kleine Inspektion").querySelectorAll(".vorschlag")[1].innerHTML);
+    gleich("Vorschlag in der Karte: „Bremsbeläge wechseln bei ca. 3.200 km fällig – zu diesem Auftrag nehmen?“", vorschlagText,
+      "💡 Bremsbeläge wechseln bei ca. 3.200 km fällig – zu diesem Auftrag nehmen? (sonst Große Inspektion) Mitnehmen");
+    wahr("Karte der Kleinen Inspektion: Fälligkeit, Positionen mit Fälligkeit und „nach Standard“, Knöpfe",
+      ohneTags(karte5("Kleine Inspektion").innerHTML).startsWith("Kleine Inspektion fällig bis 30.11.") &&
+      ohneTags(karte5("Kleine Inspektion").innerHTML).includes("Positionen (1) 🔧 Kette überfällig: km-Grenze (3.000 km) um 40 km überschritten · nach Standard") &&
+      ohneTags(karte5("Kleine Inspektion").innerHTML).endsWith("Termin planen Positionen Erledigt eintragen"), ohneTags(karte5("Kleine Inspektion").innerHTML));
+    wahr("Karte der Großen Inspektion: Hinweis zur km-Grenze, Bauteil bei der Position", ohneTags(karte5("Große Inspektion").innerHTML).includes("Hinweis: km-Grenze (ca. 4.000 km)") &&
+      ohneTags(karte5("Große Inspektion").innerHTML).includes("🔧 Bremsbeläge wechseln · Bremse vorn"), ohneTags(karte5("Große Inspektion").innerHTML));
+    const aufgabenZeilen = [...w.document.querySelectorAll('#inhalt [data-action="aufgabe-ansehen"] .text')].map(t => ohneTags(t.innerHTML));
+    gleich("Aufgaben mit Hinweis auf ihren Auftrag", aufgabenZeilen, [
+      "Licht prüfen überfällig seit 123 Tagen (01.07.2026) noch kein Auftrag · Standard: Reparatur",
+      "Kette überfällig: km-Grenze (3.000 km) um 40 km überschritten → Kleine Inspektion (fällig bis 30.11.) · nach Standard",
+      "Bremsbeläge wechseln · Bremse vorn fällig ca. im November 2026 bei ca. 3.200 km → Große Inspektion · nach Standard",
+      "Ölwechsel Nabe · Nabe fällig in 61 Tagen (01.01.2027) → Große Inspektion · nach Standard"]);
+    gleich("Mangel ohne Auftrag oben mit „Zu Auftrag …“ und „Reparatur anlegen“", [...w.document.querySelectorAll("#inhalt .zeile.mit-knoepfen button")].map(b => b.textContent),
+      ["Klingel klemmtfestgestellt am 29.10.2026›", "Zu Auftrag …", "Reparatur anlegen"]);
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    const kachel5 = [...w.document.querySelectorAll("#inhalt .karte")][0];
+    wahr("Übersicht: nächster fälliger Auftrag mit Positionen; überfällige Aufgabe ohne Auftrag als Hinweis; offene Mängel",
+      ohneTags(kachel5.innerHTML).includes("🔧 Kleine Inspektion: fällig bis 30.11. (ca. 3.330 km) · 1 Position") &&
+      ohneTags(kachel5.innerHTML).includes("⚠️ Licht prüfen überfällig – keinem Auftrag zugeordnet") && ohneTags(kachel5.innerHTML).includes("⚠️ 1 offener Mangel"), ohneTags(kachel5.innerHTML));
+    gleich("Nur berechnet: Anzeige und Berechnung verändern Daten und Speicher nicht", [w.eval("daten.auftraege.length"), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege], [0, []]);
+    w.eval("daten.wartungsarten.find(a => a.id === 'bremse').zuordnung = 'klein'");
+    gleich("Geänderte Standard-Zuordnung wirkt sofort (Bremse zur Kleinen Inspektion, kein Vorschlag mehr)", offenKurz(lage5()).map(o => [o[0], o[4], o[5]]),
+      [["klein", ["kette*", "bremse*"], ["licht"]], ["gross", ["oel*"], ["licht"]]]);
+    w.eval("daten.wartungsarten.find(a => a.id === 'bremse').zuordnung = 'gross'");
+    werkstatt5({ auftraege: [auftragV8({ id: "a-klein", wartungsartId: "klein", status: "geplant", termin: "2026-11-10", werkstatt: "W" })] });
+    gleich("Mit Termin am 10.11.: Zieldatum = Termin; die Bremse (17.11.) ist dann kein Vorschlag mehr", offenKurz(lage5())[0],
+      ["klein", false, "2026-11-10", "2026-11-10", ["kette*"], ["licht"]]);
+    werkstatt5({ auftraege: [auftragV8({ id: "a-klein", wartungsartId: "klein", status: "geplant", ausgeschlossen: ["kette"] })] });
+    gleich("Aus der Kleinen entfernt: die Kette kommt zur nächsten Inspektion (Große), kein Vorschlag mehr in der Kleinen", offenKurz(lage5()).map(o => [o[0], o[4], o[5]]),
+      [["klein", [], ["licht", "bremse"]], ["gross", ["kette*", "bremse*", "oel*"], ["licht"]]]);
+    werkstatt5({ auftraege: [auftragV8({ id: "a-rep", wartungsartId: "rep", status: "geplant", positionen: [pos("x", "aufgabe", "oel", "offen")] })] });
+    l5 = lage5();
+    gleich("Ausdrücklich zugeordnet hat Vorrang vor dem Standard; geplante Reparatur ohne Termin: Zieldatum heute, Licht (Standard Reparatur) dort berechnet, " +
+      "die überfällige Kette als Vorschlag (sonst erst zur Kleinen Inspektion)",
+      offenKurz(l5), [["klein", true, "2026-11-30", "2026-11-30", ["kette*"], ["bremse"]], ["gross", true, null, "2027-04-30", ["bremse*"], []],
+        ["rep", false, null, H5, ["oel", "licht*"], ["kette"]]]);
+
+    // -------------------------------------------------------------
+    // 55. Aufträge bearbeiten: Vorschlag, Entfernen, Verschieben, Termin, Mängel, Reparatur, Löschen
+    // -------------------------------------------------------------
+    abschnitt("55. Aufträge bearbeiten: Vorschlag annehmen, Position entfernen und verschieben, Termin, Mängel zuordnen, Reparatur anlegen, Löschen");
+    werkstatt5();
+    w.eval("aktiverTab = 'wartung'; zeichnen()");
+    karte5("Kleine Inspektion").querySelectorAll('.vorschlag [data-action="vorschlag-annehmen"]')[1].click();
+    let a5 = w.eval("daten.auftraege");
+    gleich("„Mitnehmen“: der vorgemerkte Auftrag wird gespeichert, mit der Bremse als Position; berechnete Positionen bleiben berechnet",
+      [a5.length, a5[0].wartungsartId, a5[0].status, a5[0].positionen.map(p => [p.art, p.wartungsartId, p.status]), offenKurz(lage5()).map(o => [o[0], o[1], o[4], o[5]]),
+        JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.length, w.document.getElementById("toast-text").textContent],
+      [1, "klein", "geplant", [["aufgabe", "bremse", "offen"]], [["klein", false, ["bremse", "kette*"], ["licht"]], ["gross", true, ["oel*"], ["licht"]]], 1,
+        "Bremsbeläge wechseln aufgenommen"]);
+    const keyK = a5[0].id;
+    w.auftragAnsicht(keyK);
+    const fensterText5 = () => ohneTags(w.document.getElementById("fensterinhalt").innerHTML);
+    wahr("Ansicht des Auftrags: Positionen mit „Verschieben …“ und „Entfernen“, Vorschlag, Aufgabe und Mangel hinzufügen, Termin, Erledigt, Löschen",
+      fensterText5().startsWith("Kleine Inspektion fällig bis 30.11. Positionen 🔧 Bremsbeläge wechseln · Bremse vorn") &&
+      fensterText5().includes("Verschieben … Entfernen") && fensterText5().includes("💡 Licht prüfen überfällig – zu diesem Auftrag nehmen?") &&
+      fensterText5().includes("Aufgabe hinzufügen") && fensterText5().includes("Mangel hinzufügen") && fensterText5().endsWith("Auftrag löschen"), fensterText5());
+    gleich("Auswahl „Aufgabe hinzufügen“: nicht im Auftrag stehende Aufgaben mit Fälligkeit und jetzigem Auftrag",
+      [...w.document.querySelectorAll("#ap-aufgabe option")].map(o => o.textContent), ["Licht prüfen – überfällig", "Ölwechsel Nabe – am 01.01.2027 fällig (jetzt: Große Inspektion)"]);
+    w.document.querySelector('#fensterinhalt [data-action="position-entfernen"][data-pos="aufgabe:kette"]').click();
+    a5 = w.eval("daten.auftraege");
+    gleich("Berechnete Position entfernen: im Auftrag ausgeschlossen, die Kette kommt zur Großen Inspektion; die Ansicht bleibt offen",
+      [a5[0].ausgeschlossen, offenKurz(lage5()).map(o => [o[0], o[4]]), w.eval("fenster.open")], [["kette"], [["klein", ["bremse"]], ["gross", ["kette*", "oel*"]]], true]);
+    w.document.querySelector('#fensterinhalt [data-action="position-verschieben"][data-pos="aufgabe:bremse"]').click();
+    gleich("„Verschieben …“: Auswahl der anderen offenen Aufträge", [...w.document.querySelectorAll('#fensterinhalt [data-action="position-verschieben-ziel"] .text > div:first-child')].map(d => d.textContent),
+      ["Große Inspektion"]);
+    w.document.querySelector('#fensterinhalt [data-action="position-verschieben-ziel"]').click();
+    a5 = w.eval("daten.auftraege");
+    gleich("Verschoben: die Große Inspektion wird gespeichert, mit der Bremse ausdrücklich; in der Kleinen ausgeschlossen",
+      [a5.map(a => [a.wartungsartId, a.positionen.map(p => p.wartungsartId), a.ausgeschlossen]), w.document.getElementById("toast-text").textContent],
+      [[["klein", [], ["kette", "bremse"]], ["gross", ["bremse"], []]], "Position verschoben"]);
+    w.fensterSchliessen();
+    w.auftragAnsicht(keyK);
+    w.document.getElementById("ap-aufgabe").value = "kette";
+    w.document.querySelector('#fensterinhalt [data-action="position-aufgabe-dazu"]').click();
+    a5 = w.eval("daten.auftraege");
+    gleich("Aufgabe hinzufügen: die Kette ausdrücklich in der Kleinen (aus „ausgeschlossen“ genommen), in der Großen nicht mehr berechnet",
+      a5.map(a => [a.wartungsartId, a.positionen.map(p => p.wartungsartId), a.ausgeschlossen]), [["klein", ["kette"], ["bremse"]], ["gross", ["bremse"], []]]);
+    w.fensterSchliessen();
+    // Termin planen, ändern und entfernen
+    w.auftragTerminFormular(keyK);
+    w.document.getElementById("t-datum").value = "2026-11-20";
+    w.document.getElementById("t-werkstatt").value = "Beispiel-Werkstatt";
+    w.auftragTerminSpeichern(keyK);
+    gleich("Termin geplant: am Auftrag gespeichert, Anzeige „Termin am …“ mit erwartetem Kilometerstand; „Ohne Termin“ klein darunter",
+      [w.eval("daten.auftraege[0]").termin, w.eval("daten.auftraege[0]").werkstatt, lage5().offene[0].text, lage5().offene[0].erwartet],
+      ["2026-11-20", "Beispiel-Werkstatt", "Termin am 20.11.2026 bei Beispiel-Werkstatt (in 19 Tagen)", { datum: "2026-11-20", km: 3230 }]);
+    alerts.length = 0;
+    w.auftragTerminFormular(keyK);
+    w.document.getElementById("t-datum").value = "";
+    w.auftragTerminSpeichern(keyK);
+    gleich("Leeres Datum beim Termin ändert nichts (Hinweis auf „Termin entfernen“)", [w.eval("daten.auftraege[0]").termin, alerts.length], ["2026-11-20", 1]);
+    w.frage = async () => true;
+    await w.auftragTerminEntfernen(keyK);
+    gleich("Termin entfernen: Auftrag bleibt mit seinen Positionen", [w.eval("daten.auftraege[0]").termin, w.eval("daten.auftraege[0]").positionen.length], [null, 1]);
+    w.auftragTerminFormular("neu:gross");
+    w.document.getElementById("t-datum").value = "2027-03-15";
+    w.auftragTerminSpeichern("neu:gross");
+    werkstatt5();
+    w.auftragTerminFormular("neu:klein");
+    w.document.getElementById("t-datum").value = "2026-11-12";
+    w.auftragTerminSpeichern("neu:klein");
+    gleich("Termin am vorgemerkten Auftrag: speichert den Auftrag mit Termin (nur die ausdrücklichen Angaben, keine berechneten Positionen)",
+      w.eval("daten.auftraege").map(a => [a.wartungsartId, a.status, a.termin, a.positionen]), [["klein", "geplant", "2026-11-12", []]]);
+    // Mängel zuordnen, Reparatur anlegen
+    w.mangelZuordnenWahl("m-klingel");
+    gleich("Mangel „Zu Auftrag …“: offene Aufträge und „Neu: Reparatur“, „Neu: Eigenleistung“",
+      [[...w.document.querySelectorAll('#fensterinhalt [data-action="mangel-zuordnen-ziel"] .text > div:first-child')].map(d => d.textContent),
+        [...w.document.querySelectorAll('#fensterinhalt [data-action="mangel-auftrag-neu"]')].map(b => b.textContent)],
+      [["Kleine Inspektion", "Große Inspektion"], ["Neu: Reparatur", "Neu: Eigenleistung"]]);
+    w.document.querySelector('#fensterinhalt [data-action="mangel-zuordnen-ziel"]').click();
+    l5 = lage5();
+    gleich("Mangel der Kleinen Inspektion zugeordnet: Position, nicht mehr oben ohne Auftrag", [l5.offene[0].positionen.map(p => p.mangelId || p.wartungsartId), l5.maengelOhneAuftrag],
+      [["m-klingel", "kette"], []]);
+    w.mangelAuftragNeu("m-klingel", "rep");
+    a5 = w.eval("daten.auftraege");
+    gleich("„Reparatur anlegen“: neue geplante Reparatur mit dem Mangel (aus der Kleinen verschoben); ihre Ansicht öffnet sich",
+      [a5.map(a => [a.wartungsartId, a.positionen.map(p => p.mangelId || p.wartungsartId)]), w.document.querySelector("#fensterinhalt h2").textContent],
+      [[["klein", []], ["rep", ["m-klingel"]]], "Reparatur"]);
+    w.auftragTerminFormular("anlegen:eigen");
+    w.document.getElementById("t-werkstatt").value = "";
+    w.auftragTerminSpeichern("anlegen:eigen");
+    gleich("„+ Eigenleistung“ legt einen geplanten Auftrag (Termin optional) an; mehrere Aufträge ohne Fälligkeit möglich",
+      w.eval("daten.auftraege").map(a => [a.wartungsartId, a.termin]), [["klein", "2026-11-12"], ["rep", null], ["eigen", null]]);
+    const repId = w.eval("daten.auftraege[1].id");
+    let vorLoeschen = JSON.stringify(w.eval("daten"));
+    await w.auftragLoeschen(repId);
+    gleich("Geplanten Auftrag löschen: der Mangel steht wieder ohne Auftrag; mit „Rückgängig“",
+      [w.eval("daten.auftraege.length"), lage5().maengelOhneAuftrag.map(m => m.id), w.document.getElementById("toast-text").textContent], [2, ["m-klingel"], "Auftrag gelöscht"]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“ stellt den Auftrag wieder her", JSON.stringify(w.eval("daten")) === vorLoeschen, true);
+
+    // -------------------------------------------------------------
+    // 56. Erledigt eintragen: Positionen fest, Intervall neu, Mängel, nicht gemacht
+    // -------------------------------------------------------------
+    abschnitt("56. Erledigt eintragen: angezeigte Positionen fest gespeichert, erledigte Aufgaben beginnen neu, nicht gemachte bleiben offen");
+    werkstatt5({ maengel: [...kopie(MAENGEL5), { id: "m-licht", datum: "2026-10-30", beschreibung: "Rücklicht flackert", status: "offen", erledigtAm: null }] });
+    w.aufgabeZuAuftrag("neu:klein", "bremse");
+    w.mangelZuAuftrag("neu:klein", "m-klingel");
+    w.speichern();
+    const kleinId = w.eval("daten.auftraege[0].id");
+    w.auftragErledigen(kleinId);
+    gleich("Formular: Datum heute (kein Termin), Kilometerstand berechnet, alle angezeigten Positionen (auch die berechnete Kette) zum Abhaken, weitere offene Mängel",
+      [w.document.getElementById("p-datum").value, w.document.getElementById("p-km").value,
+        [...w.document.querySelectorAll('input[name="p-position"]')].map(el => [el.checked, ohneTags(el.parentElement.innerHTML)]),
+        [...w.document.querySelectorAll('input[name="p-mangel"]')].map(el => [el.value, el.checked])],
+      [H5, "3040", [[true, "🔧 Bremsbeläge wechseln"], [true, "⚠️ Klingel klemmt"], [true, "🔧 Kette"]], [["m-licht", false]]]);
+    w.document.querySelectorAll('input[name="p-position"]')[0].checked = false;  // Bremse nicht gemacht
+    w.document.getElementById("p-werkstatt").value = "Beispiel-Werkstatt";
+    w.document.getElementById("p-datum").value = "2026-10-31";
+    w.protokollDatumGeaendert();
+    w.abschlussSpeichern();
+    a5 = w.eval("daten.auftraege");
+    const erledigt5 = a5.find(a => a.id === kleinId);
+    gleichInhalt("Erledigt: genau die angezeigten Positionen fest gespeichert (Kette mit neuer Kennung), Bremse „nicht gemacht“; Datum und km-Stand vom Auftrag",
+      [erledigt5.status, erledigt5.termin, erledigt5.datum, erledigt5.kmStand, erledigt5.kmManuell, erledigt5.werkstatt,
+        erledigt5.positionen.map(p => [p.art, p.wartungsartId || p.mangelId, p.status]), erledigt5.positionen.every(p => typeof p.id === "string" && p.id), erledigt5.ausgeschlossen],
+      ["erledigt", null, "2026-10-31", 3040, false, "Beispiel-Werkstatt", [["aufgabe", "bremse", "nicht-gemacht"], ["mangel", "m-klingel", "erledigt"], ["aufgabe", "kette", "erledigt"]], true, []]);
+    gleich("Erledigter Mangel geschlossen (Datum des Auftrags), der nicht abgehakte weitere Mangel bleibt offen",
+      w.eval("daten.maengel").map(m => [m.id, m.status, m.erledigtAm]), [["m-klingel", "erledigt", "2026-10-31"], ["m-licht", "offen", null]]);
+    l5 = lage5();
+    gleich("Erledigte Aufgabe beginnt ihr Intervall neu (Datum und km-Stand des Auftrags): Kette fällig bei 6.040 km",
+      [l5.aufgabeVon("kette").st.letzte.datum, l5.aufgabeVon("kette").st.grenzeKm, l5.aufgabeVon("kette").st.text], ["2026-10-31", 6040, "fällig ca. im August 2027 bei ca. 6.040 km"]);
+    gleich("Kleine Inspektion: nächste ab 01.10.2027 (vorgemerkt, die Kette bis dahin wieder fällig); die nicht gemachte Bremse wieder in der Großen",
+      offenKurz(l5).map(o => [o[0], o[1], o[2], o[4], o[5]]), [["klein", true, "2027-10-01", ["kette*"], ["licht"]], ["gross", true, null, ["bremse*", "oel*"], ["licht"]]]);
+    gleich("Historie: erledigter Auftrag mit Anzahl erledigter Positionen", ohneTags(w.bildWartung(H5)).includes("31.10.2026 · Kleine Inspektion Beispiel-Werkstatt · 2 Positionen 3.040 km"), true);
+    // Spätere Änderungen an Intervallen und Zuordnungen verändern erledigte Aufträge nicht
+    const fest = JSON.stringify(erledigt5);
+    w.eval(`daten.wartungsarten.find(a => a.id === "kette").intervallKm = 50;
+      daten.wartungsarten.find(a => a.id === "bremse").zuordnung = "klein";
+      daten.wartungsarten.find(a => a.id === "oel").intervallMonate = 1;`);
+    w.speichern();
+    w.erledigterAuftragAnsicht(w.eval("daten.auftraege").find(a => a.id === kleinId));
+    gleich("Danach Intervalle und Zuordnungen geändert: der erledigte Auftrag bleibt unverändert (gespeichert und in der Ansicht)",
+      [JSON.stringify(w.eval("daten.auftraege").find(a => a.id === kleinId)) === fest, fensterText5()],
+      [true, "Kleine Inspektion Datum Sa, 31.10.2026 Werkstatt Beispiel-Werkstatt Kilometerstand 3.040 km (berechnet) Erledigte Positionen ✓ Mangel: Klingel klemmt ✓ Kette " +
+        "Nicht gemacht – Bremsbeläge wechseln Schließen Ändern"]);
+    // Ändern: Mangel abwählen → wieder offen; weiteren Mangel abhaken
+    w.erledigterAuftragAendern(kleinId);
+    w.document.querySelectorAll('input[name="p-position"]')[1].checked = false;
+    w.document.querySelector('input[name="p-mangel"][value="m-licht"]').checked = true;
+    w.abschlussSpeichern();
+    gleich("Ändern: abgewählter Mangel wieder offen (Position „nicht gemacht“), weiterer Mangel als erledigte Position",
+      [w.eval("daten.auftraege").find(a => a.id === kleinId).positionen.map(p => [p.wartungsartId || p.mangelId, p.status]),
+        w.eval("daten.maengel").map(m => [m.id, m.status, m.erledigtAm])],
+      [[["bremse", "nicht-gemacht"], ["m-klingel", "nicht-gemacht"], ["kette", "erledigt"], ["m-licht", "erledigt"]], [["m-klingel", "offen", null], ["m-licht", "erledigt", "2026-10-31"]]]);
+    vorLoeschen = JSON.stringify(w.eval("daten"));
+    await w.erledigtLoeschen(kleinId);
+    gleich("Erledigten Auftrag löschen: mit ihm erledigte Mängel wieder offen, die Kette wieder fällig", [w.eval("daten.maengel").map(m => m.status), lage5().aufgabeVon("kette").st.letzte],
+      [["offen", "offen"], null]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“", JSON.stringify(w.eval("daten")) === vorLoeschen, true);
+    // Eigenleistung zu einer Aufgabe
+    werkstatt5();
+    w.aufgabeZuAuftrag("neu:klein", "bremse");
+    w.speichern();
+    w.aufgabeAnsicht("bremse");
+    wahr("Ansicht einer Aufgabe: Bauteil, Regel, Fälligkeit, Auftrag, „Zu Auftrag …“, „Erledigt eintragen“ (Eigenleistung)",
+      fensterText5().startsWith("Bremsbeläge wechseln Bauteil Bremse vorn Regel Intervall: 3.200 km · Bremse vorn · Standard: Große Inspektion Fälligkeit fällig ca. im November 2026") &&
+      fensterText5().includes("Auftrag Kleine Inspektion (fällig bis 30.11.)") && fensterText5().includes("legt eine erledigte Eigenleistung"), fensterText5());
+    w.document.querySelector('#fensterinhalt [data-action="aufgabe-erledigen"]').click();
+    gleich("„Erledigt eintragen“ an der Aufgabe: Formular einer Eigenleistung mit dieser Position", [w.document.querySelector("#fensterinhalt h2").textContent,
+      [...w.document.querySelectorAll('input[name="p-position"]')].map(el => ohneTags(el.parentElement.innerHTML))], ["Erledigt: Eigenleistung", ["🔧 Bremsbeläge wechseln"]]);
+    w.abschlussSpeichern();
+    a5 = w.eval("daten.auftraege");
+    gleich("Erledigte Eigenleistung gespeichert; die Bremse steht in keinem geplanten Auftrag mehr; neu fällig ab 3.040 km",
+      [a5.map(a => [a.wartungsartId, a.status, a.positionen.map(p => [p.wartungsartId, p.status])]), lage5().aufgabeVon("bremse").st.grenzeKm],
+      [[["klein", "geplant", []], ["eigen", "erledigt", [["bremse", "erledigt"]]]], 6240]);
+    // Mangel von Hand erledigen bzw. wieder öffnen
+    werkstatt5({ maengel: [...kopie(MAENGEL5), { id: "m-alt", datum: "2026-05-01", beschreibung: "Sattel locker", status: "erledigt", erledigtAm: "2026-05-02" }],
+      auftraege: [auftragV8({ id: "a-g", wartungsartId: "klein", status: "geplant", positionen: [pos("x", "mangel", "m-klingel", "offen")] }),
+        auftragV8({ id: "a-e", wartungsartId: "rep", datum: "2026-05-02", positionen: [pos("y", "mangel", "m-alt", "erledigt")] })] });
+    w.mangelFormular("m-klingel");
+    w.document.getElementById("m-status").value = "erledigt";
+    w.mangelSpeichern("m-klingel");
+    w.mangelFormular("m-alt");
+    w.document.getElementById("m-status").value = "offen";
+    w.mangelSpeichern("m-alt");
+    gleich("Mangel von Hand erledigt: aus dem geplanten Auftrag entfernt; mit Auftrag erledigter Mangel wieder geöffnet: dort „nicht gemacht“",
+      w.eval("daten.auftraege").map(a => [a.id, a.positionen.map(p => [p.mangelId, p.status])]), [["a-g", []], ["a-e", [["m-alt", "nicht-gemacht"]]]]);
+    w.mangelAnsicht("m-alt");
+    wahr("Ansicht eines offenen Mangels: „noch keinem Auftrag zugeordnet“ und „Zu Auftrag …“", fensterText5().includes("Im Auftrag noch keinem Auftrag zugeordnet") &&
+      fensterText5().includes("Zu Auftrag …"), fensterText5());
+    w.fensterSchliessen();
+
+    // -------------------------------------------------------------
+    // 57. Wartungsarten: Art, Bauteil, Standard-Zuordnung, Wechsel nur unbenutzt
+    // -------------------------------------------------------------
+    abschnitt("57. Wartungsarten: Auftrag oder Aufgabe, Bauteil mit Auswahlliste, Standard-Zuordnung; Art wechseln nur, solange sie nicht verwendet wird");
+    werkstatt5({ auftraege: [auftragV8({ id: "a-e", wartungsartId: "rep", datum: "2026-05-02", positionen: [pos("y", "aufgabe", "kette", "erledigt")] })] });
+    alerts.length = 0;
+    w.artFormular(null);
+    gleich("Neue Wartungsart: Standard Aufgabe; Bauteil-Auswahl aus den bisher verwendeten Bauteilen",
+      [w.document.getElementById("a-typ").value, w.document.getElementById("a-auftrag-feld").hidden, [...w.document.querySelectorAll("#a-bauteile option")].map(o => o.value)],
+      ["aufgabe", true, ["Bremse vorn", "Nabe"]]);
+    w.document.getElementById("a-typ").value = "auftrag";
+    w.artTypGeaendert();
+    gleich("Art „Auftrag“: Einmalig und Zeitfenster sichtbar, Bauteil und Zuordnung verborgen",
+      [w.document.getElementById("a-auftrag-feld").hidden, w.document.getElementById("a-aufgabe-feld").hidden], [false, true]);
+    w.document.getElementById("a-typ").value = "aufgabe";
+    w.artTypGeaendert();
+    w.document.getElementById("a-name").value = "Reifen und Schlauch wechseln vorn";
+    w.document.getElementById("a-km").value = "4000";
+    w.document.getElementById("a-bauteil").value = " Reifen vorn ";
+    w.document.getElementById("a-zuordnung").value = "klein";
+    w.artSpeichern(null);
+    gleich("Neue Aufgabe gespeichert (Bauteil getrimmt, ohne Zeitfenster)", (({ id, ...r }) => r)(w.eval("daten.wartungsarten").slice(-1)[0]),
+      { name: "Reifen und Schlauch wechseln vorn", typ: "aufgabe", intervallMonate: null, intervallKm: 4000, fensterVon: null, fensterBis: null, gueltigAbJahr: null,
+        einmalig: false, bauteil: "Reifen vorn", zuordnung: "klein" });
+    w.artFormular("kette");
+    gleich("Verwendete Art: Auswahl der Art gesperrt, mit Begründung", [w.document.getElementById("a-typ").disabled,
+      w.document.getElementById("a-typ").nextElementSibling.textContent], [true, "Die Art lässt sich nicht mehr ändern, weil die Wartungsart als Position in Aufträgen verwendet wird."]);
+    w.document.getElementById("a-typ").disabled = false;
+    w.document.getElementById("a-typ").value = "auftrag";
+    w.artSpeichern("kette");
+    gleich("Wechsel trotzdem versucht: abgelehnt mit Hinweis, nichts geändert", [alerts.slice(-1)[0], w.eval("daten.wartungsarten.find(a => a.id === 'kette').typ")],
+      ["Die Art lässt sich nicht ändern, weil die Wartungsart als Position in Aufträgen verwendet wird.", "aufgabe"]);
+    w.artFormular("oel");
+    w.document.getElementById("a-typ").value = "auftrag";
+    w.artTypGeaendert();
+    w.document.getElementById("a-name").value = "Nabeninspektion";
+    w.artSpeichern("oel");
+    gleich("Unbenutzte Aufgabe wird Auftrag (Bauteil und Zuordnung entfallen) und erscheint als offener Auftrag",
+      [(({ typ, bauteil, zuordnung, intervallMonate }) => [typ, bauteil, zuordnung, intervallMonate])(w.eval("daten.wartungsarten.find(a => a.id === 'oel')")),
+        lage5().offene.map(o => o.art.id)], [["auftrag", null, null, 12], ["klein", "oel", "gross"]]);
+    w.artFormular("gross");
+    w.document.getElementById("a-typ").value = "aufgabe";
+    w.artSpeichern("gross");
+    gleich("Auftrag, der Standard-Zuordnung einer Aufgabe ist, wird nicht zur Aufgabe", [alerts.slice(-1)[0].includes("Standard-Zuordnung dieser Aufgaben ist: Bremsbeläge wechseln"),
+      w.eval("daten.wartungsarten.find(a => a.id === 'gross').typ")], [true, "auftrag"]);
+    w.artLoeschen("kette");
+    gleich("Verwendete Art lässt sich nicht löschen", alerts.slice(-1)[0], "Diese Wartungsart wird als Position in Aufträgen verwendet und kann deshalb nicht gelöscht werden. Du kannst sie aber umbenennen.");
+    await w.artLoeschen("gross");
+    gleich("Unbenutzten Auftrag löschen: Aufgaben mit dieser Zuordnung bekommen „nächste Inspektion“",
+      [w.eval("daten.wartungsarten.some(a => a.id === 'gross')"), w.eval("daten.wartungsarten.find(a => a.id === 'bremse').zuordnung")], [false, "naechste-inspektion"]);
+    werkstatt5({ auftraege: [auftragV8({ id: "r1", wartungsartId: "rep", status: "geplant" }), auftragV8({ id: "r2", wartungsartId: "rep", status: "geplant" })] });
+    w.artFormular("rep");
+    w.document.getElementById("a-monate").value = "12";
+    w.artSpeichern("rep");
+    gleich("Intervall an einer Art mit mehreren geplanten Aufträgen: abgelehnt", [alerts.slice(-1)[0].startsWith("Es gibt mehrere geplante Aufträge"),
+      w.eval("daten.wartungsarten.find(a => a.id === 'rep').intervallMonate")], [true, null]);
+    w.fensterSchliessen();
+    w.heute = echtHeute;
+    w.eval("daten = leereDaten(); aktiverTab = 'uebersicht'; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
     localStorage.removeItem(TEST_SCHLUESSEL);
     localStorage.removeItem(TEST_EXPORT_SCHLUESSEL);
     localStorage.removeItem("radkm-test-wetter");
+    localStorage.removeItem("radkm-test-wartungsarten-pruefen");
   }
 
   const erg = document.getElementById("ergebnis");
@@ -3176,7 +3736,7 @@ async function start() {
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV1(d, v1) {
-  gleich("version = 7", d.version, 7);
+  gleich("version = 8", d.version, 8);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
   gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele; Wetter ohne Orte)", d.einstellungen, stdEinstellungen());
@@ -3190,28 +3750,30 @@ function pruefeUmwandlungV1(d, v1) {
   gleich("Vorhandene Eintrags-IDs bleiben erhalten",
     d.eintraege.filter((e, i) => v1.eintraege[i].id).map(e => e.id), v1.eintraege.filter(e => e.id).map(e => e.id));
   gleich("Eintrag ohne id bekommt eine neue id", typeof d.eintraege[4].id === "string" && d.eintraege[4].id.length > 0, true);
-  gleich("Wartungsarten erhalten, Zeitfenster leer, nicht einmalig", d.wartungsarten,
-    v1.wartungsarten.map(a => Object.assign({}, a, { fensterVon: null, fensterBis: null, gueltigAbJahr: null, einmalig: false })));
-  gleich("Wartungsprotokoll vollständig erhalten", d.wartungsprotokoll, [
-    Object.assign({}, v1.wartungsprotokoll[0]),
-    Object.assign({}, v1.wartungsprotokoll[1]),
-    Object.assign({ werkstatt: "", notiz: "" }, v1.wartungsprotokoll[2], { kmManuell: true })
-  ].map(p => ({ id: p.id, datum: p.datum, wartungsartId: p.wartungsartId, werkstatt: p.werkstatt, kmStand: p.kmStand, kmManuell: p.kmManuell, notiz: p.notiz })));
-  gleich("Termine vollständig erhalten", d.termine, v1.termine);
+  gleichInhalt("Wartungsarten erhalten, Zeitfenster leer, nicht einmalig; Inspektionen und Reparatur als Auftrag, „Kette wechseln“ als Aufgabe, Eigenleistung ergänzt",
+    d.wartungsarten, [...v1.wartungsarten.map((a, i) => artV8(a, i < 3 ? "auftrag" : "aufgabe")), EIGENLEISTUNG]);
+  const [p1, p2, p3] = v1.wartungsprotokoll;
+  gleichInhalt("Wartungsprotokoll vollständig erhalten: Aufträge als erledigte Aufträge, die Aufgabe (Kette) als Position einer Reparatur vom selben Tag; " +
+    "der Termin der Kleinen Inspektion als geplanter Auftrag", [d.auftraege, "wartungsprotokoll" in d, "termine" in d], [[
+    ausProtokoll(p1), ausProtokoll(p2),
+    auftragV8({ id: "p-3", wartungsartId: "reparatur", datum: "2026-09-29", kmStand: 2000, kmManuell: true,
+      positionen: [{ id: "pos-p-3", art: "aufgabe", wartungsartId: "kette", status: "erledigt", notiz: "" }] }),
+    ausTermin(v1.termine[0])], false, false]);
   gleich("Mängelliste ist leer", d.maengel, []);
 }
 
 // Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV2(d, v2, wo) {
-  gleich(wo + ": version = 7", d.version, 7);
+  gleich(wo + ": version = 8", d.version, 8);
   gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
   gleich(wo + ": Einstellungen mit Standardwerten ergänzt (auch Wetter)", d.einstellungen, stdEinstellungen());
   gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
   gleichInhalt(wo + ": Einträge vollständig erhalten (auch 0 km, Wochensumme, Sonderzeichen), Arbeitsweg aus, ohne Wetter",
     d.eintraege, v2.eintraege.map(e => Object.assign({}, e, { arbeitsweg: false, wetter: null })));
-  gleichInhalt(wo + ": Wartungsarten erhalten (Zeitfenster, gültig ab, Intervall in km), nicht einmalig",
-    d.wartungsarten, v2.wartungsarten.map(a => Object.assign({}, a, { einmalig: false })));
-  gleichInhalt(wo + ": Wartungsprotokoll, Termine und Mängel unverändert", [d.wartungsprotokoll, d.termine, d.maengel], [v2.wartungsprotokoll, v2.termine, v2.maengel]);
+  gleichInhalt(wo + ": Wartungsarten erhalten (Zeitfenster, gültig ab, Intervall in km), nicht einmalig, als Auftrag bzw. Aufgabe; Eigenleistung ergänzt",
+    d.wartungsarten, [...v2.wartungsarten.map((a, i) => artV8(Object.assign({}, a, { einmalig: false }), i < 3 ? "auftrag" : "aufgabe")), EIGENLEISTUNG]);
+  gleichInhalt(wo + ": Protokoll, Termine und Mängel erhalten (als Aufträge; der erledigte Mangel als Position, ohne protokollId)", [d.auftraege, d.maengel],
+    [[ausProtokoll(v2.wartungsprotokoll[0], [posMangel("m-1")]), ausProtokoll(v2.wartungsprotokoll[1]), ausTermin(v2.termine[0])], v2.maengel.map(ohneProtokollId)]);
   gleich(wo + ": exportiertAm wird nicht übernommen", "exportiertAm" in d, false);
 }
 

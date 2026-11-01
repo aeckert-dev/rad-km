@@ -24,9 +24,12 @@ ist für das iPhone optimiert.
   dem Rad und längste Serie
 - Hinweis auf übliche Fahrtage ohne Eintrag (auf Wunsch schon am selben Tag ab 18:00), mit „Nachtragen“ und „Keine Fahrt“
 - Einträge übersichtlich zusammengefasst nach Woche, Monat und Jahr
-- Wartungsprotokoll mit Fälligkeit (Intervall in Monaten und/oder km, jährliches
-  Zeitfenster oder einmalig) und geplanten Terminen
-- Mängelliste, die beim Eintragen einer Wartung abgehakt werden kann
+- Werkstatt wie in der Instandhaltung (Auftrag – Position – Mangel):
+  Inspektionen und Reparaturen sind **Aufträge** mit Termin, Wartungsaufgaben
+  (z. B. Bremsbeläge, Ölwechsel) und Mängel hängen als **Positionen** daran;
+  Fälligkeit nach Intervall (Monate und/oder km), jährlichem Zeitfenster oder
+  einmalig, Vorschläge „zu diesem Auftrag nehmen?“
+- Mängelliste; Mängel werden einem Auftrag zugeordnet oder als Reparatur angelegt
 - Löschen mit „Rückgängig“
 - Datensicherung als JSON-Datei, die vor dem Teilen geprüft wird; gespeicherte
   Sicherungen lassen sich prüfen, ohne etwas zu überschreiben
@@ -55,6 +58,10 @@ Das bedeutet:
 - Der Service Worker speichert nur die App selbst (`index.html`), damit sie
   auch ohne Netz startet. Auf die Daten im `localStorage` hat er keinen
   Zugriff.
+- Nach dem Update auf Datenversion 8 merkt sich die App unter
+  `radkm-wartungsarten-pruefen`, dass der Hinweis „Bitte Wartungsarten prüfen“
+  noch angezeigt werden soll. Das gehört nicht zu deinen Daten und nicht zur
+  Sicherung.
 
 ### Was geht beim Wetter ins Netz?
 
@@ -191,9 +198,12 @@ Auf dem iPhone:
   - **Keine Fahrt** legt mit einem Tipper einen Eintrag mit 0 km an (mit
     „Rückgängig“).
   - Eine Woche mit einer importierten Wochensumme gilt als erfasst.
-- **Nächste fällige Wartung:** ein geplanter Termin oder die berechnete
-  Fälligkeit, je nachdem, was zuerst kommt. Liegt sie in der Zukunft, steht
-  der erwartete Kilometerstand dabei, z. B. „(ca. 4.350 km)“.
+- **Nächster fälliger Auftrag:** der erste überfällige bzw. anstehende offene
+  Auftrag (siehe „Wartung“) mit Termin oder Fälligkeit und der Zahl seiner
+  Positionen, z. B. „🔧 Kleine Inspektion: fällig bis 30.11. (ca. 4.350 km) · 3
+  Positionen“. Liegt das Datum in der Zukunft, steht der erwartete
+  Kilometerstand dabei. Eine überfällige Aufgabe ohne Auftrag steht als Hinweis
+  darunter, z. B. „⚠️ Licht prüfen überfällig – keinem Auftrag zugeordnet“.
 - **Summen:**
   - Heute.
   - Woche: Montag bis Sonntag.
@@ -238,19 +248,19 @@ zusammen:
 
 ### Erst lesen, dann ändern
 
-Antippen eines Eintrags, eines Wartungsprotokoll-Eintrags oder eines Mangels
+Antippen eines Eintrags, eines erledigten Auftrags oder eines Mangels
 zeigt ihn zunächst nur an. Erst **Ändern** öffnet das Formular. **Löschen**
 gibt es nur im Formular, immer mit Rückfrage. Das Erfassen über eine Vorlage
 bleibt bei zwei Klicks (Vorlage antippen, Speichern).
 
 ### Rückgängig
 
-Nach dem Löschen eines Eintrags, eines Wartungsprotokoll-Eintrags, eines
+Nach dem Löschen eines Eintrags, eines Auftrags, eines
 Mangels oder einer Vorlage, nach „Keine Fahrt“, einer Rückmeldung zur Kleidung,
 „Wetter nachtragen …“, dem Entfernen einer Kleidungsstufe oder eines
 Regenzusatzes und „Auf Standard zurücksetzen“ (Kleidung, Ampel-Grenzen)
 erscheint unten 12 Sekunden lang eine Meldung mit **Rückgängig**. Damit kommt der alte Stand vollständig zurück, auch die
-Verknüpfungen (z. B. die Mängel eines gelöschten Protokoll-Eintrags). Jede
+Verknüpfungen (z. B. die Mängel eines gelöschten Auftrags). Jede
 weitere Änderung beendet das Angebot, damit sie nicht überschrieben wird.
 
 ### Vorlagen
@@ -523,7 +533,10 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   Arbeitsort), in der Ansicht „Jetzt“ für den angezeigten Ort.
   - **Je Teilstrecke** steht am Fahrtag darunter, eingerückt, eine eigene Zeile
     mit der Richtung relativ zur Fahrtrichtung und der Stärke, z. B.
-    „Musterdorf → Ecke: schräg von hinten rechts 16 km/h“. Grundlage sind die
+    „Musterdorf → Ecke: schräg von hinten rechts 16 km/h“, und zwar seit
+    Release 5a zweizeilig: der Name der Teilstrecke („Musterdorf → Ecke“) klein,
+    darunter eingerückt in normaler Schrift die Windangabe („schräg von hinten
+    rechts 16 km/h“). Grundlage sind die
     Richtung der Teilstrecke (Luftlinie, ohne Wegpunkte von Wohn- zu
     Arbeitsort) und der mittlere Wind der Fahrzeit an ihren beiden Enden. Die
     Stärke ist die volle mittlere Windgeschwindigkeit dort (nicht nur der Anteil
@@ -581,82 +594,148 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
 
 ### Wartung
 
+Seit Release 5a arbeitet der Reiter Wartung wie eine kleine Werkstatt (angelehnt
+an die Instandhaltung: Auftrag – Vorgang – Meldung).
+
+- **Wartungsarten** gibt es in zwei Arten:
+  - **Auftrag**, z. B. Erstinspektion (einmalig), Kleine und Große Inspektion
+    (mit Intervall bzw. jährlichem Zeitfenster), Reparatur und Eigenleistung
+    (ohne Intervall, werden bei Bedarf angelegt). Nur Aufträge haben einen
+    Termin.
+  - **Aufgabe**, z. B. „Ölwechsel Nabe“, „Bremsbeläge wechseln“, „Reifen und
+    Schlauch wechseln vorn“. Mit eigenem Intervall (km und/oder Monate), einem
+    **Bauteil** (Textfeld mit Auswahlliste aus den bisher verwendeten Bauteilen,
+    z. B. „Bremse vorn“) und einer **Standard-Zuordnung**: ein bestimmter Auftrag
+    (z. B. „Große Inspektion“) oder „nächste Inspektion“. Eine Aufgabe hat
+    keinen eigenen Termin; erledigt wird sie als Position eines Auftrags.
+  - Bei einer Neuinstallation voreingestellt: Erstinspektion (einmalig, 3 Monate
+    oder 300 km), Kleine Inspektion (Zeitfenster März–April), Große Inspektion
+    (Zeitfenster Oktober–November), Reparatur und Eigenleistung; keine Aufgaben.
+  - Die Art (Auftrag oder Aufgabe) lässt sich nur ändern, solange die
+    Wartungsart in keinem Auftrag und keiner Position verwendet wird; sonst
+    erklärt das Formular, warum nicht. Ein Auftrag, der Standard-Zuordnung einer
+    Aufgabe ist, wird nicht zur Aufgabe. Verwendete Wartungsarten lassen sich
+    nicht löschen (Umbenennen geht jederzeit); wird ein Auftrag gelöscht, der
+    Standard-Zuordnung war, bekommen diese Aufgaben „nächste Inspektion“.
+- **Fälligkeit:**
+  - Bei km und Monaten gilt, was zuerst eintritt. Grundlage ist die letzte
+    Erledigung (Datum und Kilometerstand des Auftrags), ohne Erledigung das
+    Startdatum mit dem Start-Kilometerstand.
+  - Bei Aufträgen mit Zeitfenster gilt immer das Zeitfenster; die Monate
+    werden nicht ausgewertet. Ein km-Intervall gibt dann nur einen **Hinweis**,
+    wenn die km-Grenze vor dem Ende des Fensters erreicht wird, z. B. „Hinweis:
+    km-Grenze (ca. 4.000 km) voraussichtlich schon im Februar 2027 erreicht“.
+  - Große und Kleine Inspektion (wie alle Aufträge) laufen unabhängig
+    voneinander: Es zählen nur die erledigten Aufträge derselben Art.
+  - Die Texte sind dieselben wie bisher (siehe unten „Fälligkeit mit
+    Zeitfenster“ und „Fälligkeit mit Intervall“).
+- **Offene Aufträge:** Status „geplant“, optional mit Termin (Datum),
+  Werkstatt und Notiz.
+  - Hat ein Auftrag mit Fälligkeit (Intervall, Zeitfenster oder einmalig) noch
+    keinen geplanten Auftrag, zeigt die App trotzdem den nächsten (vorgemerkt,
+    ohne Termin). Gespeichert wird er erst, wenn du etwas daran änderst (Termin,
+    Position, Mangel). Nach „Erledigt eintragen“ erscheint so automatisch der
+    nächste. Je Auftrag mit Fälligkeit gibt es höchstens einen geplanten;
+    Reparaturen und Eigenleistungen können mehrere haben.
+  - **„+ Reparatur“ / „+ Eigenleistung“** legen einen solchen Auftrag an
+    (Termin optional).
+  - **Zieldatum** eines offenen Auftrags: der Termin, sonst das Ende des
+    Zeitfensters bzw. das Fälligkeitsdatum; liegt es vor heute oder fehlt es
+    (Reparatur ohne Termin), gilt heute.
+- **Positionen** eines Auftrags sind Aufgaben und Mängel.
+  - **Standard-Zuordnung (nur berechnet):** Eine Aufgabe, die in keinem
+    geplanten Auftrag steht, erscheint automatisch im Auftrag ihrer Zuordnung,
+    wenn sie bis zu dessen Zieldatum fällig wird; „nächste Inspektion“ ist der
+    früheste offene Auftrag mit Intervall, Zeitfenster oder einmalig (nicht die
+    Reparatur). Die Zuordnung wird nicht gespeichert, sondern bei jeder Anzeige
+    angewendet: Die App verändert deine Daten nicht von selbst, und eine
+    geänderte Zuordnung oder ein geändertes Intervall wirkt sofort. In der
+    Karte steht dann „nach Standard“.
+  - Aufgaben, die erst nach dem Zieldatum aller passenden Aufträge fällig
+    werden, stehen vorerst ohne Auftrag in der Liste der Aufgaben („noch kein
+    Auftrag · Standard: …“), mit ihrer Fälligkeit.
+  - Im Auftrag (Knopf **„Positionen“**) kannst du Aufgaben und Mängel
+    **hinzufügen**, **entfernen** oder **zu einem anderen offenen Auftrag
+    verschieben**. Eine entfernte Aufgabe nimmt die Standard-Zuordnung dort
+    nicht wieder auf. Eine Aufgabe und ein Mangel stehen in höchstens einem
+    geplanten Auftrag.
+  - **Vorschläge:** Aufgaben, die bis zum Zieldatum fällig werden und noch
+    keinem offenen Auftrag zugeordnet sind (oder nur nach Standard einem
+    späteren), bietet die Karte an, z. B. „💡 Bremsbeläge wechseln bei ca. 5.000
+    km fällig – zu diesem Auftrag nehmen? (sonst Große Inspektion)“ mit
+    **„Mitnehmen“**.
+- **Mängel:** einem offenen Auftrag zuordnen („Zu Auftrag …“); passt keiner,
+  legt **„Reparatur anlegen“** eine geplante Reparatur mit diesem Mangel an
+  (im Auswahlfenster wahlweise auch eine Eigenleistung).
+- **Erledigt eintragen** (Abschluss):
+  - Datum (der Termin, wenn er heute oder früher liegt, sonst heute),
+    Werkstatt, Kilometerstand (aus den Einträgen berechnet, überschreibbar; mit
+    „Berechneten Wert verwenden“ zurück) und Notiz.
+  - Je Position „erledigt“ (abgehakt) oder „nicht gemacht“. Dazu lassen sich
+    weitere offene Mängel abhaken, die dabei erledigt wurden.
+  - Gespeichert wird **genau der angezeigte Stand der Positionen**, auch die
+    nur nach Standard berechneten. Spätere Änderungen an Intervallen oder
+    Zuordnungen verändern erledigte Aufträge nicht.
+  - Erledigte Aufgaben beginnen ihr Intervall neu (Datum und Kilometerstand des
+    Auftrags), erledigte Mängel werden geschlossen (mit dem Datum des Auftrags).
+    Nicht gemachte Aufgaben tauchen wieder als Position bzw. Vorschlag auf,
+    nicht gemachte Mängel bleiben offen und stehen wieder oben ohne Auftrag.
+  - **Selbst erledigt** (z. B. Reifen in der Garage gewechselt): „Erledigt
+    eintragen“ in der Ansicht einer Aufgabe legt eine erledigte
+    **Eigenleistung** mit dieser Position an.
+  - Ein erledigter Auftrag lässt sich ansehen, ändern (auch „erledigt“/„nicht
+    gemacht“ je Position) und löschen (mit Rückfrage und „Rückgängig“; Mängel,
+    die mit ihm erledigt wurden, sind dann wieder offen).
 - **Reihenfolge im Reiter Wartung:**
-  1. Offene Mängel (nur wenn vorhanden).
-  2. Überfällige Wartungen, die am längsten überfällige zuerst. Dazu zählt
-     auch ein geplanter Termin, der verstrichen ist, ohne dass die Wartung
-     eingetragen wurde.
-  3. Anstehende Wartungen, chronologisch nach dem maßgeblichen Datum:
-     geplanter Termin; vor dem Zeitfenster dessen Beginn, im Zeitfenster
-     dessen Ende; bei Intervall das Fälligkeitsdatum, bei km das
-     prognostizierte Datum. Danach Wartungen mit km-Intervall, für die noch
-     keine Prognose möglich ist.
-  4. Wartungsarten ohne Fälligkeit (z. B. Reparatur) oder noch nicht gültig
-     („Gültig ab Jahr“).
-  5. Einmalige, erledigte Wartungen.
-  6. Danach „Mangel erfassen“ (wenn es keine offenen Mängel gibt) und die
-     erledigten Mängel, das Wartungsprotokoll und die Wartungsarten.
-  - Innerhalb gleicher Daten und in den Gruppen 4 und 5 gilt die Reihenfolge
-    der Wartungsarten. Die nächste Wartung auf der Übersicht ist die erste
-    überfällige bzw. anstehende.
-- **Wartungsarten:**
-  - Bei einer Neuinstallation voreingestellt: „Große Inspektion“ (Zeitfenster
-    Oktober–November), „Kleine Inspektion“ (Zeitfenster März–April) und
-    „Reparatur“ (ohne Intervall). Wer Daten aus Version 1 übernimmt, behält
-    seine Wartungsarten unverändert, also ohne Zeitfenster.
-  - Eigene Wartungsarten kannst du anlegen und bearbeiten, z. B. für
-    Verschleißteile wie Kette oder Bremsbeläge mit einem Intervall in km.
-- **Einmalig (optional):** für Wartungen, die nur einmal anfallen, z. B. die
-  Erstinspektion.
-  - Vor der Durchführung zeigt die Karte die normale Fälligkeit.
-  - Nach der ersten Durchführung zeigt sie nur noch „erledigt am TT.MM.JJJJ“,
-    ohne „Termin planen“ und „Erledigt eintragen“, und steht am Ende der
-    Liste. Ein noch geplanter Termin wird beim Eintragen entfernt.
-  - Nicht mit einem Zeitfenster kombinierbar.
-- **Jährliches Zeitfenster (optional):**
+  1. „Bitte Wartungsarten prüfen“ (nur nach der Umwandlung, siehe unten).
+  2. Offene Mängel ohne Auftrag (nur wenn vorhanden).
+  3. Offene Aufträge mit ihren Positionen und Vorschlägen: überfällige zuerst
+     (am längsten überfällige; auch ein verstrichener Termin), dann
+     anstehende nach Termin bzw. Fälligkeit (vor dem Zeitfenster dessen Beginn,
+     im Zeitfenster dessen Ende, bei Intervall das (prognostizierte) Datum),
+     dann Aufträge mit km-Intervall ohne Prognose, zuletzt solche ohne Datum
+     (Reparatur ohne Termin, „Gültig ab Jahr“ noch nicht erreicht).
+  4. Aufgaben mit Fälligkeit (überfällige zuerst) und Hinweis auf ihren Auftrag.
+  5. Historie der erledigten Aufträge (neueste zuerst).
+  6. Mängel („Mangel erfassen“, erledigte Mängel einklappbar) und Wartungsarten
+     (getrennt nach Aufträgen und Aufgaben).
+- **Bitte Wartungsarten prüfen:** Nach der Umwandlung auf Datenversion 8
+  steht oben im Reiter Wartung dieser Hinweis (kein Fenster beim Start).
+  Antippen öffnet den Prüfbildschirm mit allen Wartungsarten (Art, Intervall
+  bzw. Zeitfenster, Bauteil, Standard-Zuordnung); Antippen einer Art öffnet ihr
+  Formular. Der Hinweis bleibt, bis du **„Alles geprüft“** tippst. Gemerkt wird
+  das unter einem eigenen Schlüssel im Speicher des Browsers, nicht in den
+  Daten und nicht in der Sicherung.
+- **Einmalig (optional, nur Aufträge):** z. B. die Erstinspektion. Vor der
+  Erledigung normale Fälligkeit; danach steht sie nur noch in der Historie und
+  bekommt keinen neuen offenen Auftrag. Nicht mit einem Zeitfenster
+  kombinierbar.
+- **Jährliches Zeitfenster (optional, nur Aufträge):**
   - Monat von und Monat bis, z. B. Oktober bis November. Das Fenster darf
     nicht über den Jahreswechsel gehen.
   - **Gültig ab Jahr (optional):** Vor diesem Jahr zeigt die App keine
     Fälligkeit („noch nicht fällig“). Praktisch beim Umstellen auf den
     saisonalen Rhythmus. Leer = sofort gültig.
-  - Ist ein Zeitfenster gesetzt, werden die Intervalle (Monate und km) nicht
-    ausgewertet.
-- **Termin planen:**
-  - Pro Wartungsart ist ein geplanter Termin mit Datum und Werkstatt möglich.
-  - Der Termin wird statt der berechneten Fälligkeit angezeigt, zusammen mit
-    dem erwarteten Kilometerstand an diesem Tag.
-- **Erledigt eintragen:**
-  - Gibt es einen geplanten Termin, bietet die App an, ihn ins Protokoll zu
-    übernehmen. Danach wird der Termin entfernt.
-  - Den **Kilometerstand** berechnet die App automatisch aus allen Einträgen
-    bis einschließlich diesem Datum.
-  - Du kannst ihn überschreiben. Mit „Berechneten Wert verwenden“ kehrst du
-    zur Berechnung zurück.
 - **Fälligkeit mit Zeitfenster:**
   - Vor dem Fenster: „fällig ab 01.10.“
-  - Im Fenster ohne Durchführung: „fällig bis 30.11.“
-  - Im Fenster durchgeführt: „erledigt, nächste ab 01.10.2027“. Es zählt nur
-    eine Durchführung **innerhalb** des Fensters.
-  - Nach dem Fenster ohne Durchführung: „überfällig seit 30.11.2026“. Das
+  - Im Fenster ohne Erledigung: „fällig bis 30.11.“
+  - Im Fenster erledigt: „erledigt, nächste ab 01.10.2027“. Es zählt nur
+    eine Erledigung **innerhalb** des Fensters.
+  - Nach dem Fenster ohne Erledigung: „überfällig seit 30.11.2026“. Das
     bleibt auch über den Jahreswechsel und im nächsten Fenster bestehen, bis
-    die Wartung durchgeführt wird.
-  - Eine Durchführung nach dem Ende des Fensters gilt als **Nachholung** für
+    der Auftrag erledigt wird.
+  - Eine Erledigung nach dem Ende des Fensters gilt als **Nachholung** für
     das versäumte Jahr: „erledigt (nachgeholt), nächste ab 01.10.2027“. Für
     das Fenster des nächsten Jahres zählt sie nicht.
   - Gezählt werden Fenster ab „Gültig ab Jahr“ und nur, wenn sie nicht vor
     dem Startdatum des Fahrrads enden.
-  - Ein geplanter Termin hat weiterhin Vorrang in der Anzeige; die Fälligkeit
-    nach Zeitfenster steht dann klein darunter.
+  - Ein Termin hat Vorrang in der Anzeige; die Fälligkeit steht dann klein
+    darunter („Ohne Termin: …“).
   - Vor und im Fenster steht der erwartete Kilometerstand zu Beginn bzw. am
     Ende des Fensters dabei.
 - **Fälligkeit mit Intervall (ohne Zeitfenster):**
-  - Intervall in Monaten und/oder in km. **Fällig ist, was zuerst erreicht
-    wird.**
-  - Grundlage ist die letzte Durchführung (Datum und Kilometerstand). Ohne
-    bisherige Durchführung zählt das Intervall ab dem Startdatum und dem
-    Start-Kilometerstand.
   - Nach Monaten: „fällig in X Tagen“, „heute fällig“ oder „überfällig seit X
-    Tagen“, bei einem Datum in der Zukunft mit dem erwarteten Kilometerstand.
+    Tagen“, bei einem Auftrag mit dem erwarteten Kilometerstand.
   - Nach km: Den Tag, an dem die km-Grenze erreicht wird, schätzt die App mit
     der Prognose (siehe unten), z. B. „fällig ca. im Mai 2027 bei ca. 7.500
     km“, darunter „Noch ca. 800 km bis zur km-Grenze“. Ist keine Schätzung
@@ -664,24 +743,23 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     ca. 7.500 km“. Ist die Grenze überschritten: „überfällig: km-Grenze
     (7.500 km) um 120 km überschritten“.
   - Dazu „Seit letzter Wartung gefahren: X km“.
-  - Ohne Fahrrad und ohne Durchführung steht dort „noch nicht durchgeführt“.
-- Eine Wartungsart, die im Protokoll verwendet wird, kann nicht gelöscht
-  werden. Umbenennen geht jederzeit.
+  - Ohne Fahrrad und ohne Erledigung steht dort „noch nicht durchgeführt“.
 
 ### Mängel
 
 - **Mangel erfassen** im Reiter Wartung: Datum (Standard heute),
   Beschreibung und Status „offen“ oder „erledigt“.
-- Offene Mängel stehen ganz oben im Reiter Wartung, erledigte unter den
-  Wartungen in einem einklappbaren Bereich.
-- Auf der Übersicht steht bei der nächsten Wartung die Anzahl offener Mängel,
-  z. B. „3 offene Mängel“.
-- **Erledigt eintragen** einer Wartung bietet die offenen Mängel zum Abhaken
-  an. Abgehakte Mängel werden erledigt, mit dem Datum der Wartung und dem
-  Protokoll-Eintrag verknüpft. Beim Ändern des Protokoll-Eintrags lassen sie
-  sich wieder abwählen (dann sind sie wieder offen).
-- Wird ein Protokoll-Eintrag gelöscht, werden die verknüpften Mängel wieder
-  auf „offen“ gesetzt. Die Rückfrage nennt sie.
+- Offene Mängel ohne Auftrag stehen ganz oben im Reiter Wartung, mit „Zu
+  Auftrag …“ und „Reparatur anlegen“; Mängel in einem Auftrag stehen bei
+  dessen Positionen. Erledigte Mängel stehen in einem einklappbaren Bereich.
+- Auf der Übersicht steht die Anzahl offener Mängel, z. B. „3 offene Mängel“.
+- Die Ansicht eines Mangels zeigt seinen Auftrag bzw. den Auftrag, mit dem er
+  erledigt wurde.
+- Wird ein Mangel von Hand auf „erledigt“ gesetzt, verschwindet er aus einem
+  geplanten Auftrag. Wird ein mit einem Auftrag erledigter Mangel wieder
+  geöffnet, steht er dort als „nicht gemacht“.
+- Wird ein Mangel gelöscht, verschwindet er auch aus den Aufträgen (mit
+  „Rückgängig“).
 
 ### Prognosen und Jahresziel
 
@@ -799,17 +877,17 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `7` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `8` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
 | `einstellungen` | Objekt | nein | Fahrtage und Jahresziele (ab Version 3), Wetter (ab Version 4), Hinweis für heute (ab Version 5, Schalter ab Version 7); fehlt das Feld, gelten die Standardwerte |
 | `vorlagen` | Liste | nein | Vorlagen in Anzeigereihenfolge |
 | `eintraege` | Liste | nein | Kilometer-Einträge |
-| `wartungsarten` | Liste | nein | Fehlt das Feld, werden die drei Standard-Wartungsarten angelegt |
-| `wartungsprotokoll` | Liste | nein | Durchgeführte Wartungen |
-| `termine` | Liste | nein | Geplante Termine |
+| `wartungsarten` | Liste | nein | Aufträge und Aufgaben; fehlt das Feld, werden die Standard-Wartungsarten angelegt |
+| `auftraege` | Liste | nein | Geplante und erledigte Aufträge mit ihren Positionen (ab Version 8) |
 | `maengel` | Liste | nein | Mängelliste (ab Version 2) |
+| `wartungsprotokoll`, `termine` | Liste | nein | Nur bis Version 7: durchgeführte Wartungen und geplante Termine; werden beim Einlesen zu `auftraege` (siehe „Versionen“) |
 
 Allgemeine Regeln:
 
@@ -818,8 +896,9 @@ Allgemeine Regeln:
   `"12,5"`. Alle km-Werte müssen ≥ 0 sein.
 - **Texte** in Anführungszeichen. Optionale Texte dürfen fehlen, `""` oder
   `null` sein.
-- **`id`-Felder** sind beliebige eindeutige Texte. Bei Vorlagen, Einträgen und
-  Protokolleinträgen dürfen sie fehlen, die App vergibt dann eigene.
+- **`id`-Felder** sind beliebige eindeutige Texte. Bei Vorlagen, Einträgen,
+  Aufträgen, Positionen und Mängeln dürfen sie fehlen, die App vergibt dann
+  eigene.
 - **Ja/Nein-Merkmale** (`arbeitsweg`, `einmalig`, `aktiv`) als `true` oder
   `false`; fehlt das Feld, gilt `false`. Ausnahme sind die Schalter
   `hinweisHeuteAn` und `abfahrtAn` (ab Version 7): Fehlen sie, gilt `true`.
@@ -837,7 +916,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 | `eintraege` | Zahl | Anzahl der Einträge |
 | `kmSumme` | Zahl | Summe der km aller Einträge |
 | `kmStand` | Zahl oder `null` | Kilometerstand (Start-Kilometerstand + Einträge ab dem Startdatum) |
-| `wartungen` | Zahl | Anzahl der Einträge im Wartungsprotokoll |
+| `wartungen` | Zahl | Anzahl der erledigten Aufträge (bis Version 7: der Einträge im Wartungsprotokoll; „Sicherung prüfen“ vergleicht bei älteren Dateien damit) |
 | `maengel` | Zahl | Anzahl der Mängel |
 
 ### `einstellungen` (ab Version 3)
@@ -975,37 +1054,54 @@ Werte sind die ungünstigsten an Wohnort, Wegpunkten und Arbeitsort.
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `id` | Text | ja | Eindeutige Kennung, wird von Protokoll und Terminen verwendet |
-| `name` | Text | ja | z. B. `"Große Inspektion"` |
+| `id` | Text | ja | Eindeutige Kennung, wird von Aufträgen, Positionen und Zuordnungen verwendet |
+| `name` | Text | ja | z. B. `"Große Inspektion"`, `"Bremsbeläge wechseln"` |
+| `typ` | `"auftrag"` oder `"aufgabe"` | ja | Ab Version 8: Auftrag (mit Termin, z. B. Inspektion, Reparatur) oder Aufgabe (Position in einem Auftrag) |
 | `intervallMonate` | ganze Zahl ≥ 1 oder `null` | nein | Intervall in Monaten |
-| `intervallKm` | Zahl > 0 oder `null` | nein | Intervall in km (ausgewertet ab Version 3); mit `intervallMonate` gilt, was zuerst erreicht wird |
-| `fensterVon` | Monat 1–12 oder `null` | nein | Beginn des jährlichen Zeitfensters (ab Version 2) |
+| `intervallKm` | Zahl > 0 oder `null` | nein | Intervall in km (ausgewertet ab Version 3); mit `intervallMonate` gilt, was zuerst erreicht wird. Bei einem Auftrag mit Zeitfenster nur ein Hinweis |
+| `fensterVon` | Monat 1–12 oder `null` | nein | Beginn des jährlichen Zeitfensters (ab Version 2); nur bei Aufträgen |
 | `fensterBis` | Monat 1–12 oder `null` | nein | Ende des Zeitfensters; nur zusammen mit `fensterVon`, `fensterVon` ≤ `fensterBis` |
 | `gueltigAbJahr` | Jahreszahl oder `null` | nein | Nur mit Zeitfenster: vor diesem Jahr keine Fälligkeit; `null` = sofort gültig |
-| `einmalig` | `true`/`false` | nein | Einmalige Wartung (ab Version 3); nach der ersten Durchführung erledigt. Nicht mit Zeitfenster |
+| `einmalig` | `true`/`false` | nein | Einmaliger Auftrag (ab Version 3); nach der ersten Erledigung erledigt. Nicht mit Zeitfenster, nicht bei Aufgaben |
+| `bauteil` | Text oder `null` | nein | Ab Version 8, nur bei Aufgaben: Bauteil, z. B. `"Bremse vorn"`; `""` wird zu `null` |
+| `zuordnung` | Text oder `null` | bei Aufgaben | Ab Version 8: Standard-Zuordnung einer Aufgabe, `"naechste-inspektion"` oder die `id` einer Wartungsart mit `"typ": "auftrag"`; bei Aufträgen `null` |
 
-Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
-`kleine-inspektion` und `reparatur`.
+Auftrag mit Fälligkeit = Intervall, Zeitfenster oder `einmalig`; sonst (z. B.
+Reparatur) wird er bei Bedarf angelegt. Die Standard-Wartungsarten (ab Version
+8) haben die IDs `erstinspektion`, `kleine-inspektion`, `grosse-inspektion`,
+`reparatur` und `eigenleistung`.
 
-### `wartungsprotokoll[]`
+### `auftraege[]` (ab Version 8)
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `id` | Text | nein | Eindeutige Kennung (wird von Mängeln verwendet) |
-| `datum` | Datum | ja | Datum der Wartung |
-| `wartungsartId` | Text | ja | `id` einer Wartungsart |
+| `id` | Text | nein | Eindeutige Kennung |
+| `wartungsartId` | Text | ja | `id` einer Wartungsart mit `"typ": "auftrag"`. Je Auftrag mit Fälligkeit höchstens ein geplanter Auftrag |
+| `status` | `"geplant"` oder `"erledigt"` | ja | |
+| `termin` | Datum oder `null` | nein | Nur bei geplanten Aufträgen: Termin |
 | `werkstatt` | Text | nein | Werkstatt |
-| `kmStand` | Zahl oder `null` | nein | Kilometerstand bei der Wartung |
+| `datum` | Datum oder `null` | bei erledigten | Datum der Erledigung; bei geplanten `null` |
+| `kmStand` | Zahl oder `null` | nein | Nur bei erledigten: Kilometerstand bei der Erledigung |
 | `kmManuell` | `true`/`false` | nein | `true` = Wert von Hand eingetragen; `false` = App berechnet ihn selbst. Fehlt das Feld, gilt ein vorhandener `kmStand` als von Hand eingetragen |
 | `notiz` | Text | nein | Durchgeführte Arbeiten / Notiz |
+| `positionen` | Liste | nein | Positionen (siehe unten); bei geplanten nur die ausdrücklich zugeordneten, bei erledigten der beim Abschluss angezeigte Stand |
+| `ausgeschlossen` | Liste von Texten | nein | Nur bei geplanten: `id`s von Aufgaben, die aus diesem Auftrag entfernt wurden (die Standard-Zuordnung nimmt sie dort nicht auf) |
 
-### `termine[]`
+**Position:**
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `wartungsartId` | Text | ja | `id` einer Wartungsart; pro Wartungsart höchstens ein Termin |
-| `datum` | Datum | ja | Geplantes Datum |
-| `werkstatt` | Text | nein | Werkstatt |
+| `id` | Text | nein | Eindeutige Kennung |
+| `art` | `"aufgabe"` oder `"mangel"` | ja | |
+| `wartungsartId` | Text | bei Aufgaben | `id` einer Wartungsart mit `"typ": "aufgabe"`; je Auftrag einmal, in höchstens einem geplanten Auftrag |
+| `mangelId` | Text | bei Mängeln | `id` eines Mangels; je Auftrag einmal, in höchstens einem geplanten Auftrag (nur offene Mängel) und mit höchstens einem Auftrag erledigt |
+| `status` | `"offen"`, `"erledigt"` oder `"nicht-gemacht"` | ja | Im geplanten Auftrag `"offen"`, im erledigten `"erledigt"` oder `"nicht-gemacht"`. Ein Mangel mit `"erledigt"` muss selbst erledigt sein |
+| `notiz` | Text | nein | Notiz zur Position |
+
+Die Aufgaben, die nur nach der Standard-Zuordnung zu einem geplanten Auftrag
+gehören, stehen nicht in den Daten; die App berechnet sie bei jeder Anzeige.
+Für Kosten und Belege (Release 5b) kommen später Felder an Auftrag und Position
+dazu.
 
 ### `maengel[]`
 
@@ -1016,14 +1112,23 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
 | `beschreibung` | Text | ja | Beschreibung des Mangels |
 | `status` | `"offen"` oder `"erledigt"` | nein | Standard `"offen"` |
 | `erledigtAm` | Datum oder `null` | nein | Nur bei `"erledigt"` |
-| `protokollId` | Text oder `null` | nein | Nur bei `"erledigt"`: `id` des Wartungsprotokoll-Eintrags, mit dem der Mangel erledigt wurde |
+
+Bis Version 7 gab es außerdem `protokollId` (der Protokolleintrag, mit dem der
+Mangel erledigt wurde); ab Version 8 steht diese Verknüpfung als Position im
+Auftrag.
+
+**Bis Version 7** (wird beim Import umgewandelt): `wartungsprotokoll[]` mit
+`id`, `datum`, `wartungsartId`, `werkstatt`, `kmStand`, `kmManuell`, `notiz` je
+durchgeführter Wartung und `termine[]` mit `wartungsartId`, `datum`,
+`werkstatt` (je Wartungsart höchstens ein Termin); die Wartungsarten hatten
+noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ### Beispiel (erfundene Werte)
 
 ```json
 {
-  "version": 7,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "4d", "eintraege": 4,
+  "version": 8,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5a", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1083,28 +1188,39 @@ Die Standard-Wartungsarten haben die IDs `grosse-inspektion`,
     { "datum": "2025-01-21", "km": 12.5, "notiz": "Umweg" }
   ],
   "wartungsarten": [
-    { "id": "grosse-inspektion", "name": "Große Inspektion", "intervallMonate": 12, "intervallKm": null,
-      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null, "einmalig": false },
-    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "intervallMonate": null, "intervallKm": null,
-      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027, "einmalig": false },
-    { "id": "reparatur", "name": "Reparatur", "intervallMonate": null, "intervallKm": null,
-      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
-    { "id": "kette", "name": "Kette", "intervallMonate": 24, "intervallKm": 3000,
-      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false },
-    { "id": "erstinspektion", "name": "Erstinspektion", "intervallMonate": 3, "intervallKm": 300,
-      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": true }
+    { "id": "grosse-inspektion", "name": "Große Inspektion", "typ": "auftrag", "intervallMonate": 12, "intervallKm": null,
+      "fensterVon": 10, "fensterBis": 11, "gueltigAbJahr": null, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "kleine-inspektion", "name": "Kleine Inspektion", "typ": "auftrag", "intervallMonate": null, "intervallKm": 3000,
+      "fensterVon": 3, "fensterBis": 4, "gueltigAbJahr": 2027, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "reparatur", "name": "Reparatur", "typ": "auftrag", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "eigenleistung", "name": "Eigenleistung", "typ": "auftrag", "intervallMonate": null, "intervallKm": null,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": null, "zuordnung": null },
+    { "id": "erstinspektion", "name": "Erstinspektion", "typ": "auftrag", "intervallMonate": 3, "intervallKm": 300,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": true, "bauteil": null, "zuordnung": null },
+    { "id": "kette", "name": "Kette wechseln", "typ": "aufgabe", "intervallMonate": 24, "intervallKm": 3000,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Kette", "zuordnung": "naechste-inspektion" },
+    { "id": "bremse-vorn", "name": "Bremsbeläge wechseln vorn", "typ": "aufgabe", "intervallMonate": null, "intervallKm": 2500,
+      "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Bremse vorn", "zuordnung": "grosse-inspektion" }
   ],
-  "wartungsprotokoll": [
-    { "id": "p1", "datum": "2025-01-15", "wartungsartId": "grosse-inspektion", "werkstatt": "Beispiel-Werkstatt",
-      "kmStand": 175.5, "kmManuell": true, "notiz": "Bremsen eingestellt" }
-  ],
-  "termine": [
-    { "wartungsartId": "kleine-inspektion", "datum": "2025-06-02", "werkstatt": "Beispiel-Werkstatt" }
+  "auftraege": [
+    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "werkstatt": "Beispiel-Werkstatt",
+      "datum": "2025-01-15", "kmStand": 175.5, "kmManuell": true, "notiz": "Bremsen eingestellt",
+      "positionen": [
+        { "id": "pos1", "art": "aufgabe", "wartungsartId": "kette", "status": "erledigt", "notiz": "" },
+        { "id": "pos2", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "nicht-gemacht", "notiz": "noch 2 mm" },
+        { "id": "pos3", "art": "mangel", "mangelId": "m1", "status": "erledigt", "notiz": "" }
+      ], "ausgeschlossen": [] },
+    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "werkstatt": "Beispiel-Werkstatt",
+      "datum": null, "kmStand": null, "kmManuell": false, "notiz": "",
+      "positionen": [
+        { "id": "pos4", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "offen", "notiz": "" },
+        { "id": "pos5", "art": "mangel", "mangelId": "m2", "status": "offen", "notiz": "" }
+      ], "ausgeschlossen": ["kette"] }
   ],
   "maengel": [
-    { "datum": "2025-01-10", "beschreibung": "Bremse quietscht", "status": "erledigt",
-      "erledigtAm": "2025-01-15", "protokollId": "p1" },
-    { "datum": "2025-02-01", "beschreibung": "Licht hinten wackelt", "status": "offen" }
+    { "id": "m1", "datum": "2025-01-10", "beschreibung": "Bremse quietscht", "status": "erledigt", "erledigtAm": "2025-01-15" },
+    { "id": "m2", "datum": "2025-02-01", "beschreibung": "Licht hinten wackelt", "status": "offen", "erledigtAm": null }
   ]
 }
 ```
@@ -1179,19 +1295,54 @@ damit nichts verloren geht.
   - Ergänzt wird `ortAusserhalb: "wohnort"` in `einstellungen.wetter`.
   - Die umgewandelten Daten werden beim nächsten Speichern als Version 7
     abgelegt.
-- Daten aus Version 1 bis 5 werden in einem Schritt über die Zwischenversionen
-  auf Version 7 gebracht.
+- **Version 7 → 8 (Werkstatt):** Einträge, Einstellungen, Vorlagen, Fahrrad
+  und alle Angaben der Wartungsarten (Intervalle, Zeitfenster, gültig ab,
+  einmalig) bleiben erhalten; `wartungsprotokoll` und `termine` werden zu
+  `auftraege`. Alle neuen Kennungen werden aus den alten abgeleitet, so dass
+  „Sicherung prüfen“ eine alte Sicherung desselben Stands weiter als
+  „identisch“ erkennt.
+  - **Wartungsarten:** mit Zeitfenster, `einmalig` oder „Inspektion“,
+    „Reparatur“ bzw. „Eigenleistung“ im Namen → Auftrag; sonst → Aufgabe
+    (`bauteil: null`, `zuordnung: "naechste-inspektion"`). Fehlen eine
+    „Reparatur“ bzw. „Eigenleistung“ (Auftrag ohne Fälligkeit), werden sie
+    ergänzt (`id` `reparatur` bzw. `eigenleistung`, ist sie belegt, mit „-2“
+    usw.). Fehlt `wartungsarten` ganz, gelten die Standardarten bis Version 7
+    (Große und Kleine Inspektion mit Zeitfenster, Reparatur).
+  - **Protokoll eines Auftrags** → erledigter Auftrag (`id` des
+    Protokolleintrags; Datum, Werkstatt, Kilometerstand, Notiz).
+  - **Protokoll einer Aufgabe** → erledigte Position (`id` „pos-“ + `id` des
+    Eintrags, Notiz übernommen) im erledigten Auftrag vom selben Datum, sonst
+    in einer erledigten Reparatur dieses Datums (`id` des ersten Eintrags).
+    Damit die Fälligkeit gleich bleibt, nur bei gleichem Kilometerstand (beide
+    berechnet oder beide gleich von Hand eingetragen); sonst eine eigene
+    Reparatur. Eine abweichende Werkstatt steht in der Notiz der Position
+    („Werkstatt: …“).
+  - **Mängel mit `protokollId`** → erledigte Position („pos-“ + `id` des
+    Mangels) in dem daraus entstandenen Auftrag; `protokollId` entfällt. Offene
+    Mängel bleiben ohne Auftrag.
+  - **Termin eines Auftrags** → geplanter Auftrag (`id` „termin-“ + `id` der
+    Wartungsart). **Termin einer Aufgabe** → offene Position im geplanten
+    Inspektions-Auftrag mit demselben Termin, sonst in einem neuen geplanten
+    Auftrag der Inspektion, in deren Zeitfenster der Termin liegt, sonst in
+    einer geplanten Reparatur mit diesem Termin und dieser Werkstatt.
+  - Danach steht im Reiter Wartung „Bitte Wartungsarten prüfen“ (siehe
+    „Wartung“).
+  - Die umgewandelten Daten werden beim nächsten Speichern als Version 8
+    abgelegt.
+- Daten aus Version 1 bis 6 werden in einem Schritt über die Zwischenversionen
+  auf Version 8 gebracht.
 
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1, 2, 3, 4, 5 und 6 auf Version 7 (`tests/daten-v1.json`
-  bis `tests/daten-v6.json`, erfundene Werte; auch dass geänderte
-  Kleidungsregeln erhalten bleiben) und die Ablehnung fehlerhafter Daten,
+- die Umwandlung von Version 1 bis 7 auf Version 8 (`tests/daten-v1.json`
+  bis `tests/daten-v7.json`, erfundene Werte; auch dass geänderte
+  Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
+  werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
-- die saisonale Fälligkeit, Verschleißteile (km zuerst / Zeit zuerst),
-  einmalige Wartungen und die Reihenfolge im Reiter Wartung,
+- die saisonale Fälligkeit, Verschleißteile als Aufgaben (km zuerst / Zeit
+  zuerst), einmalige Aufträge und die Reihenfolge im Reiter Wartung,
 - Prognosen und Jahresziel mit festen Testdaten und Stichtagen,
 - Löschen mit „Rückgängig“,
 - die Prüfung der Sicherungsdatei vor dem Teilen (das Teilen-Menü wird dabei
@@ -1247,7 +1398,34 @@ damit nichts verloren geht.
   mit und ohne Wegpunkte, eine ausgeschlossene Teilstrecke, die Rückfahrt, die
   vergangene Fahrt, die Karte „Jetzt“ (nur die erste Zeile), Böen nicht doppelt,
   die Kachel und die Hinweise unverändert (dieselben Texte wie in 4d), Daten
-  unverändert und den Hinweis in den Einstellungen.
+  unverändert und den Hinweis in den Einstellungen,
+- Release 5a (Werkstatt, Datenversion 8): die Umwandlung 7 → 8 mit
+  `tests/daten-v7.json` beim Laden und beim Import (Einordnung in Aufträge und
+  Aufgaben, Eigenleistung ergänzt, Aufgaben vom selben Tag mit gleichem bzw.
+  abweichendem km-Stand, Reparatur je Tag, Mängel mit protokollId auch zu einer
+  Aufgabe, Termine von Aufträgen und Aufgaben, feste Kennungen, „Sicherung
+  prüfen“ identisch, Kurzinfo alt und neu, gespeicherte Daten erst beim
+  Speichern geändert), den Hinweis „Bitte Wartungsarten prüfen“ (kein Fenster
+  beim Start, Prüfbildschirm, Formular und zurück, „Später“, „Alles geprüft“,
+  nicht bei „Sicherung prüfen“, beim Import), die Prüfung der Datenversion 8
+  (Art, Bauteil, Zuordnung, Status, Termin und Datum, Positionen, höchstens ein
+  geplanter Auftrag je Inspektion, Aufgaben und Mängel in höchstens einem
+  geplanten Auftrag, Mängel nur einmal erledigt, „ausgeschlossen“), die
+  Fälligkeit (Zeitfenster mit km-Hinweis, km oder Monate), die nur berechnete
+  Standard-Zuordnung („nächste Inspektion“, bestimmter Auftrag, Zieldatum mit
+  und ohne Termin, entfernt, ausdrücklich zugeordnet, sofortige Wirkung,
+  Daten unverändert), die Vorschläge („zu diesem Auftrag nehmen?“, „sonst …“),
+  Karten, Aufgabenliste und Übersicht, das Bearbeiten (Mitnehmen, Entfernen,
+  Verschieben, Hinzufügen, Termin planen, ändern und entfernen, Mangel
+  zuordnen, Reparatur und Eigenleistung anlegen, Löschen mit „Rückgängig“),
+  „Erledigt eintragen“ (angezeigte Positionen fest gespeichert, auch die
+  berechneten; nicht gemacht; Intervall neu ab Datum und km des Auftrags;
+  Mängel; spätere Änderungen an Intervallen und Zuordnungen ändern erledigte
+  Aufträge nicht; Ändern und Löschen; Eigenleistung an einer Aufgabe), Mängel
+  von Hand erledigen bzw. öffnen, das Formular der Wartungsarten (Art, Bauteil
+  mit Auswahlliste, Zuordnung, Wechsel nur unbenutzt, Löschen) und den Wind je
+  Teilstrecke zweizeilig (W15: Name klein, darunter eingerückt der Wind in
+  normaler Schrift).
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -1305,7 +1483,9 @@ node tests/offline-update-test.js
    1. Grundeinstellungen
    2. Hilfsfunktionen für Datum und Zahlen
    3. Datenmodell: Laden, Prüfen, Umwandeln, Speichern
-   4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit, Zusammenfassung
+   4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit,
+      Werkstatt (offene Aufträge, berechnete Standard-Zuordnung, Vorschläge),
+      Zusammenfassung
    5. Wetter: Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher,
       aktueller Standort, Ampel, Glätte, Kleidung, bestes Abfahrtsfenster, Wind,
       Ansicht „Jetzt“, Wetter je Eintrag und Rückblick
