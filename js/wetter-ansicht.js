@@ -40,7 +40,7 @@ function bildWetter(jetzt = Date.now()) {
       'Lege Wohnort und Arbeitsort fest. Dann zeigt die App für deine Fahrtage Ampel, Kleidung, amtliche Warnungen, Wind und die beste Abfahrtszeit.' +
       '<div class="knopfreihe"><button type="button" class="primaer" data-action="ort-bearbeiten" data-rolle="wohnort">Wohnort festlegen</button>' +
       '<button type="button" data-action="ort-bearbeiten" data-rolle="arbeitsort">Arbeitsort festlegen</button></div></div>' +
-      '<p class="klein">Orte und Fahrzeiten findest du auch unter Einstellungen → Wetter.</p>';
+      '<p class="klein">Orte und Fahrzeiten findest du auch unter Einstellungen → Wetter.</p>' + wegZuEinstellungen("Orte und Strecke", "orte");
   }
   let html = wetterHinweise(a, jetzt);
   if (!a.weitererOrt) html += rueckmeldungKarte(jetzt);
@@ -72,7 +72,7 @@ function bildWetter(jetzt = Date.now()) {
     warnungen = a.warnungen;
   }
   html += warnungenKarte(warnungen, a, jetzt);
-  return html + standKarte(a, jetzt);
+  return html + standKarte(a, jetzt) + wegZuEinstellungen("Orte, Fahrzeiten, Kleidung", "", "e-wetter");
 }
 
 // Hinweise oben: Quelle nicht erreichbar, nicht aktuell, Ersatzquelle für die Warnungen
@@ -212,7 +212,31 @@ function wetterKachel(jetzt) {
 
 // ---------- Wetter in den Einstellungen: Orte und Fahrzeiten ----------
 
+// Einstellungen → Wetter: Zeilen auf der Hauptseite (Orte und „Außerhalb der
+// Fahrten“ als Unterseiten, Fahrzeiten, Kleidung und Ampel-Grenzen als Fenster)
 function wetterEinstellungen() {
+  const w = daten.einstellungen.wetter;
+  const fahrtZeile = (art, titel) => {
+    const f = w[art];
+    return '<div class="zeile"><button type="button" class="inhalt" data-action="fahrt-bearbeiten" data-art="' + art + '"><div class="text"><div>' + titel + ' ' + f.von + '–' + f.bis + '</div>' +
+      '<div class="klein">' + (ueblicheAbfahrt(f) ? "übliche Abfahrt " + f.abfahrt : "keine übliche Abfahrt") + " · Dauer " + f.dauer + " min</div></div>" +
+      '<span class="klein" style="padding-right:16px">›</span></button></div>';
+  };
+  const orte = [w.wohnort ? "Wohnort " + w.wohnort.name : "Wohnort nicht festgelegt",
+    w.wegpunkte.length ? (w.wegpunkte.length === 1 ? "1 Wegpunkt" : w.wegpunkte.length + " Wegpunkte") : "",
+    w.arbeitsort ? "Arbeitsort " + w.arbeitsort.name : "Arbeitsort nicht festgelegt",
+    w.weitererOrt && w.weitererOrt.aktiv ? "weiterer Ort aktiv" : ""].filter(Boolean).join(" · ");
+  return '<h2 id="e-wetter">Wetter</h2><div class="liste">' +
+    seitenZeile("orte", "Orte und Strecke", orte) +
+    seitenZeile("ausserhalb", "Wetter außerhalb der Fahrten", w.ortAusserhalb === "standort" ? "Aktueller Standort" : ORT_TITEL.wohnort) +
+    fahrtZeile("hinfahrt", "Hinfahrt") + fahrtZeile("rueckfahrt", "Rückfahrt") +
+    regelZeile("kleidung-bearbeiten", "Kleidung", kleidungKurztext(w.kleidung)) +
+    regelZeile("ampel-bearbeiten", "Ampel-Grenzen", ampelKurztext(w.ampel)) + '</div>' +
+    '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Hin- und Rückfahrt eines Fahrtags zeigt der Reiter Wetter ab dem Ende der Rückfahrt am Vortag.</p>';
+}
+
+// Einstellungen → Orte und Strecke: Wohn- und Arbeitsort, Wegpunkte, Teilstrecken, weiterer Ort
+function wetterOrteSeite() {
   const w = daten.einstellungen.wetter;
   const ortZeile = rolle => {
     const o = w[rolle];
@@ -234,30 +258,25 @@ function wetterEinstellungen() {
     '<div class="feldhinweis">Der Reiter Wetter zeigt je Teilstrecke, die zählt, eine Zeile mit dem Wind relativ zu ihrer Fahrtrichtung (z. B. Gegenwind); ' +
     'die Rückfahrt in umgekehrter Reihenfolge und Richtung. ' +
     'Nimm z. B. eine Strecke durch ein Wohngebiet heraus.</div></div>' : "";
-  const fahrtZeile = (art, titel) => {
-    const f = w[art];
-    return '<div class="zeile"><button type="button" class="inhalt" data-action="fahrt-bearbeiten" data-art="' + art + '"><div class="text"><div>' + titel + ' ' + f.von + '–' + f.bis + '</div>' +
-      '<div class="klein">' + (ueblicheAbfahrt(f) ? "übliche Abfahrt " + f.abfahrt : "keine übliche Abfahrt") + " · Dauer " + f.dauer + " min</div></div>" +
-      '<span class="klein" style="padding-right:16px">›</span></button></div>';
-  };
-  return '<h2>Wetter</h2><div class="liste">' + ortZeile("wohnort") + w.wegpunkte.map(wegpunktZeile).join("") + ortZeile("arbeitsort") + '</div>' +
+  return '<div class="liste" style="margin-top:8px">' + ortZeile("wohnort") + w.wegpunkte.map(wegpunktZeile).join("") + ortZeile("arbeitsort") + '</div>' +
     '<div class="knopfreihe"><button type="button" data-action="wegpunkt-neu"' + (w.wegpunkte.length >= MAX_WEGPUNKTE ? " disabled" : "") + '>+ Wegpunkt</button></div>' +
     '<div class="feldhinweis">Bis zu ' + MAX_WEGPUNKTE + ' Wegpunkte zwischen Wohn- und Arbeitsort, in Fahrtrichtung der Hinfahrt. Sie zählen für Wind, Temperatur, Regen und Warnungen, ' +
     'sobald Wohn- und Arbeitsort festgelegt sind.</div>' + teilstreckenHtml +
     '<div class="liste" style="margin-top:12px">' + ortZeile("weitererOrt") + '</div>' +
     (w.weitererOrt ? '<label class="haken"><input type="checkbox" data-change="weiterer-ort-aktiv"' + (w.weitererOrt.aktiv ? " checked" : "") + '>' +
       '<span>Weiteren Ort zeigen (aktiv)<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter dort, ohne Hin- und Rückfahrt.</span></span></label>' : "") +
-    '<h3 style="margin-top:16px">Wetter außerhalb der Fahrten</h3>' + ortAusserhalbUmschalter(w.ortAusserhalb) +
-    '<div class="feldhinweis">Zu allen Zeiten ohne Hin- und Rückfahrt zeigen Übersicht und Reiter Wetter die Ampel für eine Fahrt ab jetzt (Dauer wie die Hinfahrt): ' +
-    'am Wohnort oder am aktuellen Standort des iPhones. Der Standort wird nur bestimmt, während diese Ansicht angezeigt wird; seine Koordinaten gehen auf 3 Nachkommastellen ' +
-    'gerundet an Open-Meteo und den Deutschen Wetterdienst und werden nicht gespeichert. Ohne Freigabe, Ortung oder Netz gilt der Wohnort.</div>' +
-    '<div class="liste" style="margin-top:12px">' + fahrtZeile("hinfahrt", "Hinfahrt") + fahrtZeile("rueckfahrt", "Rückfahrt") + '</div>' +
-    '<div class="liste" style="margin-top:12px">' + regelZeile("kleidung-bearbeiten", "Kleidung", kleidungKurztext(w.kleidung)) +
-    regelZeile("ampel-bearbeiten", "Ampel-Grenzen", ampelKurztext(w.ampel)) + '</div>' +
-    '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Hin- und Rückfahrt eines Fahrtags zeigt der Reiter Wetter ab dem Ende der Rückfahrt am Vortag. ' +
-    'Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) ' +
+    '<p class="klein">Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) ' +
     'gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
     'Für die Ortssuche geht nur der eingegebene Name an Open-Meteo.</p>';
+}
+
+// Einstellungen → Wetter außerhalb der Fahrten: Wohnort oder aktueller Standort
+function wetterAusserhalbSeite() {
+  const w = daten.einstellungen.wetter;
+  return ortAusserhalbUmschalter(w.ortAusserhalb) +
+    '<div class="feldhinweis">Zu allen Zeiten ohne Hin- und Rückfahrt zeigen Übersicht und Reiter Wetter die Ampel für eine Fahrt ab jetzt (Dauer wie die Hinfahrt): ' +
+    'am Wohnort oder am aktuellen Standort des iPhones. Der Standort wird nur bestimmt, während diese Ansicht angezeigt wird; seine Koordinaten gehen auf 3 Nachkommastellen ' +
+    'gerundet an Open-Meteo und den Deutschen Wetterdienst und werden nicht gespeichert. Ohne Freigabe, Ortung oder Netz gilt der Wohnort.</div>';
 }
 
 function regelZeile(aktion, titel, text) {

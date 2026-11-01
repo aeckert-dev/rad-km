@@ -1,4 +1,4 @@
-// Rad-km · Wartung (Ansicht): Reiter Wartung, Aufträge, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm
+// Rad-km · Wartung (Ansicht): Reiter Wartung (Aktuell | Verlauf), Aufträge, Termin, Kalender, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm
 "use strict";
 
 /* ---------- Wartung (Werkstatt: Aufträge, Aufgaben, Mängel) ---------- */
@@ -66,6 +66,10 @@ function vorschlagHtml(x, o) {
     '<button type="button" data-action="vorschlag-annehmen" data-key="' + esc(auftragKey(o)) + '" data-id="' + esc(x.art.id) + '">Mitnehmen</button></div>';
 }
 
+// Reiter Wartung (Release 5b): oben der Prüfhinweis und die Knöpfe zum
+// Anlegen, darunter „Aktuell“ (Mängel ohne Auftrag, offene Aufträge, Aufgaben)
+// bzw. „Verlauf“ (erledigte Aufträge und Mängel). Die Wartungsarten stehen
+// unter Einstellungen → Wartungsarten.
 function bildWartung(h = heute()) {
   const lage = werkstattLage(h);
   let html = "";
@@ -76,27 +80,32 @@ function bildWartung(h = heute()) {
       '<button type="button" data-action="pruefung-oeffnen">Wartungsarten prüfen</button></div>';
   }
 
+  // Anlegen: Mangel, Reparatur, Eigenleistung (Auftragsarten ohne Fälligkeit)
+  html += '<div class="knopfreihe" style="margin-top:8px"><button type="button" data-action="mangel-neu">+ Mangel</button>' +
+    bedarfsArten().map(a => '<button type="button" data-action="auftrag-neu" data-id="' + esc(a.id) + '">+ ' + esc(a.name) + '</button>').join("") + '</div>';
+
+  html += umschalterHtml("wartung-ansicht", wartungAnsicht, [["aktuell", "Aktuell"], ["verlauf", "Verlauf"]], "Ansicht");
+  html += wartungAnsicht === "verlauf" ? wartungVerlauf() : wartungAktuell(lage, h);
+  return html + wegZuEinstellungen("Wartungsarten verwalten", "wartungsarten");
+}
+
+function wartungAktuell(lage, h) {
+  let html = "";
   // Offene Mängel ohne Auftrag ganz oben (nur wenn vorhanden)
   const ohne = lage.maengelOhneAuftrag;
   if (ohne.length) {
-    html += '<h2 style="margin-top:8px">Offene Mängel ohne Auftrag <span class="klein">(' + ohne.length + ')</span></h2><div class="liste">' +
-      ohne.map(m => mangelZeile(m, true)).join("") + '</div>' +
-      '<div class="knopfreihe" style="margin-bottom:12px"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
+    html += '<h2 style="margin-top:12px">Offene Mängel ohne Auftrag <span class="klein">(' + ohne.length + ')</span></h2><div class="liste">' +
+      ohne.map(m => mangelZeile(m, true)).join("") + '</div>';
   }
 
   // Offene Aufträge mit ihren Positionen und Vorschlägen
-  html += '<h2>Offene Aufträge</h2>';
+  html += '<h2' + (ohne.length ? "" : ' style="margin-top:12px"') + '>Offene Aufträge</h2>';
   if (!lage.offene.length) html += '<div class="liste"><div class="leer">Keine offenen Aufträge.</div></div>';
   lage.offene.forEach(o => { html += auftragKarte(o, lage, h); });
-  const neu = bedarfsArten();
-  if (neu.length) {
-    html += '<div class="knopfreihe" style="margin-bottom:12px">' + neu.map(a =>
-      '<button type="button" data-action="auftrag-neu" data-id="' + esc(a.id) + '">+ ' + esc(a.name) + '</button>').join("") + '</div>';
-  }
 
   // Aufgaben mit Fälligkeit und Hinweis auf ihren Auftrag
   html += '<h2>Aufgaben</h2><div class="liste">';
-  if (!lage.aufgaben.length) html += '<div class="leer">Noch keine Aufgaben. Lege unter „Wartungsarten“ eine Wartungsart der Art „Aufgabe“ an, z. B. „Bremsbeläge wechseln“.</div>';
+  if (!lage.aufgaben.length) html += '<div class="leer">Noch keine Aufgaben. Lege unter „Einstellungen → Wartungsarten“ eine Wartungsart der Art „Aufgabe“ an, z. B. „Bremsbeläge wechseln“.</div>';
   lage.aufgaben.forEach(x => {
     const auftrag = x.offen ? "→ " + auftragKurz(x.offen) + (x.berechnet ? " · nach Standard" : "")
       : "noch kein Auftrag · Standard: " + esc(zuordnungText(x.art));
@@ -107,10 +116,14 @@ function bildWartung(h = heute()) {
       '<span class="klein" style="padding-right:16px">›</span></button></div>';
   });
   html += '</div>';
+  if (!ohne.length && offeneMaengel().length) html += '<p class="klein">Alle offenen Mängel stehen in einem Auftrag.</p>';
+  return html;
+}
 
-  // Historie: erledigte Aufträge
+function wartungVerlauf() {
+  // Erledigte Aufträge, neueste zuerst
   const erledigte = daten.auftraege.filter(a => a.status === "erledigt").sort((a, b) => b.datum.localeCompare(a.datum));
-  html += '<h2>Erledigte Aufträge</h2><div class="liste">';
+  let html = '<h2 style="margin-top:12px">Erledigte Aufträge <span class="klein">(' + erledigte.length + ')</span></h2><div class="liste">';
   if (!erledigte.length) html += '<div class="leer">Noch kein Auftrag erledigt.</div>';
   erledigte.forEach(a => {
     const n = a.positionen.filter(p => p.status === "erledigt").length;
@@ -124,24 +137,18 @@ function bildWartung(h = heute()) {
   });
   html += '</div>';
 
-  // Mängel erfassen (ohne offene Mängel ohne Auftrag) und erledigte Mängel
+  // Erledigte Mängel, zuletzt erledigte zuerst
   const erledigt = daten.maengel.filter(m => m.status === "erledigt")
     .sort((a, b) => (b.erledigtAm || b.datum).localeCompare(a.erledigtAm || a.datum));
-  if (!ohne.length || erledigt.length) html += '<h2>Mängel</h2>';
-  if (!ohne.length) {
-    html += '<div class="liste"><div class="leer">' + (offeneMaengel().length ? "Alle offenen Mängel stehen in einem Auftrag." : "Keine offenen Mängel.") + '</div></div>' +
-      '<div class="knopfreihe"><button type="button" data-action="mangel-neu">+ Mangel erfassen</button></div>';
-  }
-  if (erledigt.length) {
-    html += '<div class="liste"' + (ohne.length ? "" : ' style="margin-top:12px"') + '><div class="zeile gruppe">' +
-      '<button type="button" class="inhalt" data-action="maengel-erledigt-umschalten" aria-expanded="' + erledigteMaengelOffen + '">' +
-      CHEVRON +
-      '<div class="text"><div class="titel">Erledigte Mängel (' + erledigt.length + ')</div></div></button></div>' +
-      (erledigteMaengelOffen ? erledigt.map(m => mangelZeile(m, false)).join("") : "") + '</div>';
-  }
+  html += '<h2>Erledigte Mängel <span class="klein">(' + erledigt.length + ')</span></h2><div class="liste">' +
+    (erledigt.length ? erledigt.map(m => mangelZeile(m, false)).join("") : '<div class="leer">Noch kein Mangel erledigt.</div>') + '</div>';
+  return html;
+}
 
-  // Wartungsarten verwalten
-  html += '<h2>Wartungsarten</h2>';
+// Wartungsarten verwalten (Einstellungen → Wartungsarten)
+function wartungsartenBereich() {
+  let html = '<p class="klein" style="margin-top:8px">Aufträge (z. B. Inspektion, Reparatur) bekommen einen Termin; Aufgaben (z. B. Bremsbeläge) ' +
+    'sind Positionen in einem Auftrag.</p>';
   [["auftrag", "Aufträge"], ["aufgabe", "Aufgaben"]].forEach(([typ, titel]) => {
     const arten = daten.wartungsarten.filter(a => a.typ === typ);
     html += '<h3>' + titel + '</h3><div class="liste">' + (arten.length ? "" : '<div class="leer">Keine.</div>') +
@@ -149,8 +156,7 @@ function bildWartung(h = heute()) {
         '<div class="text"><div>' + esc(a.name) + '</div><div class="klein umbrechen">' + esc(artRegelText(a)) + '</div></div>' +
         '<span class="klein" style="padding-right:16px">›</span></button></div>').join("") + '</div>';
   });
-  html += '<div class="knopfreihe"><button type="button" data-action="art-neu">+ Neue Wartungsart</button></div>';
-  return html;
+  return html + '<div class="knopfreihe"><button type="button" data-action="art-neu">+ Neue Wartungsart</button></div>';
 }
 
 // Regel einer Wartungsart als Text: "Zeitfenster: März–April, ab 2027", "Intervall: 24 Monate oder 5.000 km · Bremse · Standard: nächste Inspektion"

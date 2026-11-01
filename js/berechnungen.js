@@ -26,6 +26,12 @@ function aktuellerKmStand() {
   return runden(f.startKm + summe(e => e.datum >= f.startdatum));
 }
 
+// Wochensumme in derselben Woche (Mo–So), außer dem Eintrag ausserId
+function wochenEintragInWoche(iso, ausserId) {
+  const montag = montagDerWoche(iso);
+  return daten.eintraege.find(e => e.typ === "woche" && e.id !== ausserId && montagDerWoche(e.datum) === montag) || null;
+}
+
 // ---------- Prognosen ----------
 // Grundlage aller Prognosen: durchschnittliche km pro Kalendertag der letzten
 // 365 Tage bis gestern; liegt das Startdatum später, ab dem Startdatum.

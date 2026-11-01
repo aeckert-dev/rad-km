@@ -504,10 +504,11 @@ async function start() {
     gleich("Offene Aufträge: die erledigte einmalige zählt nicht (Lenker: einmalig ohne Intervall, ohne Datum)",
       w.werkstattLage(H).offene.map(o => [o.art.id, o.vorgemerkt]), [["gross", true], ["lenker", true]]);
     gleich("Nächster Auftrag auf der Startseite: erledigte einmalige zählt nicht", w.naechsterAuftrag(w.werkstattLage(H), H).art.id, "gross");
-    w.eval("aktiverTab = 'wartung'; zeichnen()");
-    gleich("Reiter Wartung: Karten der offenen Aufträge ohne die erledigte Erstinspektion; sie steht in den erledigten Aufträgen",
-      [[...w.document.querySelectorAll("#inhalt > .karte h3")].map(h => h.textContent),
-        [...w.document.querySelectorAll('#inhalt [data-action="auftrag-ansehen"] .text > div:first-child')].map(d => d.textContent)],
+    w.eval("aktiverTab = 'wartung'; wartungAnsicht = 'aktuell'; zeichnen()");
+    const kartenAktuell = [...w.document.querySelectorAll("#inhalt > .karte h3")].map(h => h.textContent);
+    w.eval("wartungAnsicht = 'verlauf'; zeichnen()");
+    gleich("Reiter Wartung: Karten der offenen Aufträge (Aktuell) ohne die erledigte Erstinspektion; sie steht in den erledigten Aufträgen (Verlauf)",
+      [kartenAktuell, [...w.document.querySelectorAll('#inhalt [data-action="auftrag-ansehen"] .text > div:first-child')].map(d => d.textContent)],
       [["Große Inspektion", "Lenker tauschen"], ["10.02.2026 · Erstinspektion", "29.01.2026 · Erstinspektion"]]);
     w.eval(`daten.auftraege = []`);
     auftragDazu({ id: "t-erst", wartungsartId: "erst", status: "geplant", termin: "2026-01-28", werkstatt: "W" });
@@ -757,14 +758,18 @@ async function start() {
     // 14. Oberfläche
     // -------------------------------------------------------------
     abschnitt("14. Oberfläche");
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("wartungAnsicht = 'aktuell'; aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     const einst = w.document.getElementById("inhalt");
     wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion9"), einst.textContent);
-    wahr("Einstellungen: „Jetzt sichern“, „Sicherung prüfen …“, „Daten importieren …“",
+    wahr("Einstellungen: „Jetzt sichern“ auf der Hauptseite, Zeile zur Unterseite Datensicherung",
+      einst.querySelector('[data-action="sichern"]') && einst.querySelector('[data-action="einstellungen-seite"][data-seite="sicherung"]'));
+    w.eval("einstellungenSeite = 'sicherung'; zeichnen()");
+    wahr("Einstellungen → Datensicherung: „Jetzt sichern“, „Sicherung prüfen …“, „Daten importieren …“",
       ["sichern", "sicherung-pruefen", "import"].every(a => einst.querySelector('[data-action="' + a + '"]')));
-    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
-    wahr("Startseite: „Jetzt sichern“ in der Karte Datensicherung", w.document.querySelector('#inhalt .karte [data-action="sichern"]'));
-    w.eval(`daten.eintraege.push({ id: "alt1", datum: "2024-05-06", km: 5, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }); offeneGruppen.clear(); zeichnen()`);
+    w.eval("einstellungenSeite = null; aktiverTab = 'uebersicht'; zeichnen()");
+    wahr("Startseite: „Jetzt sichern“ in der Zeile Datensicherung", w.document.querySelector('#inhalt .karte .sicherungszeile [data-action="sichern"]'));
+    w.eval(`daten.eintraege.push({ id: "alt1", datum: "2024-05-06", km: 5, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }); offeneGruppen.clear();
+      aktiverTab = 'fahrten'; fahrtenAnsicht = 'eintraege'; zeichnen()`);
     let knopf = w.document.querySelector('[data-action="gruppe"][data-key="j2024"]');
     let pfeil = knopf.querySelector("svg.chevron");
     gleich("Eintragsliste: Aufklapp-Pfeil als Chevron (22 px) in der Textfarbe, zugeklappt",
@@ -839,7 +844,7 @@ async function start() {
     gleich("Tipper auf „Nachtragen“: Erfassung für diesen Tag",
       [w.eval("fenster.open"), w.document.getElementById("f-datum").value, w.document.querySelector("#fensterinhalt h2").textContent], [true, w.plusTage(w.heute(), -13), "Neuer Eintrag"]);
     w.fensterSchliessen();
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'fahrtage'; zeichnen()");
     const fahrtagFelder = () => [...w.document.querySelectorAll('input[data-change="fahrtag"]')];
     gleich("Einstellungen: sieben Fahrtage zum Ankreuzen", fahrtagFelder().map(f => f.nextElementSibling.textContent + (f.checked ? "✓" : "")),
       ["Mo✓", "Di✓", "Mi✓", "Do✓", "Fr✓", "Sa✓", "So✓"]);
@@ -927,7 +932,7 @@ async function start() {
     gleich("Fahrtage mit Mittwoch: andere Serien (2026: Mi 07.01. bis Di 13.01. = 4)", [kz.jahre[0].serie, kz.jahre[1].serie, kz.gesamt.serie], [4, 2, 4]);
     w.eval("daten.einstellungen.fahrtage = []");
     gleich("Ohne Fahrtage keine Serie", w.jahresKennzahlen("2026-03-01").gesamt.serie, 0);
-    w.eval("daten.einstellungen.fahrtage = [1, 2, 5]; aktiverTab = 'statistik'; statistikMonat = null; statistikTabelleOffen = false; zeichnen()");
+    w.eval("daten.einstellungen.fahrtage = [1, 2, 5]; aktiverTab = 'fahrten'; fahrtenAnsicht = 'statistik'; statistikMonat = null; statistikTabelleOffen = false; zeichnen()");
     const statText = w.document.getElementById("inhalt").textContent;
     wahr("Statistik: Tabelle mit Jahren und Gesamt, Hinweis „ohne Wochensummen“ und zur Wochensumme 2026",
       w.document.querySelectorAll("#inhalt table.tabelle tbody tr").length >= 3 && statText.includes("Radtage, Ø km, Arbeitstage und Serie ohne Wochensummen.") &&
@@ -959,7 +964,7 @@ async function start() {
     gleich("Ohne Einträge: Hinweis statt Diagramm", [!!ablage.querySelector("svg"), ablage.textContent.includes("Für 2023 und 2024 gibt es noch keine Einträge.")], [false, true]);
     ablage.remove();
     setze({ fahrrad: F("2025-01-01", 0), eintraege: [] });
-    w.eval(`daten.eintraege.push({ id: "d1", datum: heute().slice(0, 4) + "-01-15", km: 12, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }); aktiverTab = 'statistik'; zeichnen()`);
+    w.eval(`daten.eintraege.push({ id: "d1", datum: heute().slice(0, 4) + "-01-15", km: 12, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false }); aktiverTab = 'fahrten'; fahrtenAnsicht = 'statistik'; zeichnen()`);
     gleich("Statistik: zwölf antippbare Monate", w.document.querySelectorAll('#inhalt [data-action="statistik-monat"]').length, 12);
     w.document.querySelector('#inhalt [data-action="statistik-monat"][data-monat="0"]').dispatchEvent(new w.MouseEvent("click", { bubbles: true }));
     const monatsText = w.document.querySelector("#inhalt .monatswert").textContent.replace(/\s+/g, " ");
@@ -1027,21 +1032,27 @@ async function start() {
     gleich("Aufgabe Kette (km, 08.12.2026) nach Standard „nächste Inspektion“: die früheste Inspektion, bis zu deren Zieldatum sie fällig wird (Winterreifen bis 31.12.)",
       [lageR.aufgaben.map(x => [x.art.id, x.st.datum, x.offen && x.offen.art.id, x.berechnet])], [[["kette", "2026-12-08", "fenster-beginn", true]]]);
     gleich("Startseite: nächster Auftrag = der am längsten überfällige", w.naechsterAuftrag(lageR, HR).art.id, "gross");
-    const seiteWartung = () => {
+    // Seite des Reiters Wartung in der Ansicht „Aktuell“ bzw. „Verlauf“ (Release 5b), Überschriften ohne Anzahl im Verlauf
+    const seiteWartung = (ansicht = "aktuell") => {
+      w.eval("wartungAnsicht = '" + ansicht + "'");
       const ablage = w.document.createElement("div");
       ablage.innerHTML = w.bildWartung(HR);
-      return [...ablage.querySelectorAll(":scope > h2, :scope > .karte > h3")].map(el => (el.tagName === "H2" ? "## " : "") + el.textContent);
+      w.eval("wartungAnsicht = 'aktuell'");
+      return [...ablage.querySelectorAll(":scope > h2, :scope > .karte > h3")].map(el => (el.tagName === "H2" ? "## " : "") +
+        (ansicht === "verlauf" ? el.textContent.replace(/ \(\d+\)$/, "") : el.textContent));
     };
-    gleich("Seite: offene Mängel ohne Auftrag ganz oben, dann die offenen Aufträge, die Aufgaben, die erledigten Aufträge, Mängel und Wartungsarten", seiteWartung(), [
+    gleich("Aktuell: offene Mängel ohne Auftrag ganz oben, dann die offenen Aufträge und die Aufgaben", seiteWartung(), [
       "## Offene Mängel ohne Auftrag (1)", "## Offene Aufträge",
       "Große Inspektion", "Halbjahresinspektion", "Reparatur Bremsen", "Monatsinspektion", "Reparatur Licht", "Winterreifen", "Herbstcheck", "Kleine Inspektion",
-      "## Aufgaben", "## Erledigte Aufträge", "## Mängel", "## Wartungsarten"]);
+      "## Aufgaben"]);
+    gleich("Verlauf: erledigte Aufträge und erledigte Mängel", seiteWartung("verlauf"), ["## Erledigte Aufträge", "## Erledigte Mängel"]);
     w.eval("daten.maengel = daten.maengel.filter(m => m.status === 'erledigt')");
     const ohneOffene = w.document.createElement("div");
     ohneOffene.innerHTML = w.bildWartung(HR);
-    gleich("Ohne offene Mängel: kein Block oben; „+ Mangel erfassen“ und erledigte Mängel unter den erledigten Aufträgen",
-      [seiteWartung()[0], seiteWartung()[11], ohneOffene.querySelectorAll('[data-action="mangel-neu"]').length, !!ohneOffene.querySelector('[data-action="maengel-erledigt-umschalten"]')],
-      ["## Offene Aufträge", "## Mängel", 1, true]);
+    gleich("Ohne offene Mängel: kein Block oben; „+ Mangel“ oben im Reiter, Wartungsarten über Einstellungen",
+      [seiteWartung()[0], ohneOffene.querySelectorAll('[data-action="mangel-neu"]').length, !!ohneOffene.querySelector('[data-action="einstellungen-seite"][data-seite="wartungsarten"]'),
+        !!ohneOffene.querySelector('[data-action="art-bearbeiten"]')],
+      ["## Offene Aufträge", 1, true, false]);
     setze({ fahrrad: F("2026-01-01", 0), eintraege: [], wartungsarten: [
       A("reparatur", { name: "Reparatur" }), A("kette", { name: "Ketten-Inspektion", intervallKm: 500 }), A("monate", { name: "Inspektion", intervallMonate: 12 })] });
     gleich("Ohne Fahrten (keine km-Prognose): Auftrag mit km-Intervall nach denen mit Datum",
@@ -1743,22 +1754,29 @@ async function start() {
     // 34. Navigation, Vorlagen in den Einstellungen, Wetter-Kachel
     // -------------------------------------------------------------
     abschnitt("34. Navigation, Vorlagen in den Einstellungen, Wetter-Kachel und Reiter Wetter");
-    gleich("Fünf Reiter: Übersicht, Wetter, Wartung, Statistik, Einstellungen", [...w.document.querySelectorAll("nav button")].map(b => [b.dataset.tab, b.lastChild.textContent]),
-      [["uebersicht", "Übersicht"], ["wetter", "Wetter"], ["wartung", "Wartung"], ["statistik", "Statistik"], ["einstellungen", "Einstellungen"]]);
+    gleich("Fünf Reiter: Übersicht, Wetter, Wartung, Fahrten (bis 5a.1 Statistik), Einstellungen", [...w.document.querySelectorAll("nav button")].map(b => [b.dataset.tab, b.lastChild.textContent]),
+      [["uebersicht", "Übersicht"], ["wetter", "Wetter"], ["wartung", "Wartung"], ["fahrten", "Fahrten"], ["einstellungen", "Einstellungen"]]);
     setze7({ fahrrad: F("2026-01-01", 0), vorlagen: [{ id: "v1", name: "Arbeit", km: 14.2, arbeitsweg: true }, { id: "v2", name: "Einkauf", km: 3.5 }] });
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     const einstW = w.document.getElementById("inhalt");
-    gleich("Einstellungen: Bereiche", [...einstW.querySelectorAll("h2")].map(h => h.textContent),
-      ["Fahrrad", "Vorlagen", "Fahrtage", "Wetter", "Jahresziele", "Datensicherung", "Über Rad-km"]);
+    gleich("Einstellungen: Abschnitte der Hauptseite (Release 5b)", [...einstW.querySelectorAll("h2")].map(h => h.textContent),
+      ["Fahrrad", "Datensicherung", "Fahrten", "Wetter", "Wartung", "Über Rad-km"]);
+    w.eval("einstellungenSeite = 'vorlagen'; zeichnen()");
     wahr("Vorlagen in den Einstellungen: Liste, ▲/▼ und „+ Neue Vorlage“", einstW.querySelectorAll('[data-action="vorlage-bearbeiten"]').length === 2 &&
       einstW.querySelector('[data-action="vorlage-runter"][data-id="v1"]') && einstW.querySelector('[data-action="vorlage-neu"]'));
     einstW.querySelector('[data-action="vorlage-runter"][data-id="v1"]').click();
-    gleich("Reihenfolge ändern wie bisher, die Einstellungen bleiben geöffnet", [w.eval("daten.vorlagen.map(v => v.id)"), w.eval("aktiverTab")], [["v2", "v1"], "einstellungen"]);
+    gleich("Reihenfolge ändern wie bisher, die Unterseite Vorlagen bleibt geöffnet", [w.eval("daten.vorlagen.map(v => v.id)"), w.eval("aktiverTab"), w.eval("einstellungenSeite")],
+      [["v2", "v1"], "einstellungen", "vorlagen"]);
     w.document.querySelector('#inhalt [data-action="vorlage-bearbeiten"][data-id="v1"]').click();
     gleich("Vorlage antippen öffnet das Formular wie bisher", w.document.querySelector("#fensterinhalt h2").textContent, "Vorlage bearbeiten");
     w.fensterSchliessen();
-    gleich("Bereich Wetter: Orte und Fahrzeiten", [...w.document.querySelectorAll('#inhalt [data-action="ort-bearbeiten"], #inhalt [data-action="fahrt-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
-      ["Wohnort nicht festgelegt ›", "Arbeitsort nicht festgelegt ›", "Weiterer Ort nicht festgelegt ›",
+    w.eval("einstellungenSeite = 'orte'; zeichnen()");
+    gleich("Unterseite Orte und Strecke", [...w.document.querySelectorAll('#inhalt [data-action="ort-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
+      ["Wohnort nicht festgelegt ›", "Arbeitsort nicht festgelegt ›", "Weiterer Ort nicht festgelegt ›"]);
+    w.eval("einstellungenSeite = null; zeichnen()");
+    gleich("Hauptseite, Abschnitt Wetter: Orte und Strecke, außerhalb der Fahrten, Fahrzeiten",
+      [...w.document.querySelectorAll('#inhalt [data-seite="orte"], #inhalt [data-seite="ausserhalb"], #inhalt [data-action="fahrt-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
+      ["Orte und Strecke Wohnort nicht festgelegt · Arbeitsort nicht festgelegt ›", "Wetter außerhalb der Fahrten Wohnort ›",
         "Hinfahrt 06:00–07:00 übliche Abfahrt 06:00 · Dauer 60 min ›", "Rückfahrt 16:00–17:00 übliche Abfahrt 16:00 · Dauer 60 min ›"]);
     const fz = id => w.document.getElementById(id);
     w.fahrtFormular("rueckfahrt");
@@ -1832,7 +1850,7 @@ async function start() {
     gleich("Weiterer Ort aktiv: Heute und Morgen ohne Hin- und Rückfahrt", [ans.weitererOrt, ans.tage.map(t => t.titel), !!ans.fahrten, ans.tage.every(t => t.werte)], [true, ["Heute", "Morgen"], false, true]);
     w.document.querySelector('#inhalt [data-action="weiterer-ort-aus"]').click();
     gleich("„Zurück zu Wohn- und Arbeitsort“ schaltet den weiteren Ort aus", [w.eval("daten.einstellungen.wetter.weitererOrt.aktiv"), w.wetterOrte().map(x => x.rolle)], [false, ["wohnort", "arbeitsort"]]);
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'orte'; zeichnen()");
     const schalter = w.document.querySelector('#inhalt input[data-change="weiterer-ort-aktiv"]');
     schalter.checked = true;
     schalter.dispatchEvent(new w.Event("change", { bubbles: true }));
@@ -2046,7 +2064,7 @@ async function start() {
     w.eval(`daten.eintraege.push({ id: "fr", datum: "${FR}", km: 14.2, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false, wetter: null })`);
     gleich("Mit Eintrag für heute: kein Hinweis für heute", w.fehlendeFahrtage(FR, 20 * 60), VORHER);
     lueckenDaten();
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'fahrtage'; zeichnen()");
     const hinweisFeld = feld("e-hinweis-ab"), hinweisSchalter = feld("e-hinweis-an");
     gleich("Einstellungen → Fahrtage (W13): Schalter „Hinweis schon am selben Tag“ an, darunter die Uhrzeit 18:00 (bedienbar)",
       [hinweisSchalter && hinweisSchalter.type, hinweisSchalter && hinweisSchalter.checked, ohneTags(hinweisSchalter.closest("label").innerHTML),
@@ -2120,7 +2138,7 @@ async function start() {
     abschnitt("38. Ampel-Grenzen bearbeiten (Einstellungen → Wetter)");
     wetterDaten();
     w.speichern();
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     gleich("Einstellungen → Wetter: Kleidung und Ampel-Grenzen mit Kurzfassung",
       [...w.document.querySelectorAll('#inhalt [data-action="kleidung-bearbeiten"], #inhalt [data-action="ampel-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
       ["Kleidung 8 Stufen · Regenzusatz ab 40 % / 60 % · Rückmeldung an · Standard ›", "Ampel-Grenzen Böen 40 / 60 km/h · Niederschlag 0,5 / 5 mm/h · Regen ab 50 % · Standard ›"]);
@@ -2551,7 +2569,7 @@ async function start() {
       ohneTags(ablageS.querySelector('[data-action="wetter-nachtragen"]').innerHTML)], [1, true, "Wetter nachtragen …"]);
     setze7({ fahrrad: F("2026-01-01", 0), eintraege: [AE("x", "2026-01-16", 7.5, null, { arbeitsweg: false })] });
     gleich("Ohne Fahrten zur Arbeit: Hinweis", ohneTags(w.wetterStatistik("2026-10-26")), "Wetter auf dem Arbeitsweg Noch keine Fahrten mit dem Merkmal „Arbeitsweg“.");
-    w.eval("aktiverTab = 'statistik'; zeichnen()");
+    w.eval("aktiverTab = 'fahrten'; fahrtenAnsicht = 'statistik'; zeichnen()");
     wahr("Reiter Statistik enthält die Karte", ohneTags(w.document.getElementById("inhalt").innerHTML).includes("Wetter auf dem Arbeitsweg"));
 
     // -------------------------------------------------------------
@@ -2603,7 +2621,7 @@ async function start() {
     const ECKE = { name: "Ecke", lat: 51, lon: 10.2 };
     wetterDaten();
     w.speichern();
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'orte'; zeichnen()");
     const wpJetzt = () => kopie([w.eval("daten.einstellungen.wetter.wegpunkte"), w.eval("daten.einstellungen.wetter.windTeilstrecken")]);
     const streckeListe = () => [...w.document.querySelectorAll('#inhalt [data-action="ort-bearbeiten"]')].map(b => ohneTags(b.innerHTML));
     gleich("Ohne Wegpunkte: Wohnort, Arbeitsort, „+ Wegpunkt“, eine Teilstrecke zählt für den Wind", [streckeListe().slice(0, 2),
@@ -2800,7 +2818,7 @@ async function start() {
     const genau = w.teilstrecken();
     gleich("Teilstrecken mit den genauen Werten: Wohnort → Ecke unterscheidet sich nur in der 4. Stelle der Breite (ca. 56 m nach Nord)",
       [Math.round(genau[0].laenge * 1000), Math.round(genau[0].kursHin), Math.round(genau[1].laenge * 10) / 10], [56, 0, 19.5]);
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'orte'; zeichnen()");
     const einstText = ohneTags(w.document.getElementById("inhalt").innerHTML);
     gleich("Einstellungen: Koordinaten mit 4 Stellen und der Hinweis zur Rundung",
       [einstText.includes("Wohnort Musterdorf · 51,0004 / 10,0004"), einstText.includes("Wegpunkt 1 Ecke · 51,0009 / 10,0004"),
@@ -2850,7 +2868,7 @@ async function start() {
     w.fensterSchliessen();
     wahr("Hinweis im Formular: erst beim Antippen gehen Koordinaten und Name an Apple",
       hinweisKarte.includes("„In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple."), hinweisKarte);
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'orte'; zeichnen()");
     gleich("Nur im Formular: in der Liste der Einstellungen kein Karten-Knopf", w.document.querySelectorAll('#inhalt a[href*="maps.apple.com"], #inhalt #o-karte').length, 0);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
 
@@ -3019,7 +3037,7 @@ async function start() {
       netz(["open-meteo", omStandort], ["Warnungen_Gemeinden", fx["wetter-dwd-leer"]], ["Warngebiete_Gemeinden", gebietBad]);
       geoAufrufe.length = 0;
       const aufrufeBei = async (tab, t) => { w.eval("aktiverTab = '" + tab + "'"); standortLeeren(); const n = geoAufrufe.length; await w.standortBeiBedarf(false, t); return geoAufrufe.length - n; };
-      const inZustaenden = [await aufrufeBei("wetter", T), await aufrufeBei("uebersicht", T), await aufrufeBei("statistik", T), await aufrufeBei("einstellungen", T),
+      const inZustaenden = [await aufrufeBei("wetter", T), await aufrufeBei("uebersicht", T), await aufrufeBei("fahrten", T), await aufrufeBei("einstellungen", T),
         await aufrufeBei("wetter", zeit(D, "10:00"))];
       w.eval("daten.einstellungen.wetter.ortAusserhalb = 'wohnort'");
       inZustaenden.push(await aufrufeBei("wetter", T));
@@ -3048,7 +3066,7 @@ async function start() {
       await warten(30);
       gleich("Zurück auf „Wohnort“: gespeichert, keine Ortung", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ortAusserhalb, toast()[0], geoAufrufe.length,
         ohneTags(w.wetterKachel(Date.now())).startsWith("🌦️ Jetzt · Musterdorf (Wohnort)")], ["wohnort", "Wetter außerhalb der Fahrten: Wohnort", 2, true]);
-      w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+      w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'ausserhalb'; zeichnen()");
       const umschalterE = w.document.querySelectorAll('#inhalt [data-action="ort-ausserhalb"]');
       const hinweisE = umschalterE[0] && umschalterE[0].parentElement.nextElementSibling.textContent;
       umschalterE[1].click();
@@ -3224,7 +3242,7 @@ async function start() {
     await laden(windVorhersage([18, 14, 14], 225, 36));
     w.bildWetter(ABEND); w.wetterKachel(ABEND);
     gleich("Die Anzeige des Winds verändert die gespeicherten Daten nicht", localStorage.getItem(TEST_SCHLUESSEL), vorher51);
-    w.eval("aktiverTab = 'einstellungen'; zeichnen()");
+    w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'orte'; zeichnen()");
     const hinweis51 = w.document.querySelector('#inhalt [data-change="teilstrecke-wind"]').closest(".karte").querySelector(".feldhinweis").textContent;
     gleich("Einstellungen → Teilstrecken für den Wind: Hinweis auf die Zeile je Teilstrecke (statt „nach Länge gewichtet“)", hinweis51,
       "Der Reiter Wetter zeigt je Teilstrecke, die zählt, eine Zeile mit dem Wind relativ zu ihrer Fahrtrichtung (z. B. Gegenwind); die Rückfahrt in umgekehrter Reihenfolge und Richtung. " +
@@ -3448,7 +3466,7 @@ async function start() {
     gleich("Mangel ohne Auftrag oben mit „Zu Auftrag …“ und „Reparatur anlegen“", [...w.document.querySelectorAll("#inhalt .zeile.mit-knoepfen button")].map(b => b.textContent),
       ["Klingel klemmtfestgestellt am 29.10.2026›", "Zu Auftrag …", "Reparatur anlegen"]);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
-    const kachel5 = [...w.document.querySelectorAll("#inhalt .karte")][0];
+    const kachel5 = w.document.querySelector("#inhalt .stand-kachel");
     wahr("Übersicht: nächster fälliger Auftrag mit Positionen; überfällige Aufgabe ohne Auftrag als Hinweis; offene Mängel",
       ohneTags(kachel5.innerHTML).includes("🔧 Kleine Inspektion: fällig bis 30.11. (ca. 3.330 km) · 1 Position") &&
       ohneTags(kachel5.innerHTML).includes("⚠️ Licht prüfen überfällig – keinem Auftrag zugeordnet") && ohneTags(kachel5.innerHTML).includes("⚠️ 1 offener Mangel"), ohneTags(kachel5.innerHTML));
@@ -3598,7 +3616,9 @@ async function start() {
       [l5.aufgabeVon("kette").st.letzte.datum, l5.aufgabeVon("kette").st.grenzeKm, l5.aufgabeVon("kette").st.text], ["2026-10-31", 6040, "fällig ca. im August 2027 bei ca. 6.040 km"]);
     gleich("Kleine Inspektion: nächste ab 01.10.2027 (vorgemerkt, die Kette bis dahin wieder fällig); die nicht gemachte Bremse wieder in der Großen",
       offenKurz(l5).map(o => [o[0], o[1], o[2], o[4], o[5]]), [["klein", true, "2027-10-01", ["kette*"], ["licht"]], ["gross", true, null, ["bremse*", "oel*"], ["licht"]]]);
-    gleich("Historie: erledigter Auftrag mit Anzahl erledigter Positionen", ohneTags(w.bildWartung(H5)).includes("31.10.2026 · Kleine Inspektion Beispiel-Werkstatt · 2 Positionen 3.040 km"), true);
+    w.eval("wartungAnsicht = 'verlauf'");
+    gleich("Verlauf: erledigter Auftrag mit Anzahl erledigter Positionen", ohneTags(w.bildWartung(H5)).includes("31.10.2026 · Kleine Inspektion Beispiel-Werkstatt · 2 Positionen 3.040 km"), true);
+    w.eval("wartungAnsicht = 'aktuell'");
     // Spätere Änderungen an Intervallen und Zuordnungen verändern erledigte Aufträge nicht
     const fest = JSON.stringify(erledigt5);
     w.eval(`daten.wartungsarten.find(a => a.id === "kette").intervallKm = 50;
@@ -4174,6 +4194,136 @@ async function start() {
     wK.fensterSchliessen();
     wK.frameElement.remove();
     wV8.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 61. Aufteilung der Reiter (Release 5b, IA)
+    // -------------------------------------------------------------
+    abschnitt("61. Aufteilung der Reiter: Übersicht, Wartung (Aktuell | Verlauf), Fahrten (Einträge | Statistik), Einstellungen mit Unterseiten, Wege");
+    const v8i = JSON.parse(v8Text);
+    v8i.vorlagen.push({ id: "v-2", name: "Einkauf", km: 3.5, arbeitsweg: false });
+    v8i.einstellungen.wetter = { wohnort: { name: "Musterdorf", lat: 51, lon: 10 }, arbeitsort: { name: "Beispielstadt", lat: 51.1, lon: 10.2 },
+      weitererOrt: { name: "Ferienort", lat: 52, lon: 11, aktiv: false } };
+    v8i.eintraege.push({ id: "e-alt", datum: "2026-09-15", km: 5, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false, wetter: null });
+    const textI = JSON.stringify(v8i);
+    localStorage.setItem(TEST_SCHLUESSEL, textI);
+    localStorage.setItem(TEST_EXPORT_SCHLUESSEL, "2026-10-30");
+    const wI = await appLaden();
+    wI.heute = () => "2026-11-01";
+    wI.eval("zeichnen()");
+    const inhaltI = () => wI.document.getElementById("inhalt");
+    const titelI = () => wI.document.getElementById("seitentitel").textContent;
+    const zeige = (tab, extra = "") => { wI.eval("aktiverTab = '" + tab + "'; " + extra + " zeichnen()"); return inhaltI(); };
+    const tippe = sel => { inhaltI().querySelector(sel).click(); return inhaltI(); };
+    // Übersicht
+    let ue = zeige("uebersicht");
+    const reihenfolge = [...ue.querySelectorAll(":scope > h2, :scope > .wetter-kachel, :scope > .stand-kachel, :scope > .schnell, :scope > .karte")]
+      .map(el => el.tagName === "H2" ? el.textContent : el.classList.contains("wetter-kachel") ? "[Wetter]" : el.classList.contains("stand-kachel") ? "[Kilometerstand]" :
+        el.classList.contains("schnell") ? "[Erfassen]" : el.querySelector(".sicherungszeile") ? "[Sicherung]" : el.querySelector(".balken, [data-action=\"prognose\"]") ? "[Jahr]" : "[Karte]");
+    gleich("Übersicht: Wetter-Kachel, Heute erfassen, Kilometerstand mit Wartung, Summen, Jahr, diese Woche, Datensicherung in einer Zeile", reihenfolge,
+      ["[Wetter]", "Heute erfassen", "[Erfassen]", "Kilometerstand", "[Kilometerstand]", "Summen", "Jahr 2026", "[Jahr]", "Diese Woche", "[Sicherung]"]);
+    wahr("Fahrtage ohne Eintrag direkt unter den Erfassen-Knöpfen (vor dem Kilometerstand)", (() => {
+      const l = ue.querySelector(".luecke"), k = ue.querySelector(".stand-kachel"), s = ue.querySelector(".schnell");
+      return l && (s.compareDocumentPosition(l) & 4) && (l.compareDocumentPosition(k) & 4);
+    })());
+    gleich("Diese Woche: nur die Einträge der laufenden Woche (Mo 26.10.–So 01.11.), neueste zuerst; „Alle Einträge (4) ›“",
+      [[...ue.querySelectorAll('.liste [data-action="eintrag-ansehen"]')].map(b => b.dataset.id), ue.querySelector('[data-action="zu-fahrten"]').textContent],
+      [["e-tag3", "e-tag2", "e-tag1"], "Alle Einträge (4) ›"]);
+    wahr("Sicherungszeile: „Letzte Sicherung: 30.10.2026 (vor 2 Tagen)“ mit „Jetzt sichern“; kein Hinweis „fällig“",
+      ohneTags(ue.querySelector(".sicherungszeile").innerHTML).includes("Letzte Sicherung: 30.10.2026 (vor 2 Tagen) Jetzt sichern") && !ue.textContent.includes("Datensicherung fällig"));
+    // Sichtbar ohne Scrollen: Rahmen in der Größe eines iPhone 13 mini (375 × 812)
+    Object.assign(wI.frameElement.style, { width: "375px", height: "812px" });
+    wI.eval("zeichnen()");
+    const unterkante = wI.document.querySelector("nav").getBoundingClientRect().top;
+    const erfassenUnten = Math.max(...[...wI.document.querySelectorAll(".schnell button")].map(b => b.getBoundingClientRect().bottom));
+    wahr("iPhone 13 mini (375 × 812): Wetter-Kachel und alle Erfassen-Knöpfe ohne Scrollen sichtbar (" + Math.round(erfassenUnten) + " px < " + Math.round(unterkante) + " px)",
+      wI.document.querySelector(".wetter-kachel").getBoundingClientRect().top > 0 && erfassenUnten < unterkante);
+    Object.assign(wI.frameElement.style, { width: "", height: "" });
+    tippe(".stand-kachel");
+    gleich("Kilometerstand antippen: Reiter Wartung", [wI.eval("aktiverTab"), titelI()], ["wartung", "Wartung"]);
+    zeige("uebersicht");
+    tippe('[data-action="zu-fahrten"]');
+    gleich("„Alle Einträge ›“: Reiter Fahrten, Ansicht Einträge", [wI.eval("aktiverTab"), wI.eval("fahrtenAnsicht"), titelI()], ["fahrten", "eintraege", "Fahrten"]);
+    // Fahrten
+    let fa = zeige("fahrten", "fahrtenAnsicht = 'eintraege';");
+    gleich("Fahrten → Einträge: Umschalter, vollständige Liste (abgeschlossene Zeiträume zusammengefasst), „+ Eintrag“",
+      [[...fa.querySelectorAll(".reiter-umschalter button")].map(b => b.textContent + (b.classList.contains("aktiv") ? "*" : "")), ohneTags(fa.querySelector("h2").innerHTML),
+        !!fa.querySelector('[data-action="gruppe"]'), !!fa.querySelector('[data-action="eintrag-neu"]')],
+      [["Einträge*", "Statistik"], "Einträge (4)", true, true]);
+    fa = tippe('[data-action="fahrten-ansicht"][data-wert="statistik"]');
+    gleich("Fahrten → Statistik: Diagramm, Kennzahlen, Jahresziele (aus den Einstellungen), Wetter auf dem Arbeitsweg",
+      [...fa.querySelectorAll(":scope > h2")].map(h => h.textContent), ["km pro Monat", "Kennzahlen", "Jahresziele", "Wetter auf dem Arbeitsweg"]);
+    fa.querySelector('[data-action="jahresziel-bearbeiten"][data-jahr="2026"]').click();
+    gleich("Jahresziel antippen öffnet das Formular wie bisher", wI.document.querySelector("#fensterinhalt h2").textContent, "Jahresziel bearbeiten");
+    wI.fensterSchliessen();
+    // Wartung
+    let wa = zeige("wartung", "wartungAnsicht = 'aktuell';");
+    gleich("Wartung: oben „+ Mangel“, „+ Reparatur“, „+ Eigenleistung“, dann der Umschalter „Aktuell | Verlauf“",
+      [[...wa.querySelector(":scope > .knopfreihe").querySelectorAll("button")].map(b => b.textContent),
+        [...wa.querySelectorAll(".reiter-umschalter button")].map(b => b.textContent + (b.classList.contains("aktiv") ? "*" : "")),
+        !!(wa.querySelector(":scope > .knopfreihe").compareDocumentPosition(wa.querySelector(".reiter-umschalter")) & 4)],
+      [["+ Mangel", "+ Reparatur", "+ Eigenleistung"], ["Aktuell*", "Verlauf"], true]);
+    gleich("Aktuell: offene Aufträge und Aufgaben, kein Verlauf, keine Wartungsarten",
+      [[...wa.querySelectorAll(":scope > h2")].map(h => h.textContent), !!wa.querySelector('[data-action="art-bearbeiten"]')], [["Offene Aufträge", "Aufgaben"], false]);
+    wa = tippe('[data-action="wartung-ansicht"][data-wert="verlauf"]');
+    gleich("Verlauf: erledigte Aufträge und Mängel direkt sichtbar",
+      [[...wa.querySelectorAll(":scope > h2")].map(h => ohneTags(h.innerHTML)), [...wa.querySelectorAll('[data-action="auftrag-ansehen"]')].map(b => b.dataset.key),
+        [...wa.querySelectorAll('[data-action="mangel-ansehen"]')].map(b => b.dataset.id)],
+      [["Erledigte Aufträge (1)", "Erledigte Mängel (1)"], ["a-erst"], ["m-1"]]);
+    tippe('[data-action="einstellungen-seite"][data-seite="wartungsarten"]');
+    gleich("„Wartungsarten verwalten ›“: Einstellungen → Wartungsarten (Titel, Zurück, Liste, „+ Neue Wartungsart“)",
+      [wI.eval("aktiverTab"), titelI(), inhaltI().querySelector(".zurueck").textContent, inhaltI().querySelectorAll('[data-action="art-bearbeiten"]').length,
+        !!inhaltI().querySelector('[data-action="art-neu"]')],
+      ["einstellungen", "Wartungsarten", "‹ Einstellungen", 8, true]);
+    tippe('[data-action="art-bearbeiten"][data-id="bremse"]');
+    gleich("Wartungsart antippen öffnet das Formular wie bisher", wI.document.querySelector("#fensterinhalt h2").textContent, "Wartungsart bearbeiten");
+    wI.fensterSchliessen();
+    tippe(".zurueck");
+    gleich("„‹ Einstellungen“: zurück zur Hauptseite", [wI.eval("einstellungenSeite"), titelI()], [null, "Einstellungen"]);
+    // Einstellungen: Hauptseite und Unterseiten
+    const seitenI = [...inhaltI().querySelectorAll('[data-action="einstellungen-seite"][data-seite]:not([data-seite=""])')].map(b => b.dataset.seite);
+    gleich("Hauptseite: Zeilen zu allen Unterseiten", seitenI, ["fahrrad", "sicherung", "vorlagen", "fahrtage", "orte", "ausserhalb", "wartungsarten"]);
+    const titelSeiten = {};
+    seitenI.forEach(sei => {
+      inhaltI().querySelector('[data-action="einstellungen-seite"][data-seite="' + sei + '"]').click();
+      titelSeiten[sei] = titelI() + (inhaltI().firstElementChild.classList.contains("zurueck") ? " ‹" : "");
+      wI.eval("einstellungenSeite = null; zeichnen()");
+    });
+    gleich("Jede Unterseite mit eigenem Titel und „‹ Einstellungen“ ganz oben", titelSeiten, { fahrrad: "Fahrrad ‹", sicherung: "Datensicherung ‹", vorlagen: "Vorlagen ‹",
+      fahrtage: "Fahrtage ‹", orte: "Orte und Strecke ‹", ausserhalb: "Außerhalb der Fahrten ‹", wartungsarten: "Wartungsarten ‹" });
+    zeige("einstellungen", "einstellungenSeite = 'orte';");
+    wI.document.querySelector('nav [data-tab="wetter"]').click();
+    wI.document.querySelector('nav [data-tab="einstellungen"]').click();
+    gleich("Anderer Reiter und zurück: die Unterseite bleibt", [wI.eval("einstellungenSeite"), titelI()], ["orte", "Orte und Strecke"]);
+    wI.document.querySelector('nav [data-tab="einstellungen"]').click();
+    gleich("Reiter Einstellungen erneut antippen: Hauptseite", [wI.eval("einstellungenSeite"), titelI()], [null, "Einstellungen"]);
+    gleich("Hauptseite Datensicherung: Zeile mit „Jetzt sichern“", !!inhaltI().querySelector('.sicherungszeile [data-action="sichern"]'), true);
+    tippe('[data-action="zu-fahrten"][data-wert="statistik"]');
+    gleich("„Jahresziele (Fahrten → Statistik) ›“", [wI.eval("aktiverTab"), wI.eval("fahrtenAnsicht")], ["fahrten", "statistik"]);
+    // Wege aus dem Reiter Wetter und der Übersicht
+    wI.eval("aktiverTab = 'wetter'; zeichnen()");
+    const wegW = inhaltI().querySelector('[data-action="einstellungen-seite"][data-anker="e-wetter"]');
+    gleich("Reiter Wetter unten: „Orte, Fahrzeiten, Kleidung ›“", wegW && wegW.textContent, "Orte, Fahrzeiten, Kleidung ›");
+    wegW.click();
+    gleich("… führt zur Hauptseite der Einstellungen, Abschnitt Wetter", [wI.eval("aktiverTab"), wI.eval("einstellungenSeite"), !!wI.document.getElementById("e-wetter")],
+      ["einstellungen", null, true]);
+    wI.eval("daten.vorlagen = []; aktiverTab = 'uebersicht'; zeichnen()");
+    tippe('[data-action="einstellungen-seite"][data-seite="vorlagen"]');
+    gleich("Übersicht ohne Vorlagen: „Vorlagen anlegen ›“ führt zur Unterseite Vorlagen", [wI.eval("aktiverTab"), wI.eval("einstellungenSeite")], ["einstellungen", "vorlagen"]);
+    wI.eval("daten = datenEinlesen(" + JSON.stringify(textI) + ")");
+    // Keine Funktion entfernt: alle bisherigen Bedienelemente der Bildschirme sind weiter erreichbar
+    const gefunden = new Set();
+    const sammeln = () => inhaltI().querySelectorAll("[data-action], [data-change]").forEach(el => gefunden.add(el.dataset.action || "change:" + el.dataset.change));
+    [["uebersicht", ""], ["wetter", ""], ["wartung", "wartungAnsicht = 'aktuell';"], ["wartung", "wartungAnsicht = 'verlauf';"], ["fahrten", "fahrtenAnsicht = 'eintraege';"],
+      ["fahrten", "fahrtenAnsicht = 'statistik';"], ["einstellungen", "einstellungenSeite = null;"],
+      ...seitenI.map(sei => ["einstellungen", "einstellungenSeite = '" + sei + "';"])].forEach(([t, x]) => { zeige(t, x); sammeln(); });
+    const bisher = ["sichern", "sicherung-pruefen", "import", "fahrrad-aendern", "vorlage-erfassen", "vorlage-neu", "vorlage-bearbeiten", "vorlage-hoch", "vorlage-runter",
+      "jahresziel-neu", "jahresziel-bearbeiten", "ort-bearbeiten", "wegpunkt-neu", "fahrt-bearbeiten", "kleidung-bearbeiten", "ampel-bearbeiten", "ort-ausserhalb",
+      "art-neu", "art-bearbeiten", "mangel-neu", "mangel-ansehen", "auftrag-neu", "auftrag-ansehen", "auftrag-termin", "auftrag-erledigen", "aufgabe-ansehen",
+      "eintrag-neu", "eintrag-ansehen", "gruppe", "prognose", "statistik-monat", "statistik-tabelle", "tab",
+      "change:fahrtag", "change:hinweis-heute-an", "change:hinweis-heute-ab", "change:teilstrecke-wind", "change:weiterer-ort-aktiv"];
+    gleich("Alle bisherigen Bedienelemente der Reiter weiter erreichbar (Reiter, Ansichten, Unterseiten)", bisher.filter(a => !gefunden.has(a)), []);
+    gleich("Aufteilung und Wege verändern keine Daten", localStorage.getItem(TEST_SCHLUESSEL), textI);
+    wI.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

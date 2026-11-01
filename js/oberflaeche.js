@@ -108,14 +108,20 @@ function wert(id) { return document.getElementById(id).value; }
 let aktiverTab = "uebersicht";
 // Aufgeklappte Zeilen der Eintragsliste (nur solange die App geöffnet ist)
 const offeneGruppen = new Set();
-let erledigteMaengelOffen = false;
+// Umschalter in den Reitern Wartung („Aktuell | Verlauf“) und Fahrten
+// („Einträge | Statistik“) und die offene Unterseite der Einstellungen
+// (null = Hauptseite); nur solange die App geöffnet ist
+let wartungAnsicht = "aktuell";
+let fahrtenAnsicht = "eintraege";
+let einstellungenSeite = null;
 
-const TITEL = { uebersicht: "Übersicht", wetter: "Wetter", wartung: "Wartung", statistik: "Statistik", einstellungen: "Einstellungen" };
+const TITEL = { uebersicht: "Übersicht", wetter: "Wetter", wartung: "Wartung", fahrten: "Fahrten", einstellungen: "Einstellungen" };
 
 function zeichnen() {
-  document.getElementById("seitentitel").textContent = TITEL[aktiverTab];
+  const unterseite = aktiverTab === "einstellungen" && einstellungenSeite ? EINSTELLUNGEN_SEITEN[einstellungenSeite] : null;
+  document.getElementById("seitentitel").textContent = unterseite ? unterseite.titel : TITEL[aktiverTab];
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("aktiv", b.dataset.tab === aktiverTab));
-  const bildschirme = { uebersicht: bildUebersicht, wetter: bildWetter, wartung: bildWartung, statistik: bildStatistik, einstellungen: bildEinstellungen };
+  const bildschirme = { uebersicht: bildUebersicht, wetter: bildWetter, wartung: bildWartung, fahrten: bildFahrten, einstellungen: bildEinstellungen };
   let html = ladeFehler ? '<div class="hinweis fehler">' + esc(ladeFehler) + '</div>' : "";
   if (neueVersion) {
     html += '<div class="hinweis info"><strong>Neue Version verfügbar</strong><br>Deine Daten bleiben dabei unverändert.' +
@@ -123,6 +129,17 @@ function zeichnen() {
   }
   html += bildschirme[aktiverTab]();
   document.getElementById("inhalt").innerHTML = html;
+}
+
+// Umschalter oben in einem Reiter, z. B. „Aktuell | Verlauf“: [[Wert, Text], …]
+function umschalterHtml(aktion, aktuell, optionen, beschriftung) {
+  return '<div class="umschalter reiter-umschalter" role="group" aria-label="' + beschriftung + '">' + optionen.map(([w, t]) =>
+    '<button type="button" data-action="' + aktion + '" data-wert="' + w + '" aria-pressed="' + (w === aktuell) + '"' + (w === aktuell ? ' class="aktiv"' : "") + '>' + t + '</button>').join("") + '</div>';
+}
+// Weg zu einer Unterseite der Einstellungen (oder zur Hauptseite mit Sprung zu einem Abschnitt)
+function wegZuEinstellungen(text, seite, anker) {
+  return '<button type="button" class="leise weg" data-action="einstellungen-seite" data-seite="' + (seite || "") + '"' +
+    (anker ? ' data-anker="' + anker + '"' : "") + '>' + text + ' ›</button>';
 }
 
 // Aufklapp-Pfeil; dreht sich über aria-expanded der Schaltfläche (siehe CSS)

@@ -1,7 +1,11 @@
-// Rad-km · Reiter Übersicht: Kilometerstand, Erfassen, Summen, Jahr, Einträge, Eintragsformular
+// Rad-km · Reiter Übersicht (Wetter-Kachel, Erfassen, Kilometerstand, Summen, Jahr, Woche) und Einträge: Liste, Formular
 "use strict";
 
 /* ---------- Übersicht ---------- */
+// Reihenfolge (Release 5b): Hinweise, Wetter-Kachel, Heute erfassen mit
+// Fahrtagen ohne Eintrag, Kilometerstand mit Wartung, Summen, Jahr, Einträge
+// dieser Woche, Datensicherung in einer Zeile. Ampel und Erfassen sollen auf
+// einem kleinen iPhone ohne Scrollen sichtbar sein.
 function bildUebersicht() {
   const h = heute();
   let html = "";
@@ -20,8 +24,32 @@ function bildUebersicht() {
       ' Die Daten liegen nur auf diesem Gerät.<br><button type="button" class="primaer" data-action="sichern">Jetzt sichern</button></div>';
   }
 
-  // Kilometerstand, nächste Wartung und offene Mängel
-  html += '<div class="karte"><div class="klein">' + esc(daten.fahrrad ? daten.fahrrad.name : "Kilometerstand") + '</div>' +
+  html += wetterKachel(Date.now());
+
+  // Schnellerfassung, darunter Fahrtage ohne Eintrag
+  const eHeute = eintragAm(h);
+  html += '<h2>Heute erfassen</h2>';
+  if (eHeute) {
+    html += '<div class="hinweis info">✓ Heute erfasst: <strong>' + (eHeute.km === 0 ? "keine Fahrt" : kmText(eHeute.km) + ' km') + '</strong>' +
+      (eHeute.vorlage ? " (" + esc(eHeute.vorlage) + ")" : "") +
+      '<br><button type="button" data-action="eintrag-ansehen" data-id="' + eHeute.id + '">Anzeigen</button></div>';
+  }
+  html += '<div class="schnell">';
+  daten.vorlagen.forEach(v => {
+    html += '<button type="button" class="primaer" data-action="vorlage-erfassen" data-id="' + v.id + '">' +
+      '<span>' + esc(v.name) + '</span><span class="km">' + kmText(v.km) + ' km</span></button>';
+  });
+  html += '<button type="button" data-action="eintrag-neu"><span>Andere km</span><span class="km">frei eingeben</span></button>';
+  html += '</div>';
+  if (!daten.vorlagen.length) {
+    html += '<p class="klein">Tipp: Lege unter „Einstellungen → Vorlagen“ deine Standard-Strecken an, dann erfasst du einen Tag mit zwei Klicks.</p>' +
+      wegZuEinstellungen("Vorlagen anlegen", "vorlagen");
+  }
+  html += lueckenHinweis(h);
+
+  // Kilometerstand, nächste Wartung und offene Mängel (antippen: Reiter Wartung)
+  html += '<h2>Kilometerstand</h2><button type="button" class="karte stand-kachel" data-action="tab" data-tab="wartung">' +
+    '<div class="klein">' + esc(daten.fahrrad ? daten.fahrrad.name : "Kilometerstand") + '</div>' +
     '<div class="stand-zahl">' + kmText(aktuellerKmStand()) + ' km</div>';
   const lage = werkstattLage(h);
   const nw = naechsterAuftrag(lage, h);
@@ -40,29 +68,7 @@ function bildUebersicht() {
   if (anzahlMaengel) {
     html += '<div class="status-orange" style="margin-top:4px">⚠️ ' + maengelText(anzahlMaengel) + '</div>';
   }
-  html += '</div>';
-
-  html += wetterKachel(Date.now());
-  html += lueckenHinweis(h);
-
-  // Schnellerfassung
-  const eHeute = eintragAm(h);
-  html += '<h2>Heute erfassen</h2>';
-  if (eHeute) {
-    html += '<div class="hinweis info">✓ Heute erfasst: <strong>' + (eHeute.km === 0 ? "keine Fahrt" : kmText(eHeute.km) + ' km') + '</strong>' +
-      (eHeute.vorlage ? " (" + esc(eHeute.vorlage) + ")" : "") +
-      '<br><button type="button" data-action="eintrag-ansehen" data-id="' + eHeute.id + '">Anzeigen</button></div>';
-  }
-  html += '<div class="schnell">';
-  daten.vorlagen.forEach(v => {
-    html += '<button type="button" class="primaer" data-action="vorlage-erfassen" data-id="' + v.id + '">' +
-      '<span>' + esc(v.name) + '</span><span class="km">' + kmText(v.km) + ' km</span></button>';
-  });
-  html += '<button type="button" data-action="eintrag-neu"><span>Andere km</span><span class="km">frei eingeben</span></button>';
-  html += '</div>';
-  if (!daten.vorlagen.length) {
-    html += '<p class="klein">Tipp: Lege unter „Einstellungen → Vorlagen“ deine Standard-Strecken an, dann erfasst du einen Tag mit zwei Klicks.</p>';
-  }
+  html += '</button>';
 
   // Summen
   const montag = montagDerWoche(h), sonntag = plusTage(montag, 6);
@@ -74,14 +80,22 @@ function bildUebersicht() {
     '</div>';
 
   if (daten.fahrrad) html += jahresKarte(h);
-  html += '<h2>Datensicherung</h2>' + sicherungsKarte(h);
 
-  // Liste der Einträge, abgeschlossene Zeiträume zusammengefasst
-  html += '<h2>Einträge <span class="klein">(' + daten.eintraege.length + ')</span></h2><div class="liste">';
-  if (!daten.eintraege.length) html += '<div class="leer">Noch keine Einträge.</div>';
-  html += zeilenHtml(gruppieren(daten.eintraege, h), 0);
-  html += '</div>';
+  // Einträge dieser Woche; alle Einträge im Reiter Fahrten
+  const woche = daten.eintraege.filter(e => e.datum >= montag && e.datum <= sonntag).sort((a, b) => b.datum.localeCompare(a.datum));
+  html += '<h2>Diese Woche</h2><div class="liste">' +
+    (woche.length ? woche.map(e => eintragsZeile(e, "")).join("") : '<div class="leer">Diese Woche noch keine Einträge.</div>') + '</div>' +
+    '<button type="button" class="leise weg" data-action="zu-fahrten" data-wert="eintraege">Alle Einträge (' + daten.eintraege.length + ') ›</button>';
+
+  html += sicherungsZeile(h);
   return html;
+}
+
+// Alle Einträge (Reiter Fahrten → Einträge), abgeschlossene Zeiträume zusammengefasst
+function eintraegeListe(h) {
+  return '<h2 style="margin-top:12px">Einträge <span class="klein">(' + daten.eintraege.length + ')</span></h2><div class="liste">' +
+    (daten.eintraege.length ? "" : '<div class="leer">Noch keine Einträge.</div>') + zeilenHtml(gruppieren(daten.eintraege, h), 0) + '</div>' +
+    '<div class="knopfreihe"><button type="button" class="primaer" data-action="eintrag-neu">+ Eintrag</button></div>';
 }
 
 // Eingestellte Fahrtage der letzten 14 Tage (und ab der eingestellten Uhrzeit
@@ -181,12 +195,13 @@ function vorText(iso, h) {
   return t <= 0 ? "heute" : t === 1 ? "gestern" : "vor " + tageText(t);
 }
 
-// Datensicherung (Startseite und Einstellungen)
-function sicherungsKarte(h) {
+// Datensicherung auf der Übersicht in einer Zeile (und Hauptseite der Einstellungen)
+function sicherungsZeile(h) {
   const le = letzterExport();
-  return '<div class="karte"><div>Letzte Sicherung: ' + (le ? datumText(le) + " (" + vorText(le, h) + ")" : "noch nie") + '</div>' +
-    sicherungsErgebnisHtml() +
-    '<div class="knopfreihe"><button type="button" class="primaer" data-action="sichern">Jetzt sichern</button></div></div>';
+  return '<div class="karte" style="margin-top:12px"><div class="sicherungszeile"><div>Letzte Sicherung: ' +
+    (le ? datumText(le) + ' <span class="klein">(' + vorText(le, h) + ')</span>' : "noch nie") + '</div>' +
+    '<button type="button" class="primaer" data-action="sichern">Jetzt sichern</button></div>' +
+    sicherungsErgebnisHtml() + '</div>';
 }
 // Nach einer erfolgreichen Sicherung: Ergebnis und Prüfung der gespeicherten Datei
 function sicherungsErgebnisHtml() {

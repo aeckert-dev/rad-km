@@ -252,6 +252,17 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .umschalter button { flex: 1 1 0; min-height: 44px; border-radius: 0; background: transparent; color: var(--text); font-weight: 500; font-size: 15px; padding: 8px 6px; }
 .umschalter button + button { border-left: 1px solid var(--linie); }
 .umschalter button.aktiv { background: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+/* Umschalter oben in den Reitern Wartung und Fahrten */
+.reiter-umschalter { margin: 8px 0 4px; background: var(--karte); }
+/* Wege zu anderen Stellen („Alle Einträge ›“, „‹ Einstellungen“) */
+button.weg { display: block; padding: 8px 0; min-height: 44px; text-align: left; font-weight: 500; }
+button.zurueck { padding: 8px 0; min-height: 44px; margin-top: 4px; font-weight: 500; }
+/* Kilometerstand auf der Übersicht: ganze Karte führt zur Wartung */
+.stand-kachel { display: block; width: 100%; text-align: left; font-weight: 400; color: var(--text); }
+.stand-kachel:not(.primaer) { background: var(--karte); }
+/* Datensicherung auf der Übersicht: eine Zeile */
+.sicherungszeile { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sicherungszeile button { flex: 0 0 auto; }
 input.kurzfeld { max-width: 140px; }
 .verteilung-zeile { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .verteilung-titel { width: 52px; font-size: 15px; }

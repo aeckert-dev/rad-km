@@ -9,6 +9,8 @@
 
 const AKTIONEN = {
   "tab": el => {
+    // Erneutes Antippen der Einstellungen führt zur Hauptseite
+    if (el.dataset.tab === "einstellungen" && aktiverTab === "einstellungen") einstellungenSeite = null;
     aktiverTab = el.dataset.tab;
     zeichnen();
     window.scrollTo(0, 0);
@@ -69,7 +71,7 @@ const AKTIONEN = {
   "mangel-aendern": el => mangelFormular(el.dataset.id),
   "mangel-speichern": el => mangelSpeichern(el.dataset.id || null),
   "mangel-loeschen": el => mangelLoeschen(el.dataset.id),
-  "maengel-erledigt-umschalten": () => { erledigteMaengelOffen = !erledigteMaengelOffen; zeichnen(); },
+  "wartung-ansicht": el => { wartungAnsicht = el.dataset.wert; zeichnen(); },
   "art-neu": () => artFormular(null),
   "art-bearbeiten": el => artFormular(el.dataset.id),
   "art-speichern": el => artSpeichern(el.dataset.id || null),
@@ -89,6 +91,15 @@ const AKTIONEN = {
   "jahresziel-speichern": el => jahreszielSpeichern(el.dataset.jahr ? Number(el.dataset.jahr) : null),
   "jahresziel-loeschen": el => jahreszielLoeschen(Number(el.dataset.jahr)),
   "prognose": () => prognoseFenster(),
+  "fahrten-ansicht": el => { fahrtenAnsicht = el.dataset.wert; zeichnen(); },
+  "zu-fahrten": el => { aktiverTab = "fahrten"; fahrtenAnsicht = el.dataset.wert; zeichnen(); window.scrollTo(0, 0); },
+  "einstellungen-seite": el => {
+    aktiverTab = "einstellungen";
+    einstellungenSeite = el.dataset.seite || null;
+    zeichnen();
+    const ziel = el.dataset.anker && document.getElementById(el.dataset.anker);
+    if (ziel) ziel.scrollIntoView(); else window.scrollTo(0, 0);
+  },
   "statistik-monat": el => { statistikMonat = Number(el.dataset.monat); zeichnen(); },
   "statistik-tabelle": () => { statistikTabelleOffen = !statistikTabelleOffen; zeichnen(); },
 

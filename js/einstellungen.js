@@ -1,9 +1,9 @@
-// Rad-km · Reiter Einstellungen: Fahrrad, Vorlagen, Fahrtage, Jahresziele
+// Rad-km · Reiter Einstellungen: Hauptseite und Unterseiten (Fahrrad, Datensicherung, Vorlagen, Fahrtage), Fahrrad-Formular
 "use strict";
 
 /* ---------- Vorlagen (Bereich in den Einstellungen) ---------- */
 function vorlagenBereich() {
-  let html = '<p class="klein" style="margin-top:0">Vorlagen sind deine Standard-Strecken. Die Kilometer gelten für den ganzen Tag. ' +
+  let html = '<p class="klein" style="margin-top:8px">Vorlagen sind deine Standard-Strecken. Die Kilometer gelten für den ganzen Tag. ' +
     'Änderungen an Vorlagen verändern bereits erfasste Einträge nicht; nur beim Merkmal „Arbeitsweg“ fragt die App, ob sie bisherige Einträge anpassen soll.</p>' +
     '<div class="liste">';
   if (!daten.vorlagen.length) html += '<div class="leer">Noch keine Vorlagen.</div>';
@@ -75,55 +75,76 @@ function vorlageVerschieben(id, richtung) {
 }
 
 /* ---------- Einstellungen ---------- */
+// Hauptseite mit Abschnitten; jede Zeile mit „›“ öffnet eine Unterseite im
+// Reiter (zurück mit „‹ Einstellungen“ oder erneutem Antippen des Reiters)
+// oder ein Fenster. Welche Unterseite offen ist, merkt sich die App nur im
+// Arbeitsspeicher (einstellungenSeite).
+const EINSTELLUNGEN_SEITEN = {
+  fahrrad: { titel: "Fahrrad", bild: () => fahrradSeite() },
+  sicherung: { titel: "Datensicherung", bild: () => sicherungSeite() },
+  vorlagen: { titel: "Vorlagen", bild: () => vorlagenBereich() },
+  fahrtage: { titel: "Fahrtage", bild: () => fahrtageSeite() },
+  orte: { titel: "Orte und Strecke", bild: () => wetterOrteSeite() },
+  ausserhalb: { titel: "Außerhalb der Fahrten", bild: () => wetterAusserhalbSeite() },
+  wartungsarten: { titel: "Wartungsarten", bild: () => wartungsartenBereich() }
+};
+
+// Zeile, die eine Unterseite öffnet
+function seitenZeile(seite, titel, text) {
+  return '<div class="zeile"><button type="button" class="inhalt" data-action="einstellungen-seite" data-seite="' + seite + '"><div class="text"><div>' + titel + '</div>' +
+    (text ? '<div class="klein">' + esc(text) + '</div>' : "") + '</div><span class="klein" style="padding-right:16px">›</span></button></div>';
+}
+
 function bildEinstellungen() {
-  const f = daten.fahrrad;
-  const le = letzterExport();
-  let html = '<h2 style="margin-top:8px">Fahrrad</h2><div class="karte">';
-  if (f) {
-    html += detailListe([
-      ["Name", esc(f.name)],
-      ["Rahmennummer", esc(f.rahmennummer)],
-      ["Beschreibung", f.beschreibung ? '<span class="umbrueche">' + esc(f.beschreibung) + '</span>' : ""],
-      ["Startdatum", datumText(f.startdatum)],
-      ["Start-Kilometerstand", kmText(f.startKm) + " km"]
-    ]) +
-      '<div class="feldhinweis">Der Start-Kilometerstand gilt zu Beginn des Startdatums. Einträge ab diesem Tag (einschließlich) werden dazugezählt.</div>' +
-      '<div class="knopfreihe"><button type="button" class="primaer" data-action="fahrrad-aendern">Ändern</button></div>';
-  } else {
-    html += '<p style="margin-top:0">Noch kein Fahrrad angelegt.</p>' +
-      '<button type="button" class="primaer voll" data-action="fahrrad-aendern">Fahrrad anlegen</button>';
-  }
-  html += '</div>';
+  const seite = einstellungenSeite && EINSTELLUNGEN_SEITEN[einstellungenSeite];
+  if (seite) return '<button type="button" class="leise zurueck" data-action="einstellungen-seite" data-seite="">‹ Einstellungen</button>' + seite.bild();
+  const f = daten.fahrrad, es = daten.einstellungen;
+  let html = '<h2 style="margin-top:8px">Fahrrad</h2>';
+  html += f ? '<div class="liste">' + seitenZeile("fahrrad", esc(f.name), "seit " + datumText(f.startdatum) + " · Start-Kilometerstand " + kmText(f.startKm) + " km") + '</div>'
+    : '<div class="karte"><p style="margin-top:0">Noch kein Fahrrad angelegt.</p>' +
+      '<button type="button" class="primaer voll" data-action="fahrrad-aendern">Fahrrad anlegen</button></div>';
 
-  html += '<h2>Vorlagen</h2>' + vorlagenBereich();
+  // Datensicherung weit oben: Die Daten liegen nur auf diesem Gerät
+  html += '<h2>Datensicherung</h2>' + sicherungsZeile(heute()) +
+    '<div class="liste">' + seitenZeile("sicherung", "Sicherung prüfen, Daten importieren") + '</div>';
 
-  // Übliche Fahrtage (1 = Montag … 7 = Sonntag)
-  const fahrtage = daten.einstellungen.fahrtage;
-  html += '<h2>Fahrtage</h2><div class="karte"><div class="fahrtage">' +
-    [1, 2, 3, 4, 5, 6, 7].map(t => '<label class="fahrtag"><input type="checkbox" value="' + t + '" data-change="fahrtag"' +
-      (fahrtage.includes(t) ? " checked" : "") + '><span>' + WOCHENTAGE[t % 7] + '</span></label>').join("") +
-    '</div><div class="feldhinweis">Deine üblichen Fahrtage. Die Übersicht weist auf Fahrtage der letzten 14 Tage ohne Eintrag hin, ' +
-    'die Statistik zählt damit die längste Serie, und der Reiter Wetter zeigt dafür Hin- und Rückfahrt.</div>' +
-    // Schalter und Uhrzeit (das Uhrzeitfeld lässt sich auf dem iPhone nicht leeren)
-    '<label class="haken"><input type="checkbox" id="e-hinweis-an" data-change="hinweis-heute-an"' + (daten.einstellungen.hinweisHeuteAn ? " checked" : "") + '>' +
-    '<span>Hinweis schon am selben Tag</span></label>' +
-    '<label for="e-hinweis-ab">ab Uhrzeit</label>' +
-    '<input type="time" id="e-hinweis-ab" value="' + daten.einstellungen.hinweisHeuteAb + '" data-change="hinweis-heute-ab"' + (daten.einstellungen.hinweisHeuteAn ? "" : " disabled") + '>' +
-    '<div class="feldhinweis">An: Fehlt an einem Fahrtag der Eintrag, weist die Übersicht ab dieser Uhrzeit schon am selben Tag darauf hin. Aus: erst ab dem nächsten Tag.</div></div>';
+  html += '<h2>Fahrten</h2><div class="liste">' +
+    seitenZeile("vorlagen", "Vorlagen", daten.vorlagen.length ? daten.vorlagen.map(v => v.name).join(", ") : "noch keine") +
+    seitenZeile("fahrtage", "Fahrtage und Hinweis", (es.fahrtage.length ? es.fahrtage.map(t => WOCHENTAGE[t % 7]).join(", ") : "keine Fahrtage") +
+      " · " + (es.hinweisHeuteAn ? "Hinweis am selben Tag ab " + es.hinweisHeuteAb : "Hinweis ab dem nächsten Tag")) + '</div>' +
+    '<button type="button" class="leise weg" data-action="zu-fahrten" data-wert="statistik">Jahresziele (Fahrten → Statistik) ›</button>';
 
   html += wetterEinstellungen();
 
-  // Jahresziele
-  const ziele = [...daten.einstellungen.jahresziele].sort((a, b) => b.jahr - a.jahr);
-  html += '<h2>Jahresziele</h2><div class="liste">';
-  if (!ziele.length) html += '<div class="leer">Noch kein Jahresziel.</div>';
-  ziele.forEach(z => {
-    html += '<div class="zeile"><button type="button" class="inhalt" data-action="jahresziel-bearbeiten" data-jahr="' + z.jahr + '">' +
-      '<div class="text"><div>' + z.jahr + '</div></div><span class="zahl" style="padding-right:16px">' + kmText(z.km) + ' km</span></button></div>';
-  });
-  html += '</div><div class="knopfreihe"><button type="button" data-action="jahresziel-neu">+ Jahresziel</button></div>';
+  const auftraege = daten.wartungsarten.filter(a => a.typ === "auftrag").length, aufgaben = daten.wartungsarten.length - auftraege;
+  html += '<h2>Wartung</h2><div class="liste">' +
+    seitenZeile("wartungsarten", "Wartungsarten", auftraege + (auftraege === 1 ? " Auftrag" : " Aufträge") + ", " + aufgaben + (aufgaben === 1 ? " Aufgabe" : " Aufgaben")) + '</div>';
 
-  html += '<h2>Datensicherung</h2><div class="karte">' +
+  html += '<h2>Über Rad-km</h2><div class="karte">' +
+    detailListe([["App-Version", APP_VERSION], ["Datenversion", String(DATEN_VERSION)]]) + '</div>';
+  return html;
+}
+
+// Einstellungen → Fahrrad
+function fahrradSeite() {
+  const f = daten.fahrrad;
+  if (!f) return '<div class="karte"><p style="margin-top:0">Noch kein Fahrrad angelegt.</p>' +
+    '<button type="button" class="primaer voll" data-action="fahrrad-aendern">Fahrrad anlegen</button></div>';
+  return '<div class="karte">' + detailListe([
+    ["Name", esc(f.name)],
+    ["Rahmennummer", esc(f.rahmennummer)],
+    ["Beschreibung", f.beschreibung ? '<span class="umbrueche">' + esc(f.beschreibung) + '</span>' : ""],
+    ["Startdatum", datumText(f.startdatum)],
+    ["Start-Kilometerstand", kmText(f.startKm) + " km"]
+  ]) +
+    '<div class="feldhinweis">Der Start-Kilometerstand gilt zu Beginn des Startdatums. Einträge ab diesem Tag (einschließlich) werden dazugezählt.</div>' +
+    '<div class="knopfreihe"><button type="button" class="primaer" data-action="fahrrad-aendern">Ändern</button></div></div>';
+}
+
+// Einstellungen → Datensicherung: sichern, prüfen, importieren
+function sicherungSeite() {
+  const le = letzterExport();
+  return '<div class="karte">' +
     '<p style="margin-top:0">Deine Daten liegen nur auf diesem Gerät im Speicher des Browsers. Sichere sie regelmäßig als Datei, z. B. in „Dateien“ oder iCloud. ' +
     'Vor dem Teilen prüft die App die Datei.</p>' +
     '<p class="klein">Letzte Sicherung: ' + (le ? datumText(le) : "noch nie") + '</p>' +
@@ -133,11 +154,23 @@ function bildEinstellungen() {
     '<button type="button" class="voll" data-action="sicherung-pruefen">Sicherung prüfen …</button>' +
     '<p class="klein">Liest eine gespeicherte Sicherung und vergleicht sie mit dem aktuellen Stand. Dabei wird nichts verändert.</p>' +
     '<button type="button" class="voll" data-action="import">Daten importieren …</button>' +
-    '<p class="klein">Beim Import werden alle vorhandenen Daten ersetzt. Vorher wird nachgefragt.</p></div>' +
+    '<p class="klein">Beim Import werden alle vorhandenen Daten ersetzt. Vorher wird nachgefragt.</p></div>';
+}
 
-    '<h2>Über Rad-km</h2><div class="karte">' +
-    detailListe([["App-Version", APP_VERSION], ["Datenversion", String(DATEN_VERSION)]]) + '</div>';
-  return html;
+// Einstellungen → Fahrtage (1 = Montag … 7 = Sonntag) und Hinweis am selben Tag
+function fahrtageSeite() {
+  const es = daten.einstellungen;
+  return '<div class="karte" style="margin-top:8px"><div class="fahrtage">' +
+    [1, 2, 3, 4, 5, 6, 7].map(t => '<label class="fahrtag"><input type="checkbox" value="' + t + '" data-change="fahrtag"' +
+      (es.fahrtage.includes(t) ? " checked" : "") + '><span>' + WOCHENTAGE[t % 7] + '</span></label>').join("") +
+    '</div><div class="feldhinweis">Deine üblichen Fahrtage. Die Übersicht weist auf Fahrtage der letzten 14 Tage ohne Eintrag hin, ' +
+    'die Statistik zählt damit die längste Serie, und der Reiter Wetter zeigt dafür Hin- und Rückfahrt.</div>' +
+    // Schalter und Uhrzeit (das Uhrzeitfeld lässt sich auf dem iPhone nicht leeren)
+    '<label class="haken"><input type="checkbox" id="e-hinweis-an" data-change="hinweis-heute-an"' + (es.hinweisHeuteAn ? " checked" : "") + '>' +
+    '<span>Hinweis schon am selben Tag</span></label>' +
+    '<label for="e-hinweis-ab">ab Uhrzeit</label>' +
+    '<input type="time" id="e-hinweis-ab" value="' + es.hinweisHeuteAb + '" data-change="hinweis-heute-ab"' + (es.hinweisHeuteAn ? "" : " disabled") + '>' +
+    '<div class="feldhinweis">An: Fehlt an einem Fahrtag der Eintrag, weist die Übersicht ab dieser Uhrzeit schon am selben Tag darauf hin. Aus: erst ab dem nächsten Tag.</div></div>';
 }
 
 // Schalter "Hinweis schon am selben Tag": sofort speichern; die Uhrzeit ist nur bei "an" bedienbar
@@ -164,37 +197,6 @@ function fahrtageGeaendert() {
   if (speichern()) meldung("Fahrtage gespeichert");
 }
 
-// Jahresziel anlegen oder ändern ("jahr" = vorhandenes Ziel bzw. Vorschlag für ein neues)
-function jahreszielFormular(jahr, vorhanden) {
-  const z = vorhanden ? daten.einstellungen.jahresziele.find(z => z.jahr === jahr) : null;
-  let vorschlag = jahr || Number(heute().slice(0, 4));
-  if (!z && !jahr) while (daten.einstellungen.jahresziele.some(x => x.jahr === vorschlag)) vorschlag++;
-  fensterOeffnen(
-    '<h2>' + (z ? "Jahresziel bearbeiten" : "Jahresziel festlegen") + '</h2>' +
-    '<label for="z-jahr">Jahr</label><input type="text" id="z-jahr" inputmode="numeric" value="' + vorschlag + '">' +
-    '<label for="z-km">Ziel in km</label><input type="text" id="z-km" inputmode="decimal" placeholder="z. B. 5000" value="' + (z ? kmFeld(z.km) : "") + '">' +
-    '<div class="feldhinweis">Die Startseite zeigt den Fortschritt und vergleicht ihn mit dem zeitanteiligen Soll und der Jahresprognose.</div>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
-    '<button type="button" class="primaer" data-action="jahresziel-speichern" data-jahr="' + (z ? z.jahr : "") + '">Speichern</button></div>' +
-    (z ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="jahresziel-loeschen" data-jahr="' + z.jahr + '">Jahresziel entfernen</button></div>' : "")
-  );
-}
-function jahreszielSpeichern(altesJahr) {
-  const jahr = Number(wert("z-jahr").trim());
-  const km = kmLesen(wert("z-km"));
-  if (!(Number.isInteger(jahr) && jahr >= 1900 && jahr <= 9999)) { alert("Bitte eine Jahreszahl eingeben, z. B. 2027."); return; }
-  if (!(km > 0)) { alert("Bitte das Ziel als Zahl größer 0 eingeben, z. B. 5000."); return; }
-  const ziele = daten.einstellungen.jahresziele.filter(z => z.jahr !== altesJahr);
-  if (ziele.some(z => z.jahr === jahr)) { alert("Für " + jahr + " gibt es schon ein Jahresziel. Bitte dieses ändern."); return; }
-  ziele.push({ jahr, km });
-  daten.einstellungen.jahresziele = ziele.sort((a, b) => a.jahr - b.jahr);
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Jahresziel gespeichert"); }
-}
-async function jahreszielLoeschen(jahr) {
-  if (!await frage("Jahresziel für " + jahr + " wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
-  daten.einstellungen.jahresziele = daten.einstellungen.jahresziele.filter(z => z.jahr !== jahr);
-  if (speichern()) { fensterSchliessen(); zeichnen(); }
-}
 function fahrradFormular() {
   const f = daten.fahrrad || { name: "", startdatum: heute(), startKm: null, rahmennummer: "", beschreibung: "" };
   fensterOeffnen(
