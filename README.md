@@ -29,6 +29,8 @@ ist für das iPhone optimiert.
   (z. B. Bremsbeläge, Ölwechsel) und Mängel hängen als **Positionen** daran;
   Fälligkeit nach Intervall (Monate und/oder km), jährlichem Zeitfenster oder
   einmalig, Vorschläge „zu diesem Auftrag nehmen?“
+- Termin eines Auftrags (auf Wunsch mit Uhrzeit) mit einem Tipper in den
+  Kalender des iPhones übernehmen, mit Positionen und Erinnerung am Vortag
 - Mängelliste; Mängel werden einem Auftrag zugeordnet oder als Reparatur angelegt
 - Löschen mit „Rückgängig“
 - Datensicherung als JSON-Datei, die vor dem Teilen geprüft wird; gespeicherte
@@ -632,8 +634,32 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
     voneinander: Es zählen nur die erledigten Aufträge derselben Art.
   - Die Texte sind dieselben wie bisher (siehe unten „Fälligkeit mit
     Zeitfenster“ und „Fälligkeit mit Intervall“).
-- **Offene Aufträge:** Status „geplant“, optional mit Termin (Datum),
-  Werkstatt und Notiz.
+- **Offene Aufträge:** Status „geplant“, optional mit Termin (Datum, auf
+  Wunsch mit Uhrzeit), Werkstatt und Notiz.
+  - **Uhrzeit:** Im Formular „Termin planen“ bzw. „Termin ändern“ den Schalter
+    **„Mit Uhrzeit“** einschalten und die Uhrzeit wählen. Ohne Uhrzeit gilt der
+    Termin ganztägig. Angezeigt wird z. B. „Termin am 20.11.2026 um 09:30 Uhr
+    bei Beispiel-Werkstatt“. „Termin entfernen“ und „Erledigt eintragen“
+    entfernen auch die Uhrzeit.
+  - **In Kalender übernehmen:** In der Ansicht eines geplanten Auftrags mit
+    Termin steht der Knopf **„📅 In Kalender übernehmen“**. Er zeigt den Termin
+    (Titel, Tag, ganztägig bzw. Uhrzeit, Erinnerung) und bietet zwei Wege:
+    - **„Im Kalender öffnen“** öffnet die Kalenderdatei (`.ics`); iOS zeigt
+      den Termin, ein Tipper auf **„Hinzufügen“** übernimmt ihn.
+    - **„Als Datei teilen …“** öffnet das Teilen-Menü mit der Datei (z. B. in
+      „Dateien“ sichern und von dort öffnen); ohne Teilen-Menü wird sie
+      heruntergeladen.
+    - Welcher Weg in der App auf dem Home-Bildschirm zuverlässig funktioniert,
+      wird noch auf dem iPhone geprüft; der andere entfällt später.
+    - Inhalt: Titel „Kleine Inspektion – Werkstatt“ (ohne Werkstatt nur der
+      Name), Termin ganztägig bzw. 1 Stunde ab der Uhrzeit (Ortszeit),
+      Beschreibung mit den Positionen (Aufgaben mit Bauteil, Mängel mit Datum),
+      der Notiz und dem erwarteten Kilometerstand, Erinnerung **am Vortag um
+      18:00**. Die Kennung (UID) ist je Auftrag fest. Hast du den Termin schon
+      übernommen und dann geändert, übernimm ihn erneut und lösche im Kalender
+      den alten Eintrag, falls er doppelt erscheint.
+    - Die Kalenderdatei entsteht nur auf dem Gerät; es geht nichts ins Netz,
+      und deine Daten bleiben unverändert.
   - Hat ein Auftrag mit Fälligkeit (Intervall, Zeitfenster oder einmalig) noch
     keinen geplanten Auftrag, zeigt die App trotzdem den nächsten (vorgemerkt,
     ohne Termin). Gespeichert wird er erst, wenn du etwas daran änderst (Termin,
@@ -906,7 +932,7 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `8` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `9` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
@@ -1108,6 +1134,7 @@ Reparatur) wird er bei Bedarf angelegt. Die Standard-Wartungsarten (ab Version
 | `wartungsartId` | Text | ja | `id` einer Wartungsart mit `"typ": "auftrag"`. Je Auftrag mit Fälligkeit höchstens ein geplanter Auftrag |
 | `status` | `"geplant"` oder `"erledigt"` | ja | |
 | `termin` | Datum oder `null` | nein | Nur bei geplanten Aufträgen: Termin |
+| `terminZeit` | Uhrzeit `"HH:MM"` oder `null` | nein | Ab Version 9, nur zusammen mit einem Termin: Uhrzeit des Termins; `null` = ganztägig |
 | `werkstatt` | Text | nein | Werkstatt |
 | `datum` | Datum oder `null` | bei erledigten | Datum der Erledigung; bei geplanten `null` |
 | `kmStand` | Zahl oder `null` | nein | Nur bei erledigten: Kilometerstand bei der Erledigung |
@@ -1156,8 +1183,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ```json
 {
-  "version": 8,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5a.1", "eintraege": 4,
+  "version": 9,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5b", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1233,14 +1260,14 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
       "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Bremse vorn", "zuordnung": "grosse-inspektion" }
   ],
   "auftraege": [
-    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "werkstatt": "Beispiel-Werkstatt",
+    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "terminZeit": null, "werkstatt": "Beispiel-Werkstatt",
       "datum": "2025-01-15", "kmStand": 175.5, "kmManuell": true, "notiz": "Bremsen eingestellt",
       "positionen": [
         { "id": "pos1", "art": "aufgabe", "wartungsartId": "kette", "status": "erledigt", "notiz": "" },
         { "id": "pos2", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "nicht-gemacht", "notiz": "noch 2 mm" },
         { "id": "pos3", "art": "mangel", "mangelId": "m1", "status": "erledigt", "notiz": "" }
       ], "ausgeschlossen": [] },
-    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "werkstatt": "Beispiel-Werkstatt",
+    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "terminZeit": "09:30", "werkstatt": "Beispiel-Werkstatt",
       "datum": null, "kmStand": null, "kmManuell": false, "notiz": "",
       "positionen": [
         { "id": "pos4", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "offen", "notiz": "" },
@@ -1358,15 +1385,19 @@ damit nichts verloren geht.
     „Wartung“).
   - Die umgewandelten Daten werden beim nächsten Speichern als Version 8
     abgelegt.
-- Daten aus Version 1 bis 6 werden in einem Schritt über die Zwischenversionen
-  auf Version 8 gebracht.
+- **Version 8 → 9** (Release 5b): Alle Daten bleiben unverändert. Ergänzt wird
+  `terminZeit` (`null`, also ganztägig) bei jedem Auftrag. Die umgewandelten
+  Daten werden beim nächsten Speichern als Version 9 abgelegt; ein Hinweis
+  erscheint nicht.
+- Daten aus Version 1 bis 7 werden in einem Schritt über die Zwischenversionen
+  auf Version 9 gebracht.
 
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1 bis 7 auf Version 8 (`tests/daten-v1.json`
-  bis `tests/daten-v7.json`, erfundene Werte; auch dass geänderte
+- die Umwandlung von Version 1 bis 8 auf Version 9 (`tests/daten-v1.json`
+  bis `tests/daten-v8.json`, erfundene Werte; auch dass geänderte
   Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
   werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
@@ -1469,7 +1500,20 @@ damit nichts verloren geht.
 - Release 5b, Dateistruktur: `index.html` bindet CSS und JS ein und enthält
   selbst keinen Code mehr, die Liste `DATEIEN` in `sw.js` stimmt mit den
   eingebundenen Dateien überein, jede Datei ist vorhanden, gültig und
-  geladen, das CSS gilt.
+  geladen, das CSS gilt,
+- Release 5b, Datenversion 9 und Kalender (D4): die Umwandlung 8 → 9 mit
+  `tests/daten-v8.json` beim Laden und beim Import (alle Daten erhalten,
+  `terminZeit` = `null`, gespeicherte Daten erst beim Speichern geändert, kein
+  Hinweis, „Sicherung prüfen“ identisch, Export → Import), die Prüfung von
+  `terminZeit` (Format, nur mit Termin, nicht bei erledigten), das
+  Termin-Formular (Schalter „Mit Uhrzeit“, gesperrtes Feld, Anzeige mit
+  Uhrzeit, ungültige Uhrzeit, Uhrzeit ohne Datum, „Termin entfernen“,
+  „Erledigt eintragen“) und die Kalenderdatei (Aufbau, ganztägig, mit Uhrzeit
+  auch über Mitternacht, Erinnerung am Vortag um 18:00, Titel mit und ohne
+  Werkstatt, Maskierung, Beschreibung, feste UID, Falten nach 75 Bytes ohne
+  geteilte Zeichen, Dateiname, Knopf nur bei geplanten Aufträgen mit Termin,
+  Fenster, „Im Kalender öffnen“, „Als Datei teilen …“ mit Abbruch und
+  Download, Daten unverändert).
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -1538,7 +1582,8 @@ fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
 | `js/berechnungen.js` | Kilometerstand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
 | `js/statistik.js` | Fahrtage und Kennzahlen (Berechnung), Reiter Statistik mit Diagramm (SVG, ohne Bibliothek), Wetter-Statistik und „Wetter nachtragen …“ |
 | `js/wartung.js` | Werkstatt (Berechnung): Fälligkeit, offene Aufträge, berechnete Standard-Zuordnung, Vorschläge |
-| `js/wartung-ansicht.js` | Reiter Wartung: Aufträge, Termin, Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
+| `js/kalender.js` | Kalenderdatei (`.ics`) zum Termin eines geplanten Auftrags |
+| `js/wartung-ansicht.js` | Reiter Wartung: Aufträge, Termin, „In Kalender übernehmen“, Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
 | `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung, Wind, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick |
 | `js/wetter-ansicht.js` | Reiter Wetter und Kachel, Wetter-Einstellungen (Orte, Wegpunkte, Fahrzeiten), Ampel-Grenzen, Kleidungsregeln, Rückmeldung nach der Fahrt |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste, Eintragsformular, Kilometerstand für ein Datum |

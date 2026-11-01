@@ -35,7 +35,8 @@ sind immer erfunden.
 | `js/berechnungen.js` | km-Stand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
 | `js/statistik.js` | Fahrtage/Kennzahlen, Reiter Statistik, Diagramm, Wetter-Statistik, „Wetter nachtragen“ |
 | `js/wartung.js` | Werkstatt-Berechnung: Fälligkeit, `werkstattLage`, Standard-Zuordnung, Vorschläge |
-| `js/wartung-ansicht.js` | Reiter Wartung, Aufträge, Termin, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
+| `js/kalender.js` | Kalenderdatei (.ics) zum Termin eines geplanten Auftrags |
+| `js/wartung-ansicht.js` | Reiter Wartung, Aufträge, Termin, Kalender-Fenster, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
 | `js/wetter.js` | Wetter-Logik: Abruf, Zwischenspeicher, Standort, Ampel, Kleidung, Wind, Abfahrt, Rückblick |
 | `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Wetter-Einstellungen, Ampel-Grenzen, Kleidung, Rückmeldung |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste, Eintragsformular, Prognosefenster |
