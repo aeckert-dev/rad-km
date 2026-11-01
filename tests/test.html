@@ -3943,6 +3943,40 @@ async function start() {
     w.fensterSchliessen();
     w.heute = echtHeute;
     w.eval("daten = leereDaten(); aktiverTab = 'uebersicht'; zeichnen()");
+
+    // -------------------------------------------------------------
+    // 58. Dateistruktur (Release 5b, T1): index.html, css/, js/ und sw.js
+    // -------------------------------------------------------------
+    abschnitt("58. Dateistruktur (Release 5b): index.html bindet CSS und JS ein, sw.js hält alle Dateien bereit");
+    const indexText = await (await fetch("../index.html", { cache: "no-store" })).text();
+    const eingebunden = ["index.html", ...[...indexText.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map(m => m[1]),
+      ...[...indexText.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1])];
+    const swDateien = JSON.parse(/const DATEIEN = (\[[^\]]*\]);/.exec(swText)[1]);
+    gleich("sw.js: DATEIEN enthält genau die Dateien, die index.html einbindet (gleiche Reihenfolge)", swDateien, eingebunden);
+    gleich("index.html enthält kein eingebettetes CSS oder JavaScript mehr", [/<style[\s>]/.test(indexText), /<script>/.test(indexText)], [false, false]);
+    gleich("CSS zuerst, dann js/grundlagen.js als erste und js/start.js als letzte JS-Datei",
+      [eingebunden[1], eingebunden[2], eingebunden[eingebunden.length - 1]], ["css/app.css", "js/grundlagen.js", "js/start.js"]);
+    const dateiFehler = [];
+    for (const d of swDateien.slice(1)) {
+      const antwort = await fetch("../" + d, { cache: "no-store" });
+      if (!antwort.ok) { dateiFehler.push(d + ": nicht vorhanden"); continue; }
+      const text = await antwort.text();
+      if (d.endsWith(".js")) {
+        const z = text.split("\n");
+        if (!z[0].startsWith("// Rad-km · ") || z[1] !== '"use strict";') dateiFehler.push(d + ": Kopfzeile oder \"use strict\" fehlt");
+        try { new Function(text); } catch (e) { dateiFehler.push(d + ": " + e.message); }
+      }
+    }
+    gleich("Alle Dateien vorhanden; jede JS-Datei mit Kopfzeile, \"use strict\" und gültigem JavaScript", dateiFehler, []);
+    // Je Datei eine Funktion, die nur dort steht: alle Dateien sind geladen
+    const jeDatei = { "grundlagen": "heute", "daten": "datenEinlesen", "berechnungen": "kmStandAm", "statistik": "bildStatistik", "wartung": "werkstattLage",
+      "wetter": "wetterAnsicht", "oberflaeche": "zeichnen", "uebersicht": "bildUebersicht", "wetter-ansicht": "bildWetter", "wartung-ansicht": "bildWartung",
+      "einstellungen": "bildEinstellungen", "sicherung": "exportInhalt", "bedienung": "AKTIONEN", "start": "serviceWorkerStarten" };
+    gleich("Jede JS-Datei ist in der App geladen (je eine Funktion bzw. Tabelle daraus vorhanden)",
+      swDateien.filter(d => d.startsWith("js/")).map(d => d.slice(3, -3)).filter(n => !jeDatei[n] || !["function", "object"].includes(w.eval("typeof " + jeDatei[n]))), []);
+    const blatt = w.document.styleSheets[0];
+    wahr("Das CSS kommt aus css/app.css und gilt (Farbvariablen in :root, Hintergrund gesetzt)",
+      blatt.href.endsWith("/css/app.css") && blatt.cssRules.length > 50 && w.getComputedStyle(w.document.documentElement).getPropertyValue("--bg").trim() !== "");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

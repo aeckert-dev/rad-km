@@ -22,7 +22,19 @@ function serviceWorkerStarten() {
 function updatePruefen() {
   if (!swVerfuegbar() || Date.now() - letzteUpdatePruefung < UPDATE_PRUEFEN_MS) return;
   letzteUpdatePruefung = Date.now();
-  navigator.serviceWorker.ready.then(reg => { if (reg.active) reg.active.postMessage({ typ: "update-pruefen" }); });
+  navigator.serviceWorker.ready.then(reg => {
+    // Wird gerade ein neuer Service Worker eingerichtet, erst ihn fragen, wenn er
+    // aktiv ist (sonst müsste der bisherige dafür neu starten und hielte dessen
+    // Übernahme auf)
+    const neu = reg.installing || reg.waiting;
+    if (neu) {
+      neu.addEventListener("statechange", () => {
+        if (neu.state === "activated") neu.postMessage({ typ: "update-pruefen" });
+      });
+      return;
+    }
+    if (reg.active) reg.active.postMessage({ typ: "update-pruefen" });
+  });
 }
 function swNachricht(nachricht) {
   const typ = nachricht && nachricht.typ;
