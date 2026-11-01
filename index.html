@@ -4391,7 +4391,11 @@ function auftragFestlegen(key) {
   const vorhanden = daten.auftraege.find(a => a.id === key && a.status === "geplant");
   if (vorhanden) return vorhanden;
   const artId = key.startsWith("neu:") ? key.slice(4) : key.startsWith("anlegen:") ? key.slice(8) : null;
-  if (!artVon(artId)) return null;
+  const art = artVon(artId);
+  if (!art || art.typ !== "auftrag") return null;
+  // Eine Auftragsart mit Fälligkeit hat höchstens einen geplanten Auftrag
+  const geplant = hatFaelligkeit(art) && daten.auftraege.find(a => a.status === "geplant" && a.wartungsartId === artId);
+  if (geplant) return geplant;
   const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
     notiz: "", positionen: [], ausgeschlossen: [] };
   daten.auftraege.push(a);
@@ -4634,6 +4638,7 @@ function auftragAnsicht(key) {
 
 // Aufgabe in einen offenen Auftrag nehmen (aus einem anderen geplanten Auftrag verschoben)
 function aufgabeZuAuftrag(key, aufgabeId) {
+  if (!istAufgabe(artVon(aufgabeId))) return null;
   const ziel = auftragFestlegen(key);
   if (!ziel) return null;
   daten.auftraege.filter(a => a.status === "geplant" && a !== ziel).forEach(a => {
@@ -4647,6 +4652,7 @@ function aufgabeZuAuftrag(key, aufgabeId) {
 }
 // Mangel in einen offenen Auftrag nehmen (aus einem anderen geplanten Auftrag verschoben)
 function mangelZuAuftrag(key, mangelId) {
+  if (!daten.maengel.some(m => m.id === mangelId && m.status === "offen")) return null;
   const ziel = auftragFestlegen(key);
   if (!ziel) return null;
   daten.auftraege.filter(a => a.status === "geplant" && a !== ziel).forEach(a => {
