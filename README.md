@@ -36,9 +36,11 @@ ist für das iPhone optimiert.
 - Startet auch ohne Netz (dann mit dem zuletzt geladenen Wetter); neue Versionen werden angekündigt
 - Hell- und Dunkelmodus nach Systemeinstellung
 
-Die ganze App steckt in **einer einzigen Datei: `index.html`**. Dazu kommt nur
-der Service Worker `sw.js`, der die App für den Start ohne Netz bereithält. Es
-gibt keine externen Bibliotheken und keinen Build-Schritt.
+Die App besteht aus `index.html`, dem Aussehen in `css/app.css` und dem
+Programmcode in einigen Dateien unter `js/` (siehe „Dateistruktur“). Dazu
+kommt der Service Worker `sw.js`, der die App für den Start ohne Netz
+bereithält. Es gibt keine externen Bibliotheken und keinen Build-Schritt;
+GitHub Pages liefert die Dateien direkt aus.
 
 ## Wo liegen meine Daten?
 
@@ -55,8 +57,8 @@ Das bedeutet:
   weg, wenn du keine Sicherung hast. **Sichere deshalb regelmäßig** („Jetzt
   sichern“ auf der Startseite). Die App erinnert dich, wenn die letzte
   Sicherung mehr als 30 Tage zurückliegt.
-- Der Service Worker speichert nur die App selbst (`index.html`), damit sie
-  auch ohne Netz startet. Auf die Daten im `localStorage` hat er keinen
+- Der Service Worker speichert nur die App selbst (`index.html`, `css/` und
+  `js/`), damit sie auch ohne Netz startet. Auf die Daten im `localStorage` hat er keinen
   Zugriff.
 - Nach dem Update auf Datenversion 8 merkt sich die App unter
   `radkm-wartungsarten-pruefen`, dass der Hinweis „Bitte Wartungsarten prüfen“
@@ -1127,8 +1129,8 @@ Reparatur) wird er bei Bedarf angelegt. Die Standard-Wartungsarten (ab Version
 
 Die Aufgaben, die nur nach der Standard-Zuordnung zu einem geplanten Auftrag
 gehören, stehen nicht in den Daten; die App berechnet sie bei jeder Anzeige.
-Für Kosten und Belege (Release 5b) kommen später Felder an Auftrag und Position
-dazu.
+Für Kosten und Belege kommen in einem späteren Release Felder an Auftrag und
+Position dazu.
 
 ### `maengel[]`
 
@@ -1463,7 +1465,11 @@ damit nichts verloren geht.
   Auftrags, „Erledigt eintragen“ an einer Aufgabe (neue Eigenleistung, neue
   Reparatur, zu erledigtem Auftrag, schon erledigt ausgegraut, „nicht
   gemacht“ wird „erledigt“, nicht doppelt), Export/Import und „Sicherung
-  prüfen“ unverändert.
+  prüfen“ unverändert,
+- Release 5b, Dateistruktur: `index.html` bindet CSS und JS ein und enthält
+  selbst keinen Code mehr, die Liste `DATEIEN` in `sw.js` stimmt mit den
+  eingebundenen Dateien überein, jede Datei ist vorhanden, gültig und
+  geladen, das CSS gilt.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -1497,7 +1503,12 @@ Oben steht „Alle … Tests bestanden“ oder die Anzahl der Fehler.
 **Offline und Updates:** `tests/offline-update-test.js` spielt in einem echten
 Browser durch, was der Service Worker tut: erster Start, Start ohne Netz,
 Veröffentlichung einer neuen Version, Hinweis „Neue Version verfügbar“, „Neu
-laden“, geänderter Service Worker, Wetter beim Start und ohne Netz, die Ansicht
+laden“, alle Dateien aus dem Zwischenspeicher, nur eine JS-Datei bzw. nur das
+CSS geändert, vor „Neu laden“ der bisherige und danach der neue Satz
+vollständig, eine auf dem Server fehlende Datei (kein halber Satz), der
+Übergang von 5a.1 (eine Datei) auf die aufgeteilte App (5a.1 holt der Test
+mit Git aus dem Commit `52cd779`; ohne Git wird dieser Teil übersprungen),
+geänderter Service Worker, Wetter beim Start und ohne Netz, die Ansicht
 „Jetzt“ am aktuellen Standort mit und ohne Netz (die Wetterdienste antworten
 dabei mit den Aufzeichnungen aus `tests/`, der Standort ist vorgegeben). Dabei prüft
 er jedes Mal, dass die Daten im `localStorage` unverändert bleiben, und lässt
@@ -1509,36 +1520,44 @@ Node.js und Playwright):
 node tests/offline-update-test.js
 ```
 
-## Aufbau des Codes (für Neugierige)
+## Dateistruktur
 
-`index.html` besteht aus drei Teilen:
+Die App ist auf mehrere Dateien verteilt, damit man für eine Änderung nur die
+betroffenen Dateien lesen muss. Alle JavaScript-Dateien sind normale Skripte
+(keine Module) und teilen sich einen gemeinsamen Bereich: Eine Funktion aus
+`js/daten.js` ist in jeder anderen Datei aufrufbar. `index.html` lädt sie in
+fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
+`js/grundlagen.js`, `js/daten.js` und `js/start.js` (diese zuletzt).
 
-1. **HTML:** das Grundgerüst, also Überschrift, Inhaltsbereich, die untere
-   Navigationsleiste und zwei Fenster (für Formulare und Rückfragen).
-2. **CSS** (`<style>`): das Aussehen. Die Farben stehen als Variablen am
-   Anfang. Für den Dunkelmodus werden nur diese Variablen ausgetauscht.
-3. **JavaScript** (`<script>`): die Logik, in nummerierten Abschnitten:
-   1. Grundeinstellungen
-   2. Hilfsfunktionen für Datum und Zahlen
-   3. Datenmodell: Laden, Prüfen, Umwandeln, Speichern
-   4. Berechnungen: Kilometerstand, Summen, Prognosen, Fälligkeit,
-      Werkstatt (offene Aufträge, berechnete Standard-Zuordnung, Vorschläge),
-      Zusammenfassung
-   5. Wetter: Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher,
-      aktueller Standort, Ampel, Glätte, Kleidung, bestes Abfahrtsfenster, Wind,
-      Ansicht „Jetzt“, Wetter je Eintrag und Rückblick
-   6. Fenster, Rückfragen, Meldungen, Rückgängig
-   7. Die fünf Bildschirme (Übersicht, Wetter, Wartung, Statistik,
-      Einstellungen) und ihre Formulare (das Diagramm ist ein SVG, ohne
-      Bibliothek)
-   8. Datensicherung: Export, Prüfung, Import
-   9. Zuordnung der Klicks zu den Funktionen
-   10. Offline und neue Versionen (Anmeldung des Service Workers)
-   11. Start
+| Datei | Inhalt |
+|---|---|
+| `index.html` | Grundgerüst: Überschrift, Inhaltsbereich, untere Reiterleiste, zwei Fenster (Formulare, Rückfragen), Einbindung von CSS und JS |
+| `css/app.css` | Aussehen; die Farben stehen als Variablen in `:root`, für den Dunkelmodus werden nur diese ausgetauscht |
+| `js/grundlagen.js` | Grundeinstellungen (`APP_VERSION`, `DATEN_VERSION`, Speicherschlüssel, Konstanten) und Hilfsfunktionen für Datum, Zahlen, Text |
+| `js/daten.js` | Datenmodell: Standardwerte, Laden, Prüfen, Umwandeln (`MIGRATIONEN`), Speichern |
+| `js/berechnungen.js` | Kilometerstand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
+| `js/statistik.js` | Fahrtage und Kennzahlen (Berechnung), Reiter Statistik mit Diagramm (SVG, ohne Bibliothek), Wetter-Statistik und „Wetter nachtragen …“ |
+| `js/wartung.js` | Werkstatt (Berechnung): Fälligkeit, offene Aufträge, berechnete Standard-Zuordnung, Vorschläge |
+| `js/wartung-ansicht.js` | Reiter Wartung: Aufträge, Termin, Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
+| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung, Wind, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick |
+| `js/wetter-ansicht.js` | Reiter Wetter und Kachel, Wetter-Einstellungen (Orte, Wegpunkte, Fahrzeiten), Ampel-Grenzen, Kleidungsregeln, Rückmeldung nach der Fahrt |
+| `js/uebersicht.js` | Reiter Übersicht, Eintragsliste, Eintragsformular, Kilometerstand für ein Datum |
+| `js/einstellungen.js` | Reiter Einstellungen: Fahrrad, Vorlagen, Fahrtage, Jahresziele |
+| `js/sicherung.js` | Datensicherung: Export, Prüfung vor dem Teilen, Vergleich mit einer Sicherung, Import |
+| `js/oberflaeche.js` | Bausteine der Oberfläche: Fenster, Rückfrage, Meldung, Rückgängig; `zeichnen()` und Reiter |
+| `js/bedienung.js` | Zuordnung der Klicks und Eingaben (`data-action`, `data-change`) zu den Funktionen |
+| `js/start.js` | Anmeldung des Service Workers, Hinweis „Neue Version verfügbar“, Start der App |
+| `sw.js` | Service Worker (siehe unten) |
+| `tests/` | Testseite, Offline-Test und erfundene Testdateien (siehe „Tests“) |
 
-`sw.js` ist der Service Worker. Er speichert `index.html` für den Start ohne
-Netz, vergleicht sie nach dem Start mit der Fassung auf dem Server und
-übernimmt eine neue Version erst nach „Neu laden“. Eine neue Version erkennt er
-am Inhalt von `index.html`, eine Versionsnummer muss dafür nicht gepflegt
-werden. Abrufe der Wetterdienste gehen an ihm vorbei direkt ins Netz; ohne Netz
-nimmt die App den eigenen Zwischenspeicher `radkm-wetter`.
+Neue Dateien müssen in `index.html` **und** in der Liste `DATEIEN` in `sw.js`
+eingetragen werden; `tests/test.html` prüft, dass beide übereinstimmen.
+
+`sw.js` ist der Service Worker. Er speichert alle Dateien der App als
+vollständigen Satz für den Start ohne Netz, vergleicht sie nach dem Start mit
+den Dateien auf dem Server und übernimmt eine neue Version erst nach „Neu
+laden“ – immer alle Dateien gemeinsam, alte und neue werden nie gemischt.
+Eine neue Version erkennt er am Inhalt der Dateien, eine Versionsnummer muss
+dafür nicht gepflegt werden. Abrufe der Wetterdienste gehen an ihm vorbei
+direkt ins Netz; ohne Netz nimmt die App den eigenen Zwischenspeicher
+`radkm-wetter`.
