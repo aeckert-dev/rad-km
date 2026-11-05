@@ -4735,6 +4735,73 @@ async function start() {
       [await jetztSonne("06:00"), await jetztSonne("07:15"), await jetztSonne("10:07"), await jetztSonne("16:00"), await jetztSonne("18:00")],
       ["🌅 Sonnenaufgang 07:32 · Fahrt im Dunkeln", "🌅 Sonnenaufgang 07:32 · bis 07:32 dunkel", "🌇 Sonnenuntergang 16:42", "🌇 Sonnenuntergang 16:42 · ab 16:42 dunkel",
         "🌙 Dunkel seit 16:42 (Sonnenuntergang)"]);
+
+    // -------------------------------------------------------------
+    // 67. Reiterleiste verankert (B3)
+    // -------------------------------------------------------------
+    abschnitt("67. Reiterleiste (B3): feste Seitenhöhe, nur der Inhalt scrollt, Zurücksetzen nur bei geschlossener Tastatur, Tipp auf den aktiven Reiter");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wB = await appLaden();
+    Object.assign(wB.frameElement.style, { width: "375px", height: "812px" });
+    const stilB = el => wB.getComputedStyle(el), navB = () => wB.document.querySelector("nav"), mainB = () => wB.document.getElementById("inhalt");
+    wB.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
+    gleich("Aufbau: Seite so hoch wie der Bildschirm, scrollt nicht; nur main scrollt; Reiterleiste ohne position: fixed; overscroll-behavior none auf html und body",
+      [stilB(wB.document.body).overflowY, stilB(wB.document.body).display, stilB(mainB()).overflowY, stilB(navB()).position, stilB(wB.document.querySelector("header")).position,
+        stilB(wB.document.documentElement).overscrollBehaviorY, stilB(wB.document.body).overscrollBehaviorY, stilB(wB.document.getElementById("toast")).position],
+      ["hidden", "flex", "auto", "relative", "static", "none", "none", "absolute"]);
+    const untenB = () => [Math.round(navB().getBoundingClientRect().bottom), wB.innerHeight, wB.document.scrollingElement.scrollHeight <= wB.innerHeight];
+    gleich("Reiterleiste schließt unten bündig ab (375 × 812), die Seite ist nicht höher als der Bildschirm", untenB(), [812, 812, true]);
+    mainB().scrollTop = 100000;
+    gleich("Inhalt ganz nach unten gescrollt: Reiterleiste bleibt unten, die Seite selbst scrollt nicht",
+      [mainB().scrollTop > 0, ...untenB(), wB.scrollY], [true, 812, 812, true, 0]);
+    const letzteZeile = [...mainB().querySelectorAll(".karte, .liste")].pop().getBoundingClientRect();
+    wahr("Letzter Inhalt über der Reiterleiste erreichbar", letzteZeile.bottom <= navB().getBoundingClientRect().top + 1);
+    // Tipp auf den aktiven Reiter
+    wB.document.querySelector('nav [data-tab="einstellungen"]').click();
+    for (let i = 0; i < 40 && mainB().scrollTop > 0; i++) await warten(50);
+    gleich("Tipp auf den aktiven Reiter: Inhalt scrollt nach oben, Reiter und Seite bleiben", [mainB().scrollTop, wB.eval("aktiverTab"), wB.eval("einstellungenSeite")], [0, "einstellungen", null]);
+    mainB().scrollTop = 300;
+    wB.document.querySelector('nav [data-tab="wartung"]').click();
+    gleich("Wechsel des Reiters: Inhalt beginnt oben", [wB.eval("aktiverTab"), mainB().scrollTop], ["wartung", 0]);
+    // Tastatur erkennen
+    wB.kleidungStufeFormular(2);
+    const feldB = wB.document.getElementById("ks-haende-regen");
+    feldB.focus();
+    const rB = feldB.getBoundingClientRect(), mB = mainB().getBoundingClientRect();
+    gleich("Feld unten auf der Seite antippen: das Feld wird im Inhalt sichtbar (über der Reiterleiste); Eingabe zählt als offene Tastatur",
+      [rB.top >= mB.top - 1 && rB.bottom <= mB.bottom + 1, wB.eingabeFokussiert(), wB.tastaturZu()], [true, true, false]);
+    feldB.blur();
+    const haken = wB.document.createElement("input");
+    haken.type = "checkbox";
+    mainB().appendChild(haken);
+    haken.focus();
+    gleich("Ein Haken öffnet keine Tastatur", [wB.eingabeFokussiert(), wB.tastaturZu()], [false, true]);
+    haken.remove();
+    // Zurücksetzen (Platzhalter für Sichtbereich und scrollTo)
+    const scrollsB = [];
+    const echtScrollB = wB.scrollTo;
+    wB.scrollTo = (...a) => scrollsB.push(a);
+    const sbB = (aend = {}) => { wB.sichtbereich = () => Object.assign({ scrollX: 0, scrollY: 0, innerHeight: 812, vvHeight: 812, vvOffsetTop: 0, scale: 1 }, aend); };
+    const verankert = aend => { scrollsB.length = 0; sbB(aend); return [wB.ansichtVerankern(), scrollsB.length]; };
+    gleich("Seite verschoben (scrollY 120 bzw. visualViewport.offsetTop 300) und Tastatur zu: zurückgesetzt",
+      [verankert({ scrollY: 120 }), verankert({ vvOffsetTop: 300 }), scrollsB[0]], [[true, 1], [true, 1], [0, 0]]);
+    gleich("Nichts verschoben: nichts zu tun", verankert({}), [false, 0]);
+    gleich("Tastatur offen (sichtbarer Bereich 300 px kleiner): nicht zurücksetzen, iOS schiebt das Feld selbst ins Bild", verankert({ scrollY: 120, vvHeight: 512 }), [false, 0]);
+    gleich("Kleine Abweichung des sichtbaren Bereichs (< 40 px) gilt als geschlossen", verankert({ scrollY: 120, vvHeight: 790 }), [true, 1]);
+    gleich("Gezoomt (scale 2): nicht zurücksetzen", verankert({ scrollY: 120, scale: 2 }), [false, 0]);
+    wB.document.getElementById("ks-kopf").focus();
+    gleich("Eingabefeld fokussiert (Tastatur offen): nicht zurücksetzen", verankert({ scrollY: 120 }), [false, 0]);
+    scrollsB.length = 0;
+    wB.document.getElementById("ks-kopf").blur();
+    await warten(600);
+    gleich("Feld verlassen (Tastatur zu): kurz danach zurückgesetzt", scrollsB.length > 0, true);
+    scrollsB.length = 0;
+    wB.document.dispatchEvent(new wB.Event("visibilitychange"));
+    await warten(500);
+    gleich("Zurück in die App: ebenfalls geprüft und zurückgesetzt", scrollsB.length > 0, true);
+    wB.scrollTo = echtScrollB;
+    gleich("Reiterleiste verändert keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    wB.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

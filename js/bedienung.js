@@ -9,11 +9,19 @@
 
 const AKTIONEN = {
   "tab": el => {
-    // Erneutes Antippen der Einstellungen führt zur Hauptseite
-    if (el.dataset.tab === "einstellungen" && aktiverTab === "einstellungen") einstellungenSeite = null;
+    // Antippen des aktiven Reiters scrollt nach oben (ein Tipp auf die
+    // Statusleiste erreicht den inneren Scrollbereich nicht); in den
+    // Einstellungen führt es von einer Unterseite zur Hauptseite
+    const aktiv = el.dataset.tab === aktiverTab;
+    if (aktiv && !(aktiverTab === "einstellungen" && einstellungenSeite)) {
+      nachOben(true);
+      if (aktiverTab === "uebersicht" || aktiverTab === "wetter") wetterBeiBedarf();
+      return;
+    }
+    if (el.dataset.tab === "einstellungen" && aktiv) einstellungenSeite = null;
     aktiverTab = el.dataset.tab;
     zeichnen();
-    window.scrollTo(0, 0);
+    nachOben();
     if (aktiverTab === "uebersicht" || aktiverTab === "wetter") wetterBeiBedarf();
   },
   "fenster-zu": () => fensterSchliessen(),
@@ -92,14 +100,14 @@ const AKTIONEN = {
   "jahresziel-loeschen": el => jahreszielLoeschen(Number(el.dataset.jahr)),
   "prognose": () => prognoseFenster(),
   "fahrten-ansicht": el => { fahrtenAnsicht = el.dataset.wert; zeichnen(); },
-  "zu-fahrten": el => { aktiverTab = "fahrten"; fahrtenAnsicht = el.dataset.wert; zeichnen(); window.scrollTo(0, 0); },
+  "zu-fahrten": el => { aktiverTab = "fahrten"; fahrtenAnsicht = el.dataset.wert; zeichnen(); nachOben(); },
   "einstellungen-seite": el => {
     aktiverTab = "einstellungen";
     einstellungenSeite = el.dataset.seite || null;
     einstellungenWert = null;
     zeichnen();
     const ziel = el.dataset.anker && document.getElementById(el.dataset.anker);
-    if (ziel) ziel.scrollIntoView(); else window.scrollTo(0, 0);
+    if (ziel) ziel.scrollIntoView(); else nachOben();
   },
   "statistik-monat": el => { statistikMonat = Number(el.dataset.monat); zeichnen(); },
   "statistik-tabelle": () => { statistikTabelleOffen = !statistikTabelleOffen; zeichnen(); },

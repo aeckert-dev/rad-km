@@ -58,5 +58,6 @@ function neuLaden() {
 laden();
 wetterSpeicherLaden();
 zeichnen();
+ansichtVerankernStarten();
 serviceWorkerStarten();
 wetterBeiBedarf();

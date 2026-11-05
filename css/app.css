@@ -70,9 +70,18 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* Seitenaufbau (B3): Die Seite hat genau die Höhe des Bildschirms und scrollt
+   selbst nie. Überschrift, Inhalt und Reiterleiste stehen untereinander; nur der
+   Inhalt (main) scrollt. Die Reiterleiste ist damit nicht fest positioniert
+   (kein position: fixed) und kann nicht mit dem sichtbaren Bereich verrutschen,
+   z. B. nach dem Schließen der Tastatur (WebKit-Fehler 297779). */
+html { -webkit-text-size-adjust: 100%; height: 100%; overscroll-behavior: none; }
 body {
   margin: 0;
+  height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column;
+  overflow: hidden; overscroll-behavior: none;
+  position: relative;
   background: var(--bg);
   color: var(--text);
   font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -80,15 +89,17 @@ body {
 }
 
 header {
-  position: sticky; top: 0; z-index: 5;
+  flex: none;
   background: var(--bg);
-  padding: calc(env(safe-area-inset-top) + 10px) 16px 8px;
+  padding: calc(env(safe-area-inset-top) + 10px) max(16px, calc((100% - 608px) / 2)) 8px;
 }
 header h1 { margin: 0; font-size: 28px; }
 
+/* Der einzige Scrollbereich; der Inhalt bleibt höchstens 640 px breit und mittig */
 main {
-  padding: 0 16px calc(env(safe-area-inset-bottom) + 96px);
-  max-width: 640px; margin: 0 auto;
+  flex: 1 1 auto; min-height: 0;
+  overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 0 max(16px, calc((100% - 608px) / 2)) 24px;
 }
 
 h2 { font-size: 20px; margin: 24px 0 8px; }
@@ -359,9 +370,9 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 dialog .fensterinhalt { padding: 18px 16px 16px; }
 dialog h2 { margin-top: 0; }
 
-/* Untere Navigationsleiste */
+/* Untere Navigationsleiste: letztes Element der Spalte, nicht fest positioniert */
 nav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  flex: none; position: relative; z-index: 10;
   display: flex;
   background: var(--karte);
   border-top: 1px solid var(--linie);
@@ -380,7 +391,7 @@ nav button.aktiv { color: var(--reiter-aktiv); font-weight: 700; }
 
 /* Kurze Bestätigung unten ("Gespeichert"), nach dem Löschen mit "Rückgängig" */
 #toast {
-  position: fixed; left: 50%; transform: translateX(-50%);
+  position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom) + 76px);
   width: max-content; max-width: calc(100% - 32px);
   display: flex; align-items: center; gap: 12px;
