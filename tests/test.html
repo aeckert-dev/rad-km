@@ -76,8 +76,8 @@ const artV8 = (a, typ) => Object.assign({ fensterVon: null, fensterBis: null, gu
 // Die Umwandlung 7 → 8 ergänzt „Eigenleistung“ (Auftrag ohne Intervall)
 const EIGENLEISTUNG = { id: "eigenleistung", name: "Eigenleistung", typ: "auftrag", intervallMonate: null, intervallKm: null, fensterVon: null,
   fensterBis: null, gueltigAbJahr: null, einmalig: false, bauteil: null, zuordnung: null };
-// Auftrag ab Version 8 (ab Version 9 mit terminZeit); aus einem Protokolleintrag bzw. Termin bis Version 7 (Kennungen daraus abgeleitet)
-const auftragV8 = felder => Object.assign({ status: "erledigt", termin: null, terminZeit: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false, notiz: "",
+// Auftrag ab Version 8 (ab Version 9 mit terminZeit, ab Version 10 mit vorlauf und imKalender); aus einem Protokolleintrag bzw. Termin bis Version 7 (Kennungen daraus abgeleitet)
+const auftragV8 = felder => Object.assign({ status: "erledigt", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false, notiz: "",
   positionen: [], ausgeschlossen: [] }, felder);
 const ausProtokoll = (p, positionen = []) => auftragV8({ id: p.id, wartungsartId: p.wartungsartId, datum: p.datum, werkstatt: p.werkstatt || "",
   kmStand: p.kmStand ?? null, kmManuell: p.kmManuell ?? (p.kmStand !== undefined && p.kmStand !== null), notiz: p.notiz || "", positionen });
@@ -199,7 +199,7 @@ async function start() {
     const mit = aend => JSON.stringify(Object.assign(kopie(v3), aend));
     const art = aend => [Object.assign({}, v3.wartungsarten[0], { einmalig: false }, aend)];
     const nurArt = aend => mit({ wartungsarten: art(aend), auftraege: [], maengel: [] });
-    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 10 })), "neueren App-Version");
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 11 })), "neueren App-Version");
     wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 11, fensterBis: 2 })), "Jahreswechsel");
     wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 3, fensterBis: null })), "beide");
     wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 })), "gueltigAbJahr");
@@ -736,7 +736,7 @@ async function start() {
     gleich("Andere JSON-Datei: keine Rad-km-Sicherung", [erg.status, erg.details], ["defekt", ["Die Versionsnummer („version“) fehlt oder ist ungültig."]]);
     erg = auswerten("\u0089PNG\r\n\u001a\n");
     gleich("Bild statt Sicherung: beschädigt bzw. keine Rad-km-Sicherung", erg.status, "defekt");
-    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 10 })));
+    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 11 })));
     gleich("Sicherung einer neueren App-Version wird erkannt", [erg.status, erg.details[0].includes("neueren App-Version")], ["defekt", true]);
     gleich("Datumsbereiche: zusammenhängende Tage, Monats- und Jahreswechsel, andere Jahre, Kürzung",
       [w.datumsBereiche(["2026-10-27", "2026-10-25", "2026-10-26"], HP), w.datumsBereiche(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], HP),
@@ -760,7 +760,7 @@ async function start() {
     abschnitt("14. Oberfläche");
     w.eval("wartungAnsicht = 'aktuell'; aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     const einst = w.document.getElementById("inhalt");
-    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion9"), einst.textContent);
+    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion10"), einst.textContent);
     wahr("Einstellungen: „Jetzt sichern“ auf der Hauptseite, Zeile zur Unterseite Datensicherung",
       einst.querySelector('[data-action="sichern"]') && einst.querySelector('[data-action="einstellungen-seite"][data-seite="sicherung"]'));
     w.eval("einstellungenSeite = 'sicherung'; zeichnen()");
@@ -1100,8 +1100,20 @@ async function start() {
           wind_speed_10m: alle(m, 5), wind_direction_10m: alle(m, 180), wind_gusts_10m: alle(m, 15) });
         Object.assign(s, { precipitation_probability: alle(s, 0), soil_temperature_0cm: alle(s, 8) });
       });
+      return sonneLokal(om);
+    };
+    // Sonnenauf- und -untergang (Release 5c) in der Ortszeit des Testgeräts, damit die Tests in jeder Zeitzone
+    // laufen: ab Sa 24.10. täglich 2 min später auf (07:18) bzw. früher unter (16:56), am Arbeitsort 1 min früher
+    const sonneLokal = om => {
+      om.forEach((o, nr) => {
+        const tage = o.daily.time.map((t, i) => plusTageT("2026-10-24", i));
+        o.daily = { time: tage.map(d => zeit(d, "00:00") / 1000),
+          sunrise: tage.map((d, i) => zeit(d, "07:18") / 1000 + (2 * i - nr) * 60), sunset: tage.map((d, i) => zeit(d, "16:56") / 1000 - (2 * i + nr) * 60) };
+      });
       return om;
     };
+    const plusTageT = (iso, n) => { const [j, m, t] = iso.split("-").map(Number); const d = new Date(j, m - 1, t + n, 12);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
     // Setzt einen Wert für den Zeitraum [von, bis) Ortszeit: Momentwerte zu den Zeitpunkten darin, Mengen
     // (Niederschlag, Böen, Regenwahrscheinlichkeit gelten für den Abschnitt davor) für die Abschnitte darin.
     // ort: 0 = Wohnort, 1 = Arbeitsort, null = beide
@@ -1153,7 +1165,7 @@ async function start() {
     const v3Text = await (await fetch("daten-v3.json", { cache: "no-store" })).text();
     const v3d = JSON.parse(v3Text);
     const pruefeV3 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten (alle Aufträge, Eigenleistung ergänzt), Protokoll und Termine (als Aufträge) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v3d.fahrrad, v3d.vorlagen, [...v3d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG],
@@ -1509,10 +1521,10 @@ async function start() {
     const kurs = w.kursZwischen(MUSTERDORF, BEISPIELSTADT), kursZurueck = w.kursZwischen(BEISPIELSTADT, MUSTERDORF);
     wahr("Richtung Musterdorf → Beispielstadt: Nordost (ca. 51°), zurück Südwest", kurs > 48 && kurs < 55 && Math.abs(kursZurueck - kurs - 180) < 1, kurs + " / " + kursZurueck);
     const proben = (v, r) => Array(4).fill({ v, r });
-    gleich("Gegenwind, Rückenwind, von rechts und von links, schräg von vorn rechts (volle Stärke), schwacher Wind mit Richtung", [
+    gleich("Gegenwind, Rückenwind, von rechts und von links, von schräg vorn rechts (volle Stärke), schwacher Wind mit Richtung", [
       w.windRelativ(proben(20, kurs), kurs).text, w.windRelativ(proben(20, kurs + 180), kurs).text, w.windRelativ(proben(20, kurs + 90), kurs).text,
       w.windRelativ(proben(20, kurs - 90), kurs).text, w.windRelativ(proben(20, kurs + 40), kurs).text, w.windRelativ(proben(8, kurs), kurs).text
-    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "von rechts 20 km/h", "von links 20 km/h", "schräg von vorn rechts 20 km/h", "Gegenwind 8 km/h (schwach)"]);
+    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "von rechts 20 km/h", "von links 20 km/h", "von schräg vorn rechts 20 km/h", "Gegenwind 8 km/h, schwach"]);
     om = aendern(aendern(ruhig(), "wind_speed_10m", D, "05:00", "18:00", 20), "wind_direction_10m", D, "05:00", "18:00", 50);
     ans = await laden(om);
     gleich("Wind aus Nordost: hin Gegenwind, zurück Rückenwind; die Ampel bleibt grün",
@@ -1832,8 +1844,8 @@ async function start() {
     seite = ohneTags(ablageR.innerHTML);
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
-        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
-        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt schräg von hinten rechts 5 km/h (schwach)",
+        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
+        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
       [ablageR.querySelectorAll(".zeitleiste .slot").length, ablageR.querySelectorAll(".zeitleiste .slot.rot").length, ablageR.querySelectorAll(".zeitleiste .slot.beste").length,
@@ -1873,10 +1885,13 @@ async function start() {
     const kleidungJetzt = () => kopie(w.eval("daten.einstellungen.wetter.kleidung"));
     const feld = id => w.document.getElementById(id);
     const fensterInhaltHtml = () => w.document.getElementById("fensterinhalt").innerHTML;
+    const inhaltHtml = () => w.document.getElementById("inhalt").innerHTML;
+    // Feld ändern und verlassen (löst "change" aus)
+    const aendere = (id, v) => { feld(id).value = v; feld(id).dispatchEvent(new w.Event("change", { bubbles: true })); };
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5b, Datenversion 9 (Release 5b)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5b", 9]);
+    gleich("App-Version 5c, Datenversion 10 (Release 5c)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5c", 10]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -1889,7 +1904,7 @@ async function start() {
     // Erwartete Empfehlung einer Fahrt: Text, wie 4b ihn angezeigt hat (im Feld Oberkörper), und ob Regenkleidung galt
     const mitEmpfehlung = (f, text, regen) => f && Object.assign({}, f, { empfehlung: text === null ? null : OK(text), regenkleidung: regen });
     const pruefeV4 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v4d.fahrrad, v4d.vorlagen, [...v4d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v4d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -1947,7 +1962,7 @@ async function start() {
     const v5Text = await (await fetch("daten-v5.json", { cache: "no-store" })).text();
     const v5d = JSON.parse(v5Text);
     const pruefeV5 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v5d.fahrrad, v5d.vorlagen, [...v5d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v5d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -1977,8 +1992,8 @@ async function start() {
       [Object.keys(w5d.rueckmeldungenAuswerten()).sort(), w5d.eval("daten.einstellungen.wetter.kleidung.stufen").map(x => x.id).filter(id => ["kalt", "kuehl", "frost"].includes(id))],
       [["frost", "gibt-es-nicht", "kalt", "kuehl"], []]);
     w5d.kleidungFormular();
-    wahr("Kleidungsregeln: „4 Rückmeldungen zu früheren Stufen“", w5d.document.getElementById("fensterinhalt").textContent.includes("4 Rückmeldungen zu früheren Stufen"),
-      w5d.document.getElementById("fensterinhalt").textContent);
+    wahr("Kleidungsregeln: „4 Rückmeldungen zu früheren Stufen“", w5d.document.getElementById("inhalt").textContent.includes("4 Rückmeldungen zu früheren Stufen"),
+      w5d.document.getElementById("inhalt").textContent);
     w5d.eintragAnsicht("e-tag1");
     const detail5 = w5d.document.getElementById("fensterinhalt").textContent;
     wahr("Detailansicht eines umgewandelten Eintrags: die damals empfohlene Kleidung", detail5.includes("👕 Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal + Regenjacke, Regenhose"), detail5);
@@ -2007,7 +2022,7 @@ async function start() {
     const v6Text = await (await fetch("daten-v6.json", { cache: "no-store" })).text();
     const v6d = JSON.parse(v6Text);
     const pruefeV6 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge (mit Wetter, Empfehlung und Rückmeldung), Wartung, Termine und Mängel erhalten; der Termin der Aufgabe Kette (20.11.) " +
         "kommt in einen geplanten Auftrag der Großen Inspektion (Zeitfenster Oktober–November)",
         [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.auftraege, d.maengel],
@@ -2031,7 +2046,7 @@ async function start() {
     pruefeV6(kopie(w6d.eval("daten")), "Beim Laden");
     gleich("Beim Laden: Version-6-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v6Text);
     const exp6 = w6d.exportInhalt("2026-10-31T19:00:00.000Z");
-    gleich("Umgewandelte Daten: Export als Version 9, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [9, kopie(w6d.eval("daten"))]);
+    gleich("Umgewandelte Daten: Export als Version 10, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [10, kopie(w6d.eval("daten"))]);
     const fr6 = "2026-10-23"; // Freitag, Fahrtag ohne Eintrag
     const fehltAm = minuten => w6d.fehlendeFahrtage(fr6, minuten).includes(fr6);
     const ausFr6 = [fehltAm(23 * 60 + 59), w6d.fehlendeFahrtage("2026-10-24", 0).includes(fr6)];
@@ -2144,15 +2159,19 @@ async function start() {
       ["Kleidung 8 Stufen · Regenzusatz ab 40 % / 60 % · Rückmeldung an · Standard ›", "Ampel-Grenzen Böen 40 / 60 km/h · Niederschlag 0,5 / 5 mm/h · Regen ab 50 % · Standard ›"]);
     w.document.querySelector('#inhalt [data-action="ampel-bearbeiten"]').click();
     const AF = ["gelbRegenWahrscheinlichkeit", "gelbNiederschlag", "rotStarkregen", "gelbBoeen", "rotBoeen", "gelbTemperatur", "glaetteTemperatur"];
-    gleich("Formular mit den aktuellen Werten (Komma)", [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), AF.map(f => feld("ag-" + f).value), feld("ag-rotWarnstufe").value],
+    gleich("Formular mit den aktuellen Werten (Komma)", [ohneTags(w.document.getElementById("seitentitel").innerHTML), AF.map(f => feld("ag-" + f).value), feld("ag-rotWarnstufe").value],
       ["Ampel-Grenzen", ["50", "0,5", "5", "40", "60", "0", "1"], "2"]);
-    feld("ag-rotBoeen").value = "55";
-    feld("ag-gelbNiederschlag").value = "0,3";
-    feld("ag-gelbTemperatur").value = "-1";
-    feld("ag-rotWarnstufe").value = "3";
-    w.document.querySelector('#fensterinhalt [data-action="ampel-speichern"]').click();
+    gleich("Ampel-Grenzen als Unterseite (kein Fenster) mit „‹ Einstellungen“, ohne „Speichern“",
+      [w.eval("fenster.open"), w.eval("einstellungenSeite"), w.document.querySelector("#inhalt .zurueck").textContent, !!w.document.querySelector('#inhalt [data-action="ampel-speichern"]')],
+      [false, "ampel", "‹ Einstellungen", false]);
+    aendere("ag-rotBoeen", "55");
+    gleich("Ein Feld verlassen: sofort gespeichert", [w.eval("daten.einstellungen.wetter.ampel.rotBoeen"), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel.rotBoeen, toast()[0]],
+      [55, 55, "Ampel-Grenzen gespeichert"]);
+    aendere("ag-gelbNiederschlag", "0,3");
+    aendere("ag-gelbTemperatur", "-1");
+    aendere("ag-rotWarnstufe", "3");
     const meineAmpel = Object.assign(kopie(STD_WETTER.ampel), { rotBoeen: 55, gelbNiederschlag: 0.3, gelbTemperatur: -1, rotWarnstufe: 3 });
-    gleich("Gespeichert (auch im Speicher), Fenster zu", [kopie(w.eval("daten.einstellungen.wetter.ampel")), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel,
+    gleich("Alle Felder gespeichert (auch im Speicher), kein Fenster", [kopie(w.eval("daten.einstellungen.wetter.ampel")), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel,
       toast()[0], w.eval("fenster.open")], [meineAmpel, meineAmpel, "Ampel-Grenzen gespeichert", false]);
     gleich("Kurzfassung ohne „Standard“", w.ampelKurztext(meineAmpel), "Böen 40 / 55 km/h · Niederschlag 0,3 / 5 mm/h · Regen ab 50 %");
     gleich("Neue Grenzen wirken: Böen 56 rot, −0,5 °C grün, −1,5 °C gelb, 0,4 mm/h gelb, Warnung Stufe 2 nur noch gelb", [
@@ -2161,20 +2180,19 @@ async function start() {
     const ampelFehler = (f, v) => {
       alerts.length = 0;
       w.ampelFormular();
-      feld("ag-" + f).value = v;
-      w.ampelSpeichern();
-      return [alerts.length, JSON.stringify(w.eval("daten.einstellungen.wetter.ampel")) === JSON.stringify(meineAmpel)];
+      aendere("ag-" + f, v);
+      return [alerts.length, JSON.stringify(w.eval("daten.einstellungen.wetter.ampel")) === JSON.stringify(meineAmpel), feld("ag-" + f).value === w.zahlFeld(meineAmpel[f])];
     };
-    gleich("Ungültig (Gelb nicht unter Rot, kein Wert, Text, über 100 %): Hinweis, nichts gespeichert",
+    gleich("Ungültig (Gelb nicht unter Rot, kein Wert, Text, über 100 %): Hinweis, nichts gespeichert, das Feld zeigt wieder den gespeicherten Wert",
       [ampelFehler("gelbBoeen", "55"), ampelFehler("gelbNiederschlag", "5"), ampelFehler("rotBoeen", ""), ampelFehler("gelbTemperatur", "kalt"),
-        ampelFehler("gelbRegenWahrscheinlichkeit", "120")], Array(5).fill([1, true]));
-    w.fensterSchliessen();
+        ampelFehler("gelbRegenWahrscheinlichkeit", "120")], Array(5).fill([1, true, true]));
     frageAntwort = false;
     await w.ampelStandard();
     gleich("„Auf Standard zurücksetzen“ mit Rückfrage: „Abbrechen“ ändert nichts", kopie(w.eval("daten.einstellungen.wetter.ampel")), meineAmpel);
     frageAntwort = true;
     await w.ampelStandard();
-    gleich("„Auf Standard zurücksetzen“: Standardwerte, Meldung mit „Rückgängig“", [kopie(w.eval("daten.einstellungen.wetter.ampel")), toast()], [STD_WETTER.ampel, ["Ampel-Grenzen zurückgesetzt", true]]);
+    gleich("„Auf Standard zurücksetzen“: Standardwerte (auch in den Feldern der Seite), Meldung mit „Rückgängig“",
+      [kopie(w.eval("daten.einstellungen.wetter.ampel")), toast(), feld("ag-rotBoeen").value, w.eval("einstellungenSeite")], [STD_WETTER.ampel, ["Ampel-Grenzen zurückgesetzt", true], "60", "ampel"]);
     w.rueckgaengig();
     gleich("… mit „Rückgängig“ wieder die eigenen Grenzen", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel, meineAmpel);
 
@@ -2186,26 +2204,30 @@ async function start() {
     w.speichern();
     alerts.length = 0;
     w.kleidungFormular();
-    const listeZeilen = aktion => [...w.document.querySelectorAll('#fensterinhalt [data-action="' + aktion + '"]')].map(b => ohneTags(b.innerHTML));
+    gleich("Kleidung als Unterseite (kein Fenster) mit „‹ Einstellungen“", [w.eval("fenster.open"), w.eval("einstellungenSeite"), w.document.getElementById("seitentitel").textContent,
+      w.document.querySelector("#inhalt .zurueck").textContent], [false, "kleidung", "Kleidung", "‹ Einstellungen"]);
+    const listeZeilen = aktion => [...w.document.querySelectorAll('#inhalt [data-action="' + aktion + '"]')].map(b => ohneTags(b.innerHTML));
     gleich("Liste: Schalter „Rückmeldung zur Kleidung“ an, 8 Stufen von warm nach kalt mit Bereichen und Auswertung, Regenzusatz ab 40 / 60 %",
       [feld("k-rueckmeldung").checked, listeZeilen("kleidung-stufe").length, listeZeilen("kleidung-stufe")[0], listeZeilen("kleidung-stufe")[3],
         listeZeilen("kleidung-stufe")[7].slice(0, 28), listeZeilen("kleidung-regen")],
       [true, 8, "ab 20 °C Oberkörper T-Shirt · Beine kurze Hose · Füße Sneakersocken Rückmeldungen: noch keine ›",
-        "7–11 °C Kopf leichte Mütze · Hände Unterziehhandschuhe · Oberkörper 2 T-Shirts, warmer Pullover · Beine Hose · Füße Socken · bei Regen Hände Übergangshandschuhe Rückmeldungen: noch keine ›",
+        "7 bis 11 °C Kopf leichte Mütze · Hände Unterziehhandschuhe · Oberkörper 2 T-Shirts, warmer Pullover · Beine Hose · Füße Socken · bei Regen Hände Übergangshandschuhe Rückmeldungen: noch keine ›",
         "unter −6 °C Kopf warme Mütze", ["ab 40 % Oberkörper Regenjacke ›", "ab 60 % Beine Regenhose · Füße Gamaschen ›"]]);
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe"][data-i="3"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="3"]').click();
     const BF = ["kopf", "hals", "haende", "oberkoerper", "beine", "fuesse"];
+    gleich("Stufe als eigene Unterseite (kein Fenster) mit „‹ Kleidung“", [w.eval("fenster.open"), w.eval("einstellungenSeite"), w.eval("einstellungenWert"),
+      w.document.querySelector("#inhalt .zurueck").textContent, w.document.querySelector("#inhalt .zurueck").dataset.seite], [false, "kleidung-stufe", 3, "‹ Kleidung", "kleidung"]);
     gleich("Formular einer Stufe: Grenze, alle sechs Bereiche (auch leere), „Hände bei Regen“",
-      [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value), feld("ks-haende-regen").value],
-      ["Stufe 7–11 °C", "7", ["leichte Mütze", "", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"], "Übergangshandschuhe"]);
+      [ohneTags(w.document.getElementById("seitentitel").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value), feld("ks-haende-regen").value],
+      ["Stufe 7 bis 11 °C", "7", ["leichte Mütze", "", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"], "Übergangshandschuhe"]);
     feld("ks-ab").value = "8";
     feld("ks-hals").value = " Tuch ";
     feld("ks-oberkoerper").value = "2 T-Shirts,  warmer Pullover , ";
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-speichern"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe-speichern"]').click();
     gleich("Speichern: Stufe gespeichert (auch im Speicher), zurück zur Liste", [kleidungJetzt().stufen[3], JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung.stufen[3].ab,
-      toast()[0], w.eval("fenster.open"), ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML)],
+      toast()[0], w.eval("einstellungenSeite"), ohneTags(w.document.getElementById("seitentitel").innerHTML)],
       [{ id: "stufe4", ab: 8, bereiche: B("leichte Mütze", "Tuch", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"), haendeBeiRegen: "Übergangshandschuhe" }, 8,
-        "Stufe gespeichert", true, "Kleidung"]);
+        "Stufe gespeichert", "kleidung", "Kleidung"]);
     gleich("Wirkt sofort: gefühlt 8 °C → geänderte Stufe, 7,9 °C → nächstkältere", [w.kleidungFuer(8, null).bereiche.hals, w.kleidungFuer(7.9, null).stufe.id], ["Tuch", "stufe5"]);
     w.kleidungStufeFormular(3);
     feld("ks-ab").value = "16";
@@ -2215,8 +2237,8 @@ async function start() {
     wetterDaten();
     w.speichern();
     w.kleidungFormular();
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-neu"]').click();
-    gleich("„+ Stufe“: leeres Formular, Grenze 3 °C unter der kältesten", [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value)],
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe-neu"]').click();
+    gleich("„+ Stufe“: leeres Formular, Grenze 3 °C unter der kältesten", [ohneTags(w.document.getElementById("seitentitel").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value)],
       ["Neue Stufe", "-9", ["", "", "", "", "", ""]]);
     const stufeFehler = (ab, fuesse) => { alerts.length = 0; w.kleidungStufeFormular(null); feld("ks-ab").value = ab; feld("ks-fuesse").value = fuesse; w.kleidungStufeSpeichern(""); return alerts.slice(-1)[0]; };
     const vorStufenFehler = JSON.stringify(kleidungJetzt());
@@ -2233,15 +2255,15 @@ async function start() {
       kj.stufen[7].id.startsWith("s"), new Set(kj.stufen.map(x => x.id)).size, kj.stufen[8].id, kj.stufen[8].ab, w.kleidungFuer(-10, null).bereiche.fuesse, toast()[0]],
       [9, -10, "Thermosocken", null, true, 9, "stufe8", null, "Thermosocken", "Stufe hinzugefügt"]);
     w.kleidungStufeFormular(8);
-    gleich("Letzte Stufe: ohne Grenze („darunter“)", [!!feld("ks-ab"), ohneTags(fensterInhaltHtml()).includes("Die letzte Stufe gilt unterhalb der vorigen (unter −10 °C).")], [false, true]);
+    gleich("Letzte Stufe: ohne Grenze („darunter“)", [!!feld("ks-ab"), ohneTags(inhaltHtml()).includes("Die letzte Stufe gilt unterhalb der vorigen (unter −10 °C).")], [false, true]);
     feld("ks-kopf").value = "Sturmhaube";
     w.kleidungStufeSpeichern("8");
     gleich("Letzte Stufe ändern: bleibt die letzte", [kleidungJetzt().stufen[8].bereiche.kopf, kleidungJetzt().stufen[8].ab], ["Sturmhaube", null]);
     w.kleidungStufeFormular(0);
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-weg"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe-weg"]').click();
     await warten(0);
     kj = kleidungJetzt();
-    gleich("Stufe entfernen (mit Rückfrage und „Rückgängig“), zurück zur Liste", [kj.stufen.length, w.stufeBereich(kj, 0), toast(), ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML)],
+    gleich("Stufe entfernen (mit Rückfrage und „Rückgängig“), zurück zur Liste", [kj.stufen.length, w.stufeBereich(kj, 0), toast(), ohneTags(w.document.getElementById("seitentitel").innerHTML)],
       [8, "ab 15 °C", ["Stufe entfernt", true], "Kleidung"]);
     w.rueckgaengig();
     gleich("… „Rückgängig“ holt sie zurück", kleidungJetzt().stufen.length, 9);
@@ -2249,20 +2271,20 @@ async function start() {
     await w.kleidungStufeWeg(8);
     kj = kleidungJetzt();
     gleich("Die letzte Stufe entfernen: die Stufe davor gilt dann darunter", [fragen.slice(-1)[0], kj.stufen.length, kj.stufen[7].id, kj.stufen[7].ab],
-      ["Stufe „unter −10 °C“ entfernen? Die Stufe −10–−6 °C gilt dann darunter.", 8, kj.stufen[7].id, null]);
+      ["Stufe „unter −10 °C“ entfernen? Die Stufe −10 bis −6 °C gilt dann darunter.", 8, kj.stufen[7].id, null]);
     while (kleidungJetzt().stufen.length > 2) await w.kleidungStufeWeg(0);
     await w.kleidungStufeWeg(0);
     w.kleidungStufeFormular(0);
-    gleich("Mindestens zwei Stufen bleiben (kein „Stufe entfernen“ mehr)", [kleidungJetzt().stufen.length, !!w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-weg"]')], [2, false]);
+    gleich("Mindestens zwei Stufen bleiben (kein „Stufe entfernen“ mehr)", [kleidungJetzt().stufen.length, !!w.document.querySelector('#inhalt [data-action="kleidung-stufe-weg"]')], [2, false]);
     wetterDaten();
     w.speichern();
     w.kleidungFormular();
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-regen"][data-i="1"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-regen"][data-i="1"]').click();
     gleich("Formular eines Regenzusatzes: Schwelle und alle sechs Bereiche", [feld("kr-ab").value, BF.map(b => feld("kr-" + b).value)], ["60", ["", "", "", "", "Regenhose", "Gamaschen"]]);
     feld("kr-fuesse").value = "Gamaschen, Überschuhe";
     w.kleidungRegenSpeichern("1");
     gleich("Regenzusatz ändern", [kleidungJetzt().regen[1].bereiche.fuesse, w.kleidungFuer(8, 70).bereiche.fuesse, toast()[0]], ["Gamaschen, Überschuhe", "Socken, Gamaschen, Überschuhe", "Regenzusatz gespeichert"]);
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-regen-neu"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-regen-neu"]').click();
     gleich("„+ Regenzusatz“: 10 % über dem letzten, Bereiche leer", [feld("kr-ab").value, BF.map(b => feld("kr-" + b).value)], ["70", ["", "", "", "", "", ""]]);
     const regenFehler = (ab, kopf) => { alerts.length = 0; w.kleidungRegenFormular(null); feld("kr-ab").value = ab; feld("kr-kopf").value = kopf; w.kleidungRegenSpeichern(""); return alerts.slice(-1)[0]; };
     gleich("Ungültig (kein Regenzeug, über 100 %, doppelte Schwelle): Hinweis, nichts gespeichert",
@@ -2288,7 +2310,8 @@ async function start() {
     w.rueckgaengig();
     gleich("… mit „Rückgängig“ wieder die eigenen Regeln", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung, meineKleidung);
     gleich("Kurzfassung für eigene Regeln", w.kleidungKurztext(meineKleidung), "8 Stufen · Regenzusatz ab 30 % / 60 % · Rückmeldung aus");
-    w.fensterSchliessen();
+    w.document.querySelector("#inhalt .zurueck").click();
+    gleich("„‹ Einstellungen“ führt zurück zur Hauptseite", [w.eval("einstellungenSeite"), w.document.getElementById("seitentitel").textContent], [null, "Einstellungen"]);
 
     // -------------------------------------------------------------
     // 40. Rückmeldung zur Kleidung
@@ -2307,14 +2330,14 @@ async function start() {
     w.rueckmeldungGeben("r1", "hin", "zu-kalt");
     gleich("„Zu kalt“: gespeichert, Grenzen unverändert, Meldung mit Auswertung der Stufe und „Rückgängig“", [eintrag("r1").wetter.hin.rueckmeldung, grenzen(kleidungJetzt()),
       JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.find(e => e.id === "r1").wetter.hin.rueckmeldung, toast()],
-      ["zu-kalt", STD_GRENZEN, "zu-kalt", ["Rückmeldung „zu kalt“ gespeichert · Stufe 7–11 °C: 1× zu kalt (bei Regen: 1× zu kalt)", true]]);
+      ["zu-kalt", STD_GRENZEN, "zu-kalt", ["Rückmeldung „zu kalt“ gespeichert · Stufe 7 bis 11 °C: 1× zu kalt (bei Regen: 1× zu kalt)", true]]);
     gleich("Keine Wirkung auf die Empfehlung (gefühlt 7,5 °C bleibt Stufe ab 7 °C)", kf(7.5, null).stufe.id, "stufe4");
     w.rueckgaengig();
     gleich("„Rückgängig“: Rückmeldung wie vorher", localStorage.getItem(TEST_SCHLUESSEL), vorRm);
     w.rueckmeldungGeben("r1", "hin", "zu-kalt");
     w.rueckmeldungGeben("r1", "hin", "passte");
     gleich("Rückmeldung ändern („zu kalt“ → „passte“): zählt nur noch als „passte“", [eintrag("r1").wetter.hin.rueckmeldung, w.auswertungText(w.rueckmeldungenAuswerten().stufe4), toast()[0]],
-      ["passte", "1× passte (bei Regen: 1× passte)", "Rückmeldung „passte“ gespeichert · Stufe 7–11 °C: 1× passte (bei Regen: 1× passte)"]);
+      ["passte", "1× passte (bei Regen: 1× passte)", "Rückmeldung „passte“ gespeichert · Stufe 7 bis 11 °C: 1× passte (bei Regen: 1× passte)"]);
     const vorGleich = datenText();
     w.rueckmeldungGeben("r1", "hin", "passte");
     w.rueckmeldungGeben("r1", "hin", "super");
@@ -2327,12 +2350,12 @@ async function start() {
       [w.auswertungText(aus.stufe4), w.auswertungText(aus.stufe5), w.auswertungText(aus.stufe1), aus.weg.anzahl, toast()[0], grenzen(kleidungJetzt())],
       ["1× zu kalt, 1× passte (bei Regen: 1× passte)", "1× passte", "noch keine", 1, "Rückmeldung „zu kalt“ gespeichert", STD_GRENZEN]);
     w.kleidungFormular();
-    let detail = ohneTags(fensterInhaltHtml());
+    let detail = ohneTags(inhaltHtml());
     wahr("Kleidungsregeln: Auswertung je Stufe und „1 Rückmeldung zu früheren Stufen“",
-      detail.includes("7–11 °C Kopf leichte Mütze") && detail.includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)") &&
-      detail.includes("3–7 °C") && detail.includes("Rückmeldungen: 1× passte") && detail.includes("1 Rückmeldung zu früheren Stufen"), detail);
+      detail.includes("7 bis 11 °C Kopf leichte Mütze") && detail.includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)") &&
+      detail.includes("3 bis 7 °C") && detail.includes("Rückmeldungen: 1× passte") && detail.includes("1 Rückmeldung zu früheren Stufen"), detail);
     w.kleidungStufeFormular(3);
-    wahr("Formular der Stufe zeigt ihre Auswertung", ohneTags(fensterInhaltHtml()).includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)"), ohneTags(fensterInhaltHtml()));
+    wahr("Formular der Stufe zeigt ihre Auswertung", ohneTags(inhaltHtml()).includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)"), ohneTags(inhaltHtml()));
     rmDaten();
     w.eintragAnsicht("r4");
     detail = ohneTags(fensterInhaltHtml());
@@ -2607,7 +2630,7 @@ async function start() {
     ablageB.innerHTML = w.bildWetter(ABEND);
     rk = rueckKarte();
     wahr("Gelb wegen Böen: Böen als Grund in der Ampelzeile und in der Zeile zum Wind, nicht bei den Werten",
-      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
+      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
 
@@ -2718,10 +2741,10 @@ async function start() {
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke: von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: von rechts 20 km/h"]]]);
     ablageB.innerHTML = w.bildWetter(ABEND);
-    wahr("Reiter Wetter: Wind je Teilstrecke unter der Zeile 🧭 (Hin- und Rückfahrt; seit 5a Name und Wind zweizeilig)",
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke von links 20 km/h Ecke → Beispielstadt Gegenwind 20 km/h") &&
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke Rückenwind 20 km/h Ecke → Musterdorf von rechts 20 km/h"),
-      ohneTags(ablageB.innerHTML));
+    gleich("Reiter Wetter: Wind je Teilstrecke unter der Zeile 🧭 (Hin- und Rückfahrt; seit 5c Name und Pfeil mit Beschriftung)",
+      [...ablageB.querySelectorAll(".wind-teile")].map(t => [ohneTags(t.previousElementSibling.innerHTML), [...t.children].map(z => z.getAttribute("aria-label") || ohneTags(z.innerHTML))]), [
+        ["🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke", "von links 20 km/h", "Ecke → Beispielstadt", "Gegenwind 20 km/h"]],
+        ["🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke", "Rückenwind 20 km/h", "Ecke → Musterdorf", "von rechts 20 km/h"]]]);
     om = drei(ruhig());
     aendern(om, "apparent_temperature", D, "06:00", "07:00", 2, 1);
     aendern(om, "precipitation_probability", D, "06:00", "07:00", 70, 1);
@@ -2910,7 +2933,7 @@ async function start() {
         "Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00"]);
     seite = seiteBei(zeit(SA, "10:07"));
     wahr("Reiter: Karte „Jetzt“ mit Ampel, Werten (Temperatur, gefühlt, Regen), Kleidung, Wind mit Böen und Abfahrtsfenster",
-      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
+      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 🌇 Sonnenuntergang 16:42 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
         "Hände Übergangshandschuhe ☔ Oberkörper T-Shirt, warmer Pullover, Regenjacke ☔ Beine Hose, Regenhose ☔ Füße Socken, Gamaschen ☔") &&
         seite.includes("🧭 Wind 20 km/h aus West, Böen bis 15 km/h 10:00 11:00 12:00 🕒 Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00") &&
         seite.includes("Amtliche Warnungen") && seite.includes("Stand: Vorhersage") && seite.includes("Aktualisieren") && seite.includes("Vorhersage: Open-Meteo.com"), seite);
@@ -3094,27 +3117,27 @@ async function start() {
     const abschnittBei = (r, kurs = 0) => w.windRelativ(eine(20, r), kurs).abschnitt;
     const windGrenzen = [0, 22.4, 22.5, 22.6, 67.4, 67.5, 67.6, 112.4, 112.5, 112.6, 157.4, 157.5, 157.6, 180];
     gleich("Rechts (Fahrtrichtung Nord): je Grenze knapp davor, genau darauf und knapp dahinter; die Grenze zählt zum Abschnitt weiter vorn (ungünstiger)",
-      windGrenzen.map(r => r + "° " + abschnittBei(r)), ["0° Gegenwind", "22.4° Gegenwind", "22.5° Gegenwind", "22.6° schräg von vorn rechts",
-        "67.4° schräg von vorn rechts", "67.5° schräg von vorn rechts", "67.6° von rechts", "112.4° von rechts", "112.5° von rechts", "112.6° schräg von hinten rechts",
-        "157.4° schräg von hinten rechts", "157.5° schräg von hinten rechts", "157.6° Rückenwind", "180° Rückenwind"]);
+      windGrenzen.map(r => r + "° " + abschnittBei(r)), ["0° Gegenwind", "22.4° Gegenwind", "22.5° Gegenwind", "22.6° von schräg vorn rechts",
+        "67.4° von schräg vorn rechts", "67.5° von schräg vorn rechts", "67.6° von rechts", "112.4° von rechts", "112.5° von rechts", "112.6° von schräg hinten rechts",
+        "157.4° von schräg hinten rechts", "157.5° von schräg hinten rechts", "157.6° Rückenwind", "180° Rückenwind"]);
     gleich("Links ebenso (−22,5° = 337,5° usw.)",
-      windGrenzen.map(r => -r).map(r => r + "° " + abschnittBei((r + 360) % 360)), ["0° Gegenwind", "-22.4° Gegenwind", "-22.5° Gegenwind", "-22.6° schräg von vorn links",
-        "-67.4° schräg von vorn links", "-67.5° schräg von vorn links", "-67.6° von links", "-112.4° von links", "-112.5° von links", "-112.6° schräg von hinten links",
-        "-157.4° schräg von hinten links", "-157.5° schräg von hinten links", "-157.6° Rückenwind", "-180° Rückenwind"]);
+      windGrenzen.map(r => -r).map(r => r + "° " + abschnittBei((r + 360) % 360)), ["0° Gegenwind", "-22.4° Gegenwind", "-22.5° Gegenwind", "-22.6° von schräg vorn links",
+        "-67.4° von schräg vorn links", "-67.5° von schräg vorn links", "-67.6° von links", "-112.4° von links", "-112.5° von links", "-112.6° von schräg hinten links",
+        "-157.4° von schräg hinten links", "-157.5° von schräg hinten links", "-157.6° Rückenwind", "-180° Rückenwind"]);
     gleich("Über Nord hinweg (Fahrtrichtung 350° bzw. 10°) und bei einer echten Fahrtrichtung (Musterdorf → Beispielstadt, ca. 51,3°)",
       [abschnittBei(12.5, 350), abschnittBei(12.6, 350), abschnittBei(347.5, 10), abschnittBei(347.4, 10), abschnittBei(0, 90), abschnittBei(90, 270),
         abschnittBei(kurs + 22.5, kurs), abschnittBei(kurs + 22.6, kurs), abschnittBei(kurs + 360 - 157.5, kurs), abschnittBei(kurs + 360 - 157.6, kurs)],
-      ["Gegenwind", "schräg von vorn rechts", "Gegenwind", "schräg von vorn links", "von links", "Rückenwind",
-        "Gegenwind", "schräg von vorn rechts", "schräg von hinten links", "Rückenwind"]);
+      ["Gegenwind", "von schräg vorn rechts", "Gegenwind", "von schräg vorn links", "von links", "Rückenwind",
+        "Gegenwind", "von schräg vorn rechts", "von schräg hinten links", "Rückenwind"]);
     gleich("Mehrere Werte: Richtung aus dem Mittel der Windvektoren, Stärke als Mittel der Geschwindigkeiten (volle Stärke, nicht der Anteil)",
       [w.windRelativ([{ v: 10, r: 80 }, { v: 30, r: 100 }], 0).text, w.windRelativ([{ v: 20, r: 350 }, { v: 20, r: 30 }], 0).text, w.windRelativ([], 0)],
       ["von rechts 20 km/h", "Gegenwind 20 km/h", null]);
     gleich("Schwacher Wind mit Himmelsrichtung, relativer Richtung (Fahrt nach Südwest bzw. Nordost) und „(schwach)“; Böen immer dabei",
       [w.windAllgemein(eine(4, 225), 12).text, w.windRelativ(eine(4, 225), 225).text, w.windRelativ(eine(4, 225), 45).text, w.windAllgemein(eine(4, 225), 12).schwach],
-      ["Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h", "Gegenwind 4 km/h (schwach)", "Rückenwind 4 km/h (schwach)", true]);
+      ["Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h", "Gegenwind 4 km/h, schwach", "Rückenwind 4 km/h, schwach", true]);
     gleich("Der angezeigte (gerundete) Wert entscheidet: 9,4 → 9 km/h (schwach), 9,5 → 10 km/h ohne Zusatz",
       [w.windAllgemein(eine(9.4, 180), 20).text, w.windAllgemein(eine(9.5, 180), 20).text, w.windRelativ(eine(9.4, 180), 0).text, w.windRelativ(eine(9.6, 180), 0).text],
-      ["Wind 9 km/h aus Süd (schwach), Böen bis 20 km/h", "Wind 10 km/h aus Süd, Böen bis 20 km/h", "Rückenwind 9 km/h (schwach)", "Rückenwind 10 km/h"]);
+      ["Wind 9 km/h aus Süd (schwach), Böen bis 20 km/h", "Wind 10 km/h aus Süd, Böen bis 20 km/h", "Rückenwind 9 km/h, schwach", "Rückenwind 10 km/h"]);
     gleich("Windstill bei gerundet 0 km/h (ohne Richtung); 0,5 km/h ist schon 1 km/h",
       [w.windAllgemein(eine(0.4, 90), 5).text, w.windRelativ(eine(0.4, 90), 0).text, w.windRelativ(eine(0.4, 90), 0).abschnitt, w.windAllgemein(eine(0.5, 90), 5).text],
       ["Windstill, Böen bis 5 km/h", "windstill", null, "Wind 1 km/h aus Ost (schwach), Böen bis 5 km/h"]);
@@ -3126,7 +3149,9 @@ async function start() {
       const d = w.document.createElement("div");
       d.innerHTML = w.bildWetter(ABEND);
       return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ({ titel: ohneTags(k.querySelector("h3").innerHTML), text: ohneTags(k.innerHTML),
-        teile: [...k.querySelectorAll(".wind-teile > .wind-teil")].map(z => ohneTags(z.querySelector(".klein").innerHTML) + ": " + ohneTags(z.querySelector(".wind-text").innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
+        // je Teilstrecke: Name und Beschriftung des Pfeils (aria-label) bzw. „windstill“
+        teile: [...k.querySelectorAll(".wind-teile > .wind-name")].map(z => ohneTags(z.innerHTML) + ": " +
+          (z.nextElementSibling.getAttribute("aria-label") || ohneTags(z.nextElementSibling.innerHTML))), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
     };
     const windVorhersage = (jeOrt, richtung, boeen) => {
       const om = drei(ruhig());
@@ -3140,30 +3165,27 @@ async function start() {
     let windK = windKarten();
     gleich("Hinfahrt: zuerst Wind mit Himmelsrichtung und Böen, darunter je Teilstrecke (Ost, dann Nord) mit der Stärke an ihren Enden",
       [windK[0].titel, windK[0].zeilen, windK[0].teile],
-      ["Hinfahrt 06:00–07:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Musterdorf → Ecke: schräg von hinten rechts 16 km/h", "Ecke → Beispielstadt: schräg von hinten links 14 km/h"]]);
+      ["Hinfahrt 06:00–07:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Musterdorf → Ecke: von schräg hinten rechts 16 km/h", "Ecke → Beispielstadt: von schräg hinten links 14 km/h"]]);
     gleich("Rückfahrt: umgekehrte Reihenfolge und Richtung",
       [windK[1].titel, windK[1].zeilen, windK[1].teile],
-      ["Rückfahrt 16:00–17:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Beispielstadt → Ecke: schräg von vorn rechts 14 km/h", "Ecke → Musterdorf: schräg von vorn links 16 km/h"]]);
+      ["Rückfahrt 16:00–17:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Beispielstadt → Ecke: von schräg vorn rechts 14 km/h", "Ecke → Musterdorf: von schräg vorn links 16 km/h"]]);
     wahr("Die frühere Zusammenfassung (Gegen-/Seitenwind gewichtet) und „zählt nicht“ stehen nicht mehr in den Karten; Böen nicht bei den Werten",
       windK.every(k => !/Seitenwind|wechselnd|zählt nicht|mm · Böen/.test(k.text) && (k.text.match(/Böen/g) || []).length === 1), windK.map(k => k.text).join("\n"));
     const ablage51 = w.document.createElement("div");
     ablage51.innerHTML = w.bildWetter(ABEND);
     const teileStil = ablage51.querySelector(".wind-teile");
     w.document.body.appendChild(ablage51);
-    const stil = w.getComputedStyle(ablage51.querySelector(".wind-teile"));
-    gleich("Teilstrecken eingerückt, je Teilstrecke ein eigener Block",
-      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, teileStil.children.length, [...teileStil.children].every(z => z.classList.contains("wind-teil"))],
-      [false, true, 2, true]);
-    // W15 (Release 5a): je Teilstrecke zweizeilig, Name klein, darunter eingerückt der Wind in normaler Schrift
-    const teil1 = teileStil.children[0], name1 = teil1.children[0], wind1 = teil1.children[1];
-    const schrift = el => w.getComputedStyle(el).fontSize, links = el => el.getBoundingClientRect().left;
-    gleich("W15: zwei Zeilen je Teilstrecke: Name der Teilstrecke klein, darunter die Windangabe",
-      [teil1.children.length, name1.className, name1.textContent, wind1.textContent], [2, "klein", "Musterdorf → Ecke", "schräg von hinten rechts 16 km/h"]);
-    gleich("W15: Windangabe in normaler Schrift (wie die Karte), größer als der Name, unter dem Namen und weiter eingerückt",
-      [schrift(wind1) === schrift(ablage51.querySelector(".karte")), parseFloat(schrift(wind1)) > parseFloat(schrift(name1)),
-        wind1.getBoundingClientRect().top >= name1.getBoundingClientRect().bottom - 1, links(wind1) + parseFloat(w.getComputedStyle(wind1).paddingLeft) > links(name1),
-        links(name1) > links(teileStil.previousElementSibling)],
-      [true, true, true, true, true]);
+    const stil = w.getComputedStyle(teileStil);
+    // B8/B1 (Release 5c): je Teilstrecke eine Zeile mit Name und Pfeil, nicht eingerückt
+    const namen = [...teileStil.querySelectorAll(".wind-name")], pfeile = [...teileStil.querySelectorAll("svg.wind-pfeil")];
+    const links = el => el.getBoundingClientRect().left;
+    gleich("B1: Teilstrecken nicht eingerückt (Name beginnt bündig mit der Zeile 🧭), Raster mit zwei Spalten",
+      [parseFloat(stil.paddingLeft), Math.abs(links(namen[0]) - links(teileStil.previousElementSibling)) < 1, stil.display, namen.length, pfeile.length],
+      [0, true, "grid", 2, 2]);
+    const r0 = namen[0].getBoundingClientRect(), p0 = pfeile[0].getBoundingClientRect(), p1 = pfeile[1].getBoundingClientRect();
+    gleich("B8: je Zeile hinter dem Namen nur ein Pfeil (ohne Text), die Pfeile stehen untereinander, 24 × 24 px",
+      [p0.left >= r0.right, Math.abs(p0.top + p0.height / 2 - (r0.top + r0.height / 2)) < 4, Math.abs(p0.left - p1.left) < 1, p0.width, p0.height, ohneTags(pfeile[0].outerHTML).trim()],
+      [true, true, true, 24, 24, ""]);
     ablage51.remove();
 
     // Schwacher Wind, die erste Teilstrecke zählt nicht
@@ -3172,8 +3194,8 @@ async function start() {
     windK = windKarten();
     gleich("Schwacher Wind: Himmelsrichtung und relative Richtung mit „(schwach)“; die ausgeschlossene Teilstrecke wird nicht erwähnt",
       windK.map(k => [k.zeilen, k.teile, k.text.includes("Musterdorf →") || k.text.includes("→ Musterdorf")]), [
-        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Ecke → Beispielstadt: schräg von hinten links 4 km/h (schwach)"], false],
-        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Beispielstadt → Ecke: schräg von vorn rechts 4 km/h (schwach)"], false]]);
+        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Ecke → Beispielstadt: von schräg hinten links 4 km/h, schwach"], false],
+        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Beispielstadt → Ecke: von schräg vorn rechts 4 km/h, schwach"], false]]);
     wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [false, false] });
     await laden(windVorhersage([4, 4, 4], 225, 12));
     gleich("Keine Teilstrecke zählt: nur die erste Zeile", windKarten().map(k => [k.zeilen, k.teile]),
@@ -3279,7 +3301,7 @@ async function start() {
         positionen: [pos("pos-termin-reifen-hinten", "aufgabe", "reifen-hinten", "offen")] })
     ];
     const pruefeV7 = (d, wo) => {
-      gleich(wo + ": version = 9, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [9, false, false]);
+      gleich(wo + ": version = 10, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [10, false, false]);
       gleichInhalt(wo + ": Fahrrad, Einstellungen (Wetter mit Standardwerten), Vorlagen und Einträge unverändert", [d.fahrrad, d.vorlagen, d.eintraege, d.einstellungen.jahresziele],
         [v7d.fahrrad, v7d.vorlagen, v7d.eintraege, v7d.einstellungen.jahresziele]);
       gleich(wo + ": Einordnung: Zeitfenster, einmalig, „Inspektion“ oder „Reparatur“ im Namen → Auftrag, sonst Aufgabe (ohne Bauteil, Standard „nächste Inspektion“); Eigenleistung ergänzt",
@@ -3332,10 +3354,10 @@ async function start() {
     wV7.document.getElementById("a-bauteil").value = "Bremse vorn";
     wV7.document.getElementById("a-zuordnung").value = "grosse-inspektion";
     wV7.artSpeichern("bremse");
-    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 9 gespeichert",
+    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 10 gespeichert",
       [wV7.document.querySelector("#fensterinhalt h2").textContent, wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").bauteil,
         wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").zuordnung, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version],
-      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 9]);
+      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 10]);
     wV7.document.querySelector('#fensterinhalt [data-action="fenster-zu"]').click();
     gleich("„Später“: Fenster zu, Hinweis bleibt", [wV7.eval("fenster.open"), inhalt7().textContent.includes("Bitte Wartungsarten prüfen")], [false, true]);
     inhalt7().querySelector('[data-action="pruefung-oeffnen"]').click();
@@ -3345,12 +3367,12 @@ async function start() {
     wV7.frameElement.remove();
     const wV7b = await appLaden();
     wV7b.eval("aktiverTab = 'wartung'; zeichnen()");
-    gleich("Nach erneutem Laden (Daten schon Version 9): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
+    gleich("Nach erneutem Laden (Daten schon Version 10): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
     wV7b.sicherungAuswerten(v7Text, wV7b.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit einer Version-7-Datei merkt nichts vor und ändert nichts", localStorage.getItem(PRUEF), null);
     wV7b.frage = async () => true;
     await wV7b.importDateiGewaehlt(new wV7b.File([v7Text], "alt.json", { type: "application/json" }));
-    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [9, "ja"]);
+    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [10, "ja"]);
     wV7b.frameElement.remove();
     localStorage.removeItem(PRUEF);
 
@@ -3897,8 +3919,8 @@ async function start() {
     w.abschlussSpeichern();
     const nach56 = w.exportInhalt();
     const wieder56 = w.eval("datenEinlesen(" + JSON.stringify(nach56) + ")");
-    gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 9)",
-      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 9]);
+    gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 10)",
+      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 10]);
     gleich("„Sicherung prüfen“: frische Sicherung identisch", w.sicherungAuswerten(nach56, w.eval("daten"), H5).status, "identisch");
     const alt56 = w.sicherungAuswerten(sich56, w.eval("daten"), H5);
     gleich("„Sicherung prüfen“: Sicherung von vorher weicht ab (Auftrag geändert, Mangel geändert)", [alt56.status, alt56.titel, alt56.details],
@@ -4005,9 +4027,9 @@ async function start() {
     const v8Text = await (await fetch("daten-v8.json", { cache: "no-store" })).text();
     const v8d = JSON.parse(v8Text);
     const pruefeV8 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
-      gleichInhalt(wo + ": Aufträge vollständig erhalten, jeweils mit terminZeit = null (ganztägig)", d.auftraege,
-        v8d.auftraege.map(a => Object.assign({}, a, { terminZeit: null })));
+      gleich(wo + ": version = 10", d.version, 10);
+      gleichInhalt(wo + ": Aufträge vollständig erhalten, jeweils mit terminZeit = null (ganztägig), ohne Vorlauf und Kalenderstand", d.auftraege,
+        v8d.auftraege.map(a => Object.assign({}, a, { terminZeit: null, vorlauf: null, imKalender: null })));
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
         [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele],
         [v8d.fahrrad, v8d.vorlagen, v8d.eintraege, v8d.wartungsarten, v8d.maengel, v8d.einstellungen.fahrtage, v8d.einstellungen.jahresziele]);
@@ -4027,7 +4049,7 @@ async function start() {
     let erg8 = wV8.sicherungAuswerten(v8Text, wV8.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit der Version-8-Datei: identisch, Kurzinfo passt", [erg8.status, erg8.kurzinfoPasst], ["identisch", true]);
     const exp8 = wV8.exportInhalt();
-    gleich("Export als Version 9, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [9, kopie(wV8.eval("daten"))]);
+    gleich("Export als Version 10, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [10, kopie(wV8.eval("daten"))]);
     // Prüfung von terminZeit
     const basis9 = JSON.parse(exp8);
     const mitZeit = (id, aend) => JSON.stringify(Object.assign({}, basis9, { auftraege: basis9.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
@@ -4051,8 +4073,8 @@ async function start() {
     gleich("Gespeichert: Termin unverändert, terminZeit 09:30, Werkstatt und Notiz unverändert",
       [auftrag8("a-klein").termin, auftrag8("a-klein").terminZeit, auftrag8("a-klein").werkstatt, auftrag8("a-klein").notiz],
       ["2026-11-20", "09:30", "Rad & Co, Süd; Filiale", "Schlüssel abgeben\nRückruf erbeten"]);
-    gleich("… und im Speicher als Version 9", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
-      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [9, "09:30"]);
+    gleich("… und im Speicher als Version 10", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [10, "09:30"]);
     wV8.eval("aktiverTab = 'wartung'; zeichnen()");
     wahr("Reiter Wartung: „Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)“",
       wV8.document.getElementById("inhalt").textContent.includes("Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)"));
@@ -4085,7 +4107,7 @@ async function start() {
     // -------------------------------------------------------------
     // 60. Termin in den Kalender (Release 5b, D4): Kalenderdatei (.ics)
     // -------------------------------------------------------------
-    abschnitt("60. Termin in den Kalender: Kalenderdatei (.ics), Knopf, „Im Kalender öffnen“ und „Als Datei teilen …“");
+    abschnitt("60. Termin in den Kalender: Kalenderdatei (.ics), Knopf, „Im Kalender öffnen“ (seit 5c in UTC und ohne „Als Datei teilen …“)");
     localStorage.setItem(TEST_SCHLUESSEL, v8Text);
     const wK = await appLaden();
     wK.heute = () => "2026-11-01";
@@ -4126,12 +4148,12 @@ async function start() {
     // Mit Uhrzeit: 1 Stunde, Erinnerung am Vortag 18:00
     const mitUhr = (zeit, key = "a-klein") => { wK.eval("daten.auftraege.find(a => a.id === '" + key + "').terminZeit = " + JSON.stringify(zeit)); return wK.kalenderDatei(oK(key), JETZT_K); };
     let k930 = mitUhr("09:30");
-    gleich("Mit Uhrzeit 09:30: DTSTART/DTEND 09:30–10:30 in Ortszeit (ohne Zeitzone), belegt, Erinnerung 15 h 30 min vorher (Vortag 18:00)",
+    gleich("Mit Uhrzeit 09:30 (Winterzeit): DTSTART/DTEND 09:30–10:30 als 08:30Z–09:30Z, belegt, Erinnerung 15 h 30 min vorher (Vortag 18:00)",
       [wertVon(k930, "DTSTART"), wertVon(k930, "DTEND"), wertVon(k930, "TRANSP"), wertVon(k930, "TRIGGER"), wertVon(k930, "DTSTART;VALUE=DATE")],
-      ["20261120T093000", "20261120T103000", "OPAQUE", "-PT15H30M", undefined]);
+      ["20261120T083000Z", "20261120T093000Z", "OPAQUE", "-PT15H30M", undefined]);
     const k2330 = mitUhr("23:30");
     gleich("23:30: Ende am Folgetag 00:30, Erinnerung 29 h 30 min vorher", [wertVon(k2330, "DTSTART"), wertVon(k2330, "DTEND"), wertVon(k2330, "TRIGGER")],
-      ["20261120T233000", "20261121T003000", "-PT29H30M"]);
+      ["20261120T223000Z", "20261120T233000Z", "-PT29H30M"]);
     const k0000 = mitUhr("00:00");
     gleich("00:00: Erinnerung 6 h vorher; 18:00: genau 24 h vorher", [wertVon(k0000, "TRIGGER"), wertVon(mitUhr("18:00"), "TRIGGER"), wertVon(mitUhr("18:05"), "TRIGGER")],
       ["-PT6H", "-PT24H", "-PT24H5M"]);
@@ -4154,9 +4176,9 @@ async function start() {
     wK.auftragAnsicht("a-klein");
     knopfK().click();
     const fensterK = wK.document.getElementById("fensterinhalt").textContent.replace(/\s+/g, " ");
-    wahr("Fenster: Titel, „Fr. 20.11.2026, ganztägig“, Erinnerung am Vortag um 18:00 Uhr, 2 Positionen, beide Wege und „Zurück“",
+    wahr("Fenster: Titel, „Fr. 20.11.2026, ganztägig“, Erinnerung am Vortag um 18:00 Uhr, 2 Positionen, „Im Kalender öffnen“ (ohne „Als Datei teilen …“) und „Zurück“",
       fensterK.includes("In Kalender übernehmen") && fensterK.includes("Kleine Inspektion – Rad & Co, Süd; Filiale") && fensterK.includes("Fr. 20.11.2026, ganztägig") &&
-      fensterK.includes("Erinnerung am Vortag um 18:00 Uhr · 2 Positionen") && fensterK.includes("Im Kalender öffnen") && fensterK.includes("Als Datei teilen …") &&
+      fensterK.includes("Erinnerung am Vortag um 18:00 Uhr · 2 Positionen") && fensterK.includes("Im Kalender öffnen") && !fensterK.includes("Als Datei teilen") && !fensterK.includes("Dateien") &&
       !!wK.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"][data-key="a-klein"]'), fensterK);
     mitUhr("09:30");
     wK.kalenderFenster("a-klein");
@@ -4172,25 +4194,12 @@ async function start() {
     gleich("„Im Kalender öffnen“: Kalenderdatei als text/calendar geöffnet, ohne download-Attribut",
       [blobs.length, blobs[0] && blobs[0].type, klicks[0], blobs[0] && ohneStempel(await blobs[0].text()) === ohneStempel(wK.kalenderDatei(oK("a-klein")))],
       [1, "text/calendar;charset=utf-8", { href: "blob:test-1", download: null }, true]);
-    // „Als Datei teilen …“: Teilen-Menü (Platzhalter) mit der Datei; ohne Teilen herunterladen
-    let geteiltK = [], teilenK = "ok";
-    Object.defineProperty(wK.navigator, "share", { value: async angaben => { geteiltK.push(angaben); if (teilenK !== "ok") throw new wK.DOMException("Platzhalter", teilenK); }, configurable: true, writable: true });
-    Object.defineProperty(wK.navigator, "canShare", { value: () => true, configurable: true, writable: true });
-    await wK.kalenderTeilen("a-klein");
-    const dateiK = geteiltK[0] && geteiltK[0].files[0];
-    gleich("„Als Datei teilen …“: nur die Datei geteilt (Name, Typ, Inhalt)",
-      [geteiltK.length, Object.keys(geteiltK[0] || {}), dateiK && dateiK.name, dateiK && dateiK.type, dateiK && ohneStempel(await dateiK.text()) === ohneStempel(wK.kalenderDatei(oK("a-klein")))],
-      [1, ["files"], "termin-kleine-inspektion-2026-11-20.ics", "text/calendar", true]);
-    teilenK = "AbortError";
-    klicks.length = 0;
-    await wK.kalenderTeilen("a-klein");
-    gleich("Teilen abgebrochen: nichts heruntergeladen", klicks.length, 0);
-    Object.defineProperty(wK.navigator, "canShare", { value: () => false, configurable: true, writable: true });
-    await wK.kalenderTeilen("a-klein");
-    gleich("Ohne Teilen-Menü: Download mit Dateinamen", klicks.slice(-1)[0], { href: "blob:test-" + blobs.length, download: "termin-kleine-inspektion-2026-11-20.ics" });
+    gleich("Keine Funktion „Als Datei teilen …“ mehr", [wK.eval("typeof kalenderTeilen"), wK.eval("'kalender-teilen' in AKTIONEN")], ["undefined", false]);
     wK.URL.createObjectURL = echtUrl;
     wK.HTMLAnchorElement.prototype.click = echtKlick;
-    gleich("Kalender ändert keine Daten", localStorage.getItem(TEST_SCHLUESSEL), datenVorK);
+    const nachK = JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)), vorK = kopie(wK.datenEinlesen(datenVorK));
+    gleichInhalt("„Im Kalender öffnen“ merkt sich nur den übernommenen Termin (imKalender), sonst bleiben die Daten unverändert",
+      nachK, Object.assign({}, vorK, { auftraege: vorK.auftraege.map(a => a.id === "a-klein" ? Object.assign({}, a, { imKalender: { termin: "2026-11-20", terminZeit: null, vorlauf: null } }) : a) }));
     wK.fensterSchliessen();
     wK.frameElement.remove();
     wV8.frameElement.remove();
@@ -4324,6 +4333,475 @@ async function start() {
     gleich("Alle bisherigen Bedienelemente der Reiter weiter erreichbar (Reiter, Ansichten, Unterseiten)", bisher.filter(a => !gefunden.has(a)), []);
     gleich("Aufteilung und Wege verändern keine Daten", localStorage.getItem(TEST_SCHLUESSEL), textI);
     wI.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 62. Datenversion 10 (Release 5c): Vorlaufzeit und Kalenderstand am Auftrag
+    // -------------------------------------------------------------
+    abschnitt("62. Datenversion 10: Umwandlung 9 → 10 (tests/daten-v9.json), Vorlaufzeit und Kalenderstand prüfen");
+    const v9Text = await (await fetch("daten-v9.json", { cache: "no-store" })).text();
+    const v9d = JSON.parse(v9Text);
+    const pruefeV9 = (d, wo) => {
+      gleich(wo + ": version = 10", d.version, 10);
+      gleichInhalt(wo + ": Aufträge vollständig erhalten (auch die Uhrzeit 09:30), jeweils mit vorlauf = null und imKalender = null", d.auftraege,
+        v9d.auftraege.map(a => Object.assign({}, a, { vorlauf: null, imKalender: null })));
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
+        [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele],
+        [v9d.fahrrad, v9d.vorlagen, v9d.eintraege, v9d.wartungsarten, v9d.maengel, v9d.einstellungen.fahrtage, v9d.einstellungen.jahresziele]);
+    };
+    pruefeV9(kopie(w.datenEinlesen(v9Text)), "Beim Import");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wV9 = await appLaden();
+    wV9.heute = () => "2026-11-05";
+    gleich("Beim Laden: kein Ladefehler", wV9.eval("ladeFehler"), null);
+    pruefeV9(kopie(wV9.eval("daten")), "Beim Laden");
+    gleich("Beim Laden: Version-9-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    const erg9 = wV9.sicherungAuswerten(v9Text, wV9.eval("daten"), "2026-11-05");
+    gleich("„Sicherung prüfen“ mit der Version-9-Datei: identisch, Kurzinfo passt", [erg9.status, erg9.kurzinfoPasst], ["identisch", true]);
+    const exp9 = wV9.exportInhalt();
+    gleich("Export als Version 10, Export → Import verlustfrei", [JSON.parse(exp9).version, kopie(wV9.datenEinlesen(exp9))], [10, kopie(wV9.eval("daten"))]);
+    const basis10 = JSON.parse(exp9);
+    const mit10 = (id, aend) => JSON.stringify(Object.assign({}, basis10, { auftraege: basis10.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
+    const auftrag10 = (text, id) => wV9.datenEinlesen(text).auftraege.find(a => a.id === id);
+    gleich("vorlauf 30 an einem Termin mit Uhrzeit wird angenommen; 1 und 240 sind die Grenzen",
+      [auftrag10(mit10("a-klein", { vorlauf: 30 }), "a-klein").vorlauf, auftrag10(mit10("a-klein", { vorlauf: 1 }), "a-klein").vorlauf,
+        auftrag10(mit10("a-klein", { vorlauf: 240 }), "a-klein").vorlauf], [30, 1, 240]);
+    gleich("vorlauf fehlt: gilt als null", auftrag10(mit10("a-klein", { vorlauf: undefined }), "a-klein").vorlauf, null);
+    [[0, "0"], [241, "241"], [12.5, "12,5"], ["30", "als Text"], [-5, "negativ"]].forEach(([v, t]) =>
+      wirft("vorlauf " + t + " wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { vorlauf: v })), "vorlauf muss eine ganze Zahl von 1 bis 240"));
+    wirft("vorlauf an einem Termin ohne Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-rep", { vorlauf: 30 })), "nur zusammen mit einer Uhrzeit");
+    wirft("vorlauf an einem erledigten Auftrag wird abgelehnt", () => wV9.datenEinlesen(mit10("a-erst", { vorlauf: 30 })), "nur zusammen mit einer Uhrzeit");
+    const ik = { termin: "2026-11-13", terminZeit: "09:00", vorlauf: 20 };
+    gleich("imKalender mit Datum, Uhrzeit und Vorlauf wird angenommen", auftrag10(mit10("a-klein", { imKalender: ik }), "a-klein").imKalender, ik);
+    gleich("imKalender ganztägig (fehlende Uhrzeit und fehlender Vorlauf gelten als null)",
+      auftrag10(mit10("a-rep", { imKalender: { termin: "2026-12-01" } }), "a-rep").imKalender, { termin: "2026-12-01", terminZeit: null, vorlauf: null });
+    gleich("imKalender an einem geplanten Auftrag ohne Termin (Termin entfernt, Eintrag im Kalender noch zu löschen) wird angenommen",
+      auftrag10(mit10("a-gross", { imKalender: { termin: "2026-11-27", terminZeit: null, vorlauf: null } }), "a-gross").imKalender.termin, "2026-11-27");
+    wirft("imKalender an einem erledigten Auftrag wird abgelehnt", () => wV9.datenEinlesen(mit10("a-erst", { imKalender: ik })), "bei erledigten null");
+    wirft("imKalender als Text wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: "2026-11-13" })), "imKalender muss");
+    wirft("imKalender mit ungültigem Datum wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-02-30" } })), "imKalender.termin");
+    wirft("imKalender mit ungültiger Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-11-13", terminZeit: "9:00" } })), "imKalender.terminZeit");
+    wirft("imKalender mit Vorlauf ohne Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-11-13", vorlauf: 30 } })), "imKalender.vorlauf");
+    wV9.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 63. Kalender und Termin (Release 5c: B10, B9, B6, B7)
+    // -------------------------------------------------------------
+    abschnitt("63. Kalender in UTC (B10), Vorlaufzeit (B9), „In Kalender übernehmen“ in der Karte und nach dem Speichern (B6), veralteter Eintrag (B7)");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wC = await appLaden();
+    wC.heute = () => "2026-11-05";
+    const fragenC = [], alertsC = [];
+    wC.frage = async t => { fragenC.push(t); return true; };
+    wC.alert = m => alertsC.push(String(m));
+    const fC = id => wC.document.getElementById(id);
+    const aC = id => wC.eval("daten.auftraege").find(a => a.id === id);
+    const setzeC = (id, felder) => wC.eval("Object.assign(daten.auftraege.find(a => a.id === '" + id + "'), " + JSON.stringify(felder) + ")");
+    const icsC = id => wC.kalenderDatei(wC.offenerVon(id), Date.UTC(2026, 10, 5, 12));
+    const textC = () => wC.document.getElementById("inhalt").textContent.replace(/\s+/g, " ");
+    const fensterC = () => wC.document.getElementById("fensterinhalt").textContent.replace(/\s+/g, " ");
+    // B10: Umrechnung aus Europe/Berlin (unabhängig von der Zeitzone des Geräts)
+    const bz = (d, z) => new Date(wC.berlinZeitpunkt(d, wC.minutenAus(z))).toISOString().slice(0, 16);
+    gleich("Europe/Berlin → UTC: Winter (06.11.) und Sommer (10.07.) 09:30",
+      [bz("2026-11-06", "09:30"), bz("2026-07-10", "09:30"), bz("2026-01-01", "00:00"), bz("2026-12-31", "23:30")],
+      ["2026-11-06T08:30", "2026-07-10T07:30", "2025-12-31T23:00", "2026-12-31T22:30"]);
+    gleich("Tag der Umstellung auf Sommerzeit (So 29.03.2026): 01:59 Winterzeit, 02:30 gibt es nicht (gilt als 03:30 Sommerzeit), 03:00 und 09:00 Sommerzeit",
+      [bz("2026-03-29", "01:59"), bz("2026-03-29", "02:30"), bz("2026-03-29", "03:00"), bz("2026-03-29", "09:00"), bz("2026-03-28", "18:00")],
+      ["2026-03-29T00:59", "2026-03-29T01:30", "2026-03-29T01:00", "2026-03-29T07:00", "2026-03-28T17:00"]);
+    gleich("Tag der Umstellung auf Winterzeit (So 25.10.2026): 02:30 doppelt (gilt beim ersten Mal, Sommerzeit), 03:00 und 09:00 Winterzeit",
+      [bz("2026-10-25", "01:30"), bz("2026-10-25", "02:30"), bz("2026-10-25", "03:00"), bz("2026-10-25", "09:00"), bz("2026-10-24", "18:00")],
+      ["2026-10-24T23:30", "2026-10-25T00:30", "2026-10-25T02:00", "2026-10-25T08:00", "2026-10-24T16:00"]);
+    const icsWerte = (id, felder) => { setzeC(id, felder); const t = icsC(id); return [wertVon(t, "DTSTART"), wertVon(t, "DTEND"), wertVon(t, "TRIGGER")]; };
+    gleich("Kalenderdatei Winter: Fr 06.11. 09:30–10:30 → 08:30Z–09:30Z, Erinnerung 15 h 30 min vorher (Do 18:00)",
+      icsWerte("a-klein", { termin: "2026-11-06", terminZeit: "09:30" }), ["20261106T083000Z", "20261106T093000Z", "-PT15H30M"]);
+    gleich("Kalenderdatei Sommer: Fr 10.07. 09:30 → 07:30Z, Erinnerung 15 h 30 min vorher",
+      icsWerte("a-klein", { termin: "2026-07-10", terminZeit: "09:30" }), ["20260710T073000Z", "20260710T083000Z", "-PT15H30M"]);
+    gleich("Termin am Tag der Umstellung auf Sommerzeit (29.03. 09:00): 07:00Z; Erinnerung Sa 18:00 Winterzeit = 14 h vorher (echte Dauer)",
+      icsWerte("a-klein", { termin: "2026-03-29", terminZeit: "09:00" }), ["20260329T070000Z", "20260329T080000Z", "-PT14H"]);
+    gleich("Termin am Tag der Umstellung auf Winterzeit (25.10. 09:00): 08:00Z; Erinnerung Sa 18:00 Sommerzeit = 16 h vorher",
+      icsWerte("a-klein", { termin: "2026-10-25", terminZeit: "09:00" }), ["20261025T080000Z", "20261025T090000Z", "-PT16H"]);
+    gleich("Termin am Montag nach der Umstellung (30.03. 09:00): 07:00Z, Erinnerung wieder 15 h vorher",
+      icsWerte("a-klein", { termin: "2026-03-30", terminZeit: "09:00" }), ["20260330T070000Z", "20260330T080000Z", "-PT15H"]);
+    const ganzC = icsC("a-rep");
+    gleich("Ganztägig unverändert: VALUE=DATE, Erinnerung relativ 6 h vor Beginn (Vortag 18:00)",
+      [wertVon(ganzC, "DTSTART;VALUE=DATE"), wertVon(ganzC, "DTEND;VALUE=DATE"), wertVon(ganzC, "DTSTART"), wertVon(ganzC, "TRIGGER")], ["20261205", "20261206", undefined, "-PT6H"]);
+    wahr("Alle Zeiten mit Uhrzeit enden auf „Z“ (keine schwebende Ortszeit mehr)", eigenschaften(icsC("a-klein")).filter(l => /^(DTSTART|DTEND|DTSTAMP):/.test(l)).every(l => /\d{8}T\d{6}Z$/.test(l)));
+    // B9: Vorlaufzeit
+    setzeC("a-klein", { termin: "2026-11-06", terminZeit: "10:00", vorlauf: 30 });
+    const icsV = icsC("a-klein");
+    gleich("Mit Vorlauf 30 min (Termin 10:00): Eintrag ab dem Losfahren 09:30 bis 11:00 (08:30Z–10:00Z), Erinnerung weiter am Vortag 18:00",
+      [wertVon(icsV, "DTSTART"), wertVon(icsV, "DTEND"), wertVon(icsV, "TRIGGER")], ["20261106T083000Z", "20261106T100000Z", "-PT15H30M"]);
+    gleich("Titel mit Terminzeit: „Kleine Inspektion – Rad & Co, Süd; Filiale (Termin 10:00)“", icsLesen(wertVon(icsV, "SUMMARY")), "Kleine Inspektion – Rad & Co, Süd; Filiale (Termin 10:00)");
+    gleich("Beschreibung beginnt mit „Termin 10:00 Uhr, losfahren 09:30 (30 min Vorlauf)“", icsLesen(wertVon(icsV, "DESCRIPTION")).split("\n\n")[0], "Termin 10:00 Uhr, losfahren 09:30 (30 min Vorlauf)");
+    setzeC("a-klein", { vorlauf: null });
+    gleich("Ohne Vorlauf: Titel ohne Terminzeit, Beginn 10:00", [icsLesen(wertVon(icsC("a-klein"), "SUMMARY")), wertVon(icsC("a-klein"), "DTSTART")],
+      ["Kleine Inspektion – Rad & Co, Süd; Filiale", "20261106T090000Z"]);
+    gleich("Losfahren: 10:00 − 30 = 09:30; 00:15 − 30 = am Vortag 23:45; 240 min", [wC.losfahrenZeit("10:00", 30), wC.losfahrenZeit("00:15", 30), wC.losfahrenZeit("14:00", 240)],
+      ["09:30", "am Vortag 23:45", "10:00"]);
+    setzeC("a-klein", { termin: "2026-11-20", terminZeit: "09:30", vorlauf: null });
+    // Formular
+    wC.auftragTerminFormular("a-klein");
+    gleich("Formular: Feld „Vorlaufzeit (Minuten, optional)“ leer und bedienbar (Termin mit Uhrzeit), Zifferntastatur",
+      [fC("t-vorlauf").value, fC("t-vorlauf").disabled, fC("t-vorlauf").inputMode, wC.document.querySelector('label[for="t-vorlauf"]').textContent], ["", false, "numeric", "Vorlaufzeit (Minuten, optional)"]);
+    const eingabe = (id, v) => { fC(id).value = v; fC(id).dispatchEvent(new wC.Event("input", { bubbles: true })); };
+    fC("t-zeit").value = "10:00";
+    eingabe("t-vorlauf", "30");
+    wahr("Hinweis unter dem Feld: „losfahren 09:30 – der Kalendereintrag beginnt mit dem Losfahren.“", fC("t-vorlauf-hinweis").textContent.startsWith("losfahren 09:30 –"), fC("t-vorlauf-hinweis").textContent);
+    fC("t-zeit-an").checked = false;
+    fC("t-zeit-an").dispatchEvent(new wC.Event("change", { bubbles: true }));
+    gleich("Schalter „Mit Uhrzeit“ aus: Uhrzeit und Vorlaufzeit gesperrt", [fC("t-zeit").disabled, fC("t-vorlauf").disabled], [true, true]);
+    fC("t-zeit-an").checked = true;
+    fC("t-zeit-an").dispatchEvent(new wC.Event("change", { bubbles: true }));
+    [["0", "0"], ["241", "241"], ["abc", "Text"], ["12,5", "12,5"]].forEach(([v, t]) => {
+      fC("t-vorlauf").value = v;
+      wC.auftragTerminSpeichern("a-klein");
+      gleich("Vorlaufzeit „" + t + "“: abgelehnt, nichts geändert", [alertsC.slice(-1)[0], aC("a-klein").terminZeit, aC("a-klein").vorlauf],
+        ["Bitte als Vorlaufzeit ganze Minuten von 1 bis 240 eingeben, z. B. 30 – oder das Feld leer lassen.", "09:30", null]);
+    });
+    fC("t-vorlauf").value = " 30 ";
+    wC.auftragTerminSpeichern("a-klein");
+    gleich("Gespeichert: Uhrzeit 10:00, Vorlauf 30 (auch im Speicher)", [aC("a-klein").terminZeit, aC("a-klein").vorlauf,
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").vorlauf], ["10:00", 30, 30]);
+    // B6: nach dem Speichern eines geänderten Termins: Fenster „Termin gespeichert“
+    gleich("Geänderter Termin: Fenster „Termin gespeichert“ mit „Im Kalender öffnen“ und „Fertig“ (das Fenster bleibt offen)",
+      [wC.eval("fenster.open"), wC.document.querySelector("#fensterinhalt h2").textContent, !!wC.document.querySelector('#fensterinhalt [data-action="kalender-oeffnen"][data-key="a-klein"]'),
+        !!wC.document.querySelector('#fensterinhalt [data-action="fenster-zu"]')], [true, "Termin gespeichert", true, true]);
+    wahr("… mit Termin, Losfahren und Kalenderzeit: „Fr. 20.11.2026, 10:00 Uhr (1 Stunde), losfahren 09:30 – im Kalender 09:30–11:00“",
+      fensterC().includes("Fr. 20.11.2026, 10:00 Uhr (1 Stunde), losfahren 09:30 – im Kalender 09:30–11:00") && fensterC().includes("(Termin 10:00)"), fensterC());
+    wC.fensterSchliessen();
+    wC.eval("aktiverTab = 'wartung'; wartungAnsicht = 'aktuell'; zeichnen()");
+    wahr("Karte im Reiter Wartung: „Termin am 20.11.2026 um 10:00 Uhr bei Rad & Co, Süd; Filiale, losfahren 09:30 (in 15 Tagen)“",
+      textC().includes("Termin am 20.11.2026 um 10:00 Uhr bei Rad & Co, Süd; Filiale, losfahren 09:30 (in 15 Tagen)"), textC());
+    wC.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    wahr("Übersicht: nächste Wartung mit „losfahren 09:30“", textC().includes("Kleine Inspektion: Termin am 20.11.2026 um 10:00 Uhr bei Rad & Co, Süd; Filiale, losfahren 09:30"), textC());
+    wC.eval("aktiverTab = 'wartung'; zeichnen()");
+    const karteKnopf = id => wC.document.querySelector('#inhalt [data-action="kalender-oeffnen"][data-key="' + id + '"]');
+    gleich("Karte: „📅 In Kalender übernehmen“ bei Terminen mit und ohne Uhrzeit, nicht ohne Termin",
+      [karteKnopf("a-klein") && karteKnopf("a-klein").textContent, !!karteKnopf("a-rep"), !!wC.document.querySelector('#inhalt [data-action="kalender-oeffnen"][data-key="a-gross"]')],
+      ["📅 In Kalender übernehmen", true, false]);
+    // Kalenderdatei öffnen (Platzhalter für Blob und Link)
+    const blobsC = [];
+    const echtUrlC = wC.URL.createObjectURL, echtKlickC = wC.HTMLAnchorElement.prototype.click;
+    wC.URL.createObjectURL = b => { blobsC.push(b); return "blob:c-" + blobsC.length; };
+    wC.HTMLAnchorElement.prototype.click = function () { };
+    karteKnopf("a-klein").click();
+    gleich("Tipp in der Karte öffnet direkt die Kalenderdatei (ohne Fenster) und merkt sich den Termin",
+      [blobsC.length, blobsC[0] && blobsC[0].type, wC.eval("fenster.open"), aC("a-klein").imKalender, wC.document.getElementById("toast-text").textContent],
+      [1, "text/calendar;charset=utf-8", false, { termin: "2026-11-20", terminZeit: "10:00", vorlauf: 30 }, "An den Kalender übergeben – dort „Hinzufügen“ tippen"]);
+    wahr("… Inhalt der geöffneten Datei = Kalenderdatei des Auftrags (mit Vorlauf)", (await blobsC[0].text()).includes("DTSTART:20261120T083000Z"));
+    gleich("Danach in der Karte: „📅 In den Kalender übernommen“, kein Knopf und kein Hinweis",
+      [textC().includes("📅 In den Kalender übernommen"), !!karteKnopf("a-klein"), textC().includes("Im Kalender steht noch")], [true, false, false]);
+    // Nur Werkstatt geändert: Fenster schließt wie bisher
+    wC.auftragTerminFormular("a-klein");
+    fC("t-werkstatt").value = "Rad & Co, Nord";
+    wC.auftragTerminSpeichern("a-klein");
+    gleich("Nur die Werkstatt geändert (Termin steht so im Kalender): Fenster zu, Meldung „Termin gespeichert“",
+      [wC.eval("fenster.open"), wC.document.getElementById("toast-text").textContent, aC("a-klein").werkstatt], [false, "Termin gespeichert", "Rad & Co, Nord"]);
+    // B7: veralteter Eintrag
+    wC.auftragTerminFormular("a-klein");
+    fC("t-zeit").value = "09:00";
+    wC.auftragTerminSpeichern("a-klein");
+    gleich("Uhrzeit geändert: Fenster „Termin gespeichert“ mit Hinweis auf den alten Eintrag (Reihenfolge: erst löschen, dann übernehmen)",
+      [wC.document.querySelector("#fensterinhalt h2").textContent,
+        fensterC().includes("Im Kalender steht noch der alte Termin (Fr 20.11., 10:00, losfahren 09:30). Erst dort den alten Eintrag löschen, dann den neuen übernehmen.")],
+      ["Termin gespeichert", true]);
+    wC.document.querySelector('#fensterinhalt [data-action="kalender-oeffnen"]').click();
+    gleich("„Im Kalender öffnen“ im Fenster: Bestätigung „An den Kalender übergeben (Fr 20.11., 09:00, losfahren 08:30)“ und „Alten Eintrag (Fr 20.11., 10:00, losfahren 09:30) im Kalender löschen nicht vergessen.“",
+      [fensterC().includes("✓ An den Kalender übergeben (Fr 20.11., 09:00, losfahren 08:30).") && fensterC().includes("Alten Eintrag (Fr 20.11., 10:00, losfahren 09:30) im Kalender löschen nicht vergessen."),
+        aC("a-klein").imKalender, blobsC.length], [true, { termin: "2026-11-20", terminZeit: "09:00", vorlauf: 30 }, 2]);
+    wC.fensterSchliessen();
+    // Nur die Vorlaufzeit geändert → veraltet
+    setzeC("a-klein", { vorlauf: 45 });
+    wC.zeichnen();
+    wahr("Nur die Vorlaufzeit geändert: Karte zeigt „Im Kalender steht noch der alte Termin (Fr 20.11., 09:00, losfahren 08:30) …“ mit „In Kalender übernehmen“",
+      textC().includes("Im Kalender steht noch der alte Termin (Fr 20.11., 09:00, losfahren 08:30). Erst dort den alten Eintrag löschen, dann den neuen übernehmen.") &&
+      !!wC.document.querySelector('#inhalt .hinweis [data-action="kalender-oeffnen"][data-key="a-klein"]'), textC());
+    wC.auftragAnsicht("a-klein");
+    gleich("Auftragsfenster („Positionen“): derselbe Hinweis, „In Kalender übernehmen“ öffnet das Fenster mit Zusammenfassung",
+      [fensterC().includes("Im Kalender steht noch der alte Termin (Fr 20.11., 09:00, losfahren 08:30)"), !!wC.document.querySelector('#fensterinhalt .hinweis [data-action="kalender"][data-key="a-klein"]')], [true, true]);
+    wC.document.querySelector('#fensterinhalt .hinweis [data-action="kalender"]').click();
+    gleich("… Fenster „In Kalender übernehmen“ mit Hinweis und „Zurück“", [wC.document.querySelector("#fensterinhalt h2").textContent, fensterC().includes("Erst dort den alten Eintrag löschen"),
+      !!wC.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"]')], ["In Kalender übernehmen", true, true]);
+    wC.fensterSchliessen();
+    karteKnopf("a-klein").click();
+    gleich("Übernehmen aus der Karte bei veraltetem Eintrag: Fenster „In Kalender übernommen“ erinnert an den alten Eintrag",
+      [wC.eval("fenster.open"), fensterC().includes("Alten Eintrag (Fr 20.11., 09:00, losfahren 08:30) im Kalender löschen nicht vergessen."), aC("a-klein").imKalender.vorlauf],
+      [true, true, 45]);
+    wC.fensterSchliessen();
+    // Termin entfernen: Hinweis zum Löschen im Kalender, „Im Kalender gelöscht“
+    await wC.auftragTerminEntfernen("a-klein");
+    wahr("„Termin entfernen“: Rückfrage nennt den Eintrag im Kalender", fragenC.slice(-1)[0].includes("Im Kalender steht der Termin (Fr 20.11., 09:00, losfahren 08:15); lösche ihn dort."), fragenC.slice(-1)[0]);
+    gleich("Termin entfernt: Uhrzeit und Vorlauf leer, imKalender bleibt", [aC("a-klein").termin, aC("a-klein").terminZeit, aC("a-klein").vorlauf, !!aC("a-klein").imKalender], [null, null, null, true]);
+    wahr("Karte: „Im Kalender steht noch der Termin (Fr 20.11., 09:00, losfahren 08:15) – bitte dort löschen.“ mit „Im Kalender gelöscht“",
+      textC().includes("Im Kalender steht noch der Termin (Fr 20.11., 09:00, losfahren 08:15) – bitte dort löschen.") &&
+      !!wC.document.querySelector('#inhalt [data-action="kalender-geloescht"][data-key="a-klein"]'), textC());
+    wC.document.querySelector('#inhalt [data-action="kalender-geloescht"][data-key="a-klein"]').click();
+    gleich("„Im Kalender gelöscht“: Hinweis weg, imKalender leer", [aC("a-klein").imKalender, textC().includes("Im Kalender steht noch")], [null, false]);
+    // Neuer Auftrag mit Termin: Fenster „… angelegt“ mit „Positionen“
+    wC.auftragTerminFormular("anlegen:eigenleistung");
+    fC("t-datum").value = "2026-11-14";
+    wC.auftragTerminSpeichern("anlegen:eigenleistung");
+    gleich("Neuer Auftrag mit Termin: Fenster „Eigenleistung angelegt“ mit „Im Kalender öffnen“, „Positionen“ und „Fertig“",
+      [wC.document.querySelector("#fensterinhalt h2").textContent, !!wC.document.querySelector('#fensterinhalt [data-action="kalender-oeffnen"]'),
+        !!wC.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"]'), fensterC().includes("Sa. 14.11.2026, ganztägig")], ["Eigenleistung angelegt", true, true, true]);
+    wC.fensterSchliessen();
+    // Auftrag löschen und erledigt eintragen
+    setzeC("a-rep", { imKalender: { termin: "2026-12-05", terminZeit: null, vorlauf: null } });
+    wC.auftragErledigen("a-rep");
+    wC.abschlussSpeichern();
+    gleich("„Erledigt eintragen“: Termin, Uhrzeit, Vorlauf und imKalender leer", [aC("a-rep").status, aC("a-rep").termin, aC("a-rep").vorlauf, aC("a-rep").imKalender], ["erledigt", null, null, null]);
+    wC.fensterSchliessen();
+    const eigenC = wC.eval("daten.auftraege").find(a => a.wartungsartId === "eigenleistung" && a.status === "geplant");
+    setzeC(eigenC.id, { imKalender: { termin: "2026-11-14", terminZeit: null, vorlauf: null } });
+    await wC.auftragLoeschen(eigenC.id);
+    wahr("„Auftrag löschen“: Rückfrage nennt den Eintrag im Kalender (Sa 14.11., ganztägig)", fragenC.slice(-1)[0].includes("Im Kalender steht der Termin (Sa 14.11., ganztägig); lösche ihn dort."), fragenC.slice(-1)[0]);
+    gleichInhalt("Gespeicherte Daten weiter gültig (Export → Import)", kopie(wC.datenEinlesen(wC.exportInhalt())), kopie(wC.eval("daten")));
+    wC.URL.createObjectURL = echtUrlC;
+    wC.HTMLAnchorElement.prototype.click = echtKlickC;
+    wC.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 64. Kleidung und Ampel-Grenzen als Unterseiten (B4), „bis“ (B5)
+    // -------------------------------------------------------------
+    abschnitt("64. Kleidung und Ampel-Grenzen als Unterseiten statt Fenster (B4); Temperaturbereiche mit „bis“ (B5)");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wU = await appLaden();
+    const inhaltU = () => wU.document.getElementById("inhalt");
+    const titelU = () => wU.document.getElementById("seitentitel").textContent;
+    const tippeU = sel => inhaltU().querySelector(sel).click();
+    wU.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
+    tippeU('[data-action="kleidung-bearbeiten"]');
+    gleich("Einstellungen → Kleidung: Unterseite „Kleidung“, kein Fenster", [titelU(), wU.eval("fenster.open"), wU.document.querySelectorAll("dialog[open]").length], ["Kleidung", false, 0]);
+    const kopfVorher = wU.eval("daten.einstellungen.wetter.kleidung.stufen[6].bereiche.kopf");
+    tippeU('[data-action="kleidung-stufe"][data-i="6"]');
+    gleich("Stufe antippen: Unterseite „Stufe −6 bis −1 °C“ mit „‹ Kleidung“, kein Fenster",
+      [titelU(), inhaltU().querySelector(".zurueck").textContent, wU.eval("fenster.open")], ["Stufe −6 bis −1 °C", "‹ Kleidung", false]);
+    wU.document.getElementById("ks-kopf").value = "Eingabe noch nicht gespeichert";
+    wU.document.dispatchEvent(new wU.Event("visibilitychange"));
+    gleich("Zurück in die App (visibilitychange): Unterseite mit Formular wird nicht neu gezeichnet, die Eingabe bleibt",
+      wU.document.getElementById("ks-kopf").value, "Eingabe noch nicht gespeichert");
+    wU.swNachricht({ typ: "neue-version" });
+    gleich("„Neue Version“ während des Formulars: Eingabe bleibt, Hinweis erst danach", [wU.document.getElementById("ks-kopf").value, inhaltU().textContent.includes("Neue Version verfügbar")],
+      ["Eingabe noch nicht gespeichert", false]);
+    tippeU('[data-action="kleidung-bearbeiten"]');
+    gleich("„Abbrechen“: zurück zur Kleidung, nichts gespeichert, jetzt mit Hinweis „Neue Version verfügbar“",
+      [titelU(), wU.eval("daten.einstellungen.wetter.kleidung.stufen[6].bereiche.kopf"), inhaltU().textContent.includes("Neue Version verfügbar")], ["Kleidung", kopfVorher, true]);
+    wU.eval("neueVersion = false");
+    tippeU('[data-action="kleidung-stufe"][data-i="7"]');
+    gleich("Letzte Stufe: „Stufe unter −6 °C“", titelU(), "Stufe unter −6 °C");
+    tippeU(".zurueck");
+    gleich("„‹ Kleidung“ führt zur Kleidung", [titelU(), wU.eval("einstellungenSeite")], ["Kleidung", "kleidung"]);
+    tippeU('[data-action="kleidung-regen"][data-i="0"]');
+    gleich("Regenzusatz: Unterseite „Regenzusatz ab 40 %“ mit „‹ Kleidung“", [titelU(), inhaltU().querySelector(".zurueck").textContent, wU.eval("fenster.open")],
+      ["Regenzusatz ab 40 %", "‹ Kleidung", false]);
+    tippeU(".zurueck");
+    tippeU('[data-action="kleidung-regen-neu"]');
+    gleich("„+ Regenzusatz“: Unterseite „Neuer Regenzusatz“", titelU(), "Neuer Regenzusatz");
+    tippeU(".zurueck");
+    tippeU('[data-action="kleidung-stufe-neu"]');
+    gleich("„+ Stufe“: Unterseite „Neue Stufe“", titelU(), "Neue Stufe");
+    wU.document.querySelector('nav [data-tab="einstellungen"]').click();
+    gleich("Reiter Einstellungen antippen: Hauptseite", [titelU(), wU.eval("einstellungenSeite")], ["Einstellungen", null]);
+    tippeU('[data-action="ampel-bearbeiten"]');
+    gleich("Einstellungen → Ampel-Grenzen: Unterseite, kein Fenster, Felder mit data-change", [titelU(), wU.eval("fenster.open"),
+      inhaltU().querySelectorAll('input[data-change="ampel-feld"]').length, !!inhaltU().querySelector('select[data-change="ampel-feld"]')], ["Ampel-Grenzen", false, 7, true]);
+    wU.eval("aktiverTab = 'fahrten'; zeichnen()");
+    wU.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'fahrtage'; zeichnen()");
+    wU.document.getElementById("e-hinweis-ab").value = "19:00";
+    wU.document.dispatchEvent(new wU.Event("visibilitychange"));
+    gleich("Unterseite ohne Formular (Fahrtage, speichert sofort) wird beim Zurückkehren wie bisher neu gezeichnet", wU.document.getElementById("e-hinweis-ab").value, "18:00");
+    // B5: Bereiche mit „bis“
+    const kU = wU.eval("daten.einstellungen.wetter.kleidung");
+    gleich("Bereiche der Stufen: „ab 20 °C“, „15 bis 20 °C“, „−1 bis 3 °C“, „−6 bis −1 °C“, „unter −6 °C“",
+      [0, 1, 4, 5, 6, 7].map(i => wU.stufeBereich(kU, i)), ["ab 20 °C", "15 bis 20 °C", "3 bis 7 °C", "−1 bis 3 °C", "−6 bis −1 °C", "unter −6 °C"]);
+    gleich("Tageswerte (weiterer Ort) ebenfalls mit „bis“", wU.tageswerteText({ tmin: -3.2, tmax: 2, gefuehltMin: -7, gefuehltMax: -1, regenWahrscheinlichkeit: 20, niederschlag: 0,
+      wind: 10, boeen: 25, gewitter: false }), "−3 °C bis 2 °C (gefühlt −7 °C bis −1 °C) · Regen 20 %, 0 mm · Wind bis 10 km/h, Böen bis 25 km/h");
+    gleich("Unterseiten verändern keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    wU.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 65. Windpfeile je Teilstrecke (B8, B1)
+    // -------------------------------------------------------------
+    abschnitt("65. Windpfeile je Teilstrecke (B8): Winkel, Farbe, schwach, windstill, Beschriftung für VoiceOver, Kontrast");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wP = await appLaden();
+    const eineP = (v, r) => [{ v, r }];
+    const relP = (r, kurs = 0, v = 20) => wP.windRelativ(eineP(v, r), kurs);
+    gleich("Drehung des Pfeils (Fahrer fährt nach oben): Gegenwind nach unten (180°), Rückenwind nach oben (0°), von rechts nach links (270°), von links nach rechts (90°)",
+      [relP(0).drehung, relP(180).drehung, relP(90).drehung, relP(270).drehung], [180, 0, 270, 90]);
+    gleich("Genauer Winkel (nicht auf 8 Richtungen gerundet): 30° → 210°, 37,3° → 217,3°, 320° → 140°; Fahrtrichtung 51,3°, Wind aus 225° → 353,7°",
+      [relP(30).drehung, relP(37.3).drehung, relP(320).drehung, relP(225, 51.3).drehung], [210, 217.3, 140, 353.7]);
+    gleich("Farbe nach Abschnitt (Grenzen wie bisher, die Grenze zählt nach vorn): rot Gegenwind, orange schräg vorn und seitlich, grün schräg hinten und Rückenwind",
+      [0, 22.5, 22.6, 67.5, 90, 112.5, 112.6, 157.5, 157.6, 180, 337.4, 247.5, 202.5].map(r => relP(r).farbe),
+      ["gegen", "gegen", "seite", "seite", "seite", "seite", "ruecken", "ruecken", "ruecken", "ruecken", "seite", "seite", "ruecken"]);
+    gleich("Beschriftung: „von“ immer vorne, Gegen- und Rückenwind ohne „von“; schwach mit „, schwach“",
+      [relP(0, 0, 14).text, relP(135, 0, 4).text, relP(45, 0, 12).text, relP(270, 0, 8).text, relP(180, 0, 25).text, relP(210, 0, 9.4).text],
+      ["Gegenwind 14 km/h", "von schräg hinten rechts 4 km/h, schwach", "von schräg vorn rechts 12 km/h", "von links 8 km/h, schwach", "Rückenwind 25 km/h", "von schräg hinten links 9 km/h, schwach"]);
+    gleich("Windstill: keine Richtung, kein Pfeil", [relP(90, 0, 0.4).text, relP(90, 0, 0.4).drehung, relP(90, 0, 0.4).farbe], ["windstill", null, null]);
+    const pfeilEl = t => { const d = wP.document.createElement("div"); d.innerHTML = wP.windPfeilHtml(t); return d.firstElementChild; };
+    const pg = pfeilEl(relP(0, 0, 14)), ps = pfeilEl(relP(135, 0, 4)), pw = pfeilEl(relP(90, 0, 0.4));
+    gleich("SVG: role=img, aria-label, Farbe als Klasse, gedreht um die Mitte; schwach mit Klasse „schwach“",
+      [pg.tagName.toLowerCase(), pg.getAttribute("role"), pg.getAttribute("aria-label"), pg.getAttribute("class"), pg.querySelector("g").getAttribute("transform"),
+        ps.getAttribute("class"), ps.getAttribute("aria-label")],
+      ["svg", "img", "Gegenwind 14 km/h", "wind-pfeil gegen", "rotate(180 12 12)", "wind-pfeil ruecken schwach", "von schräg hinten rechts 4 km/h, schwach"]);
+    gleich("Windstill: statt des Pfeils „windstill“ klein in Grau", [pw.tagName.toLowerCase(), pw.className, pw.textContent], ["span", "klein windstill", "windstill"]);
+    const ablageP = wP.document.createElement("div");
+    ablageP.className = "karte";
+    ablageP.innerHTML = wP.windHtml({ text: "Wind 15 km/h aus Südwest, Böen bis 36 km/h", teile: [Object.assign({ titel: "Musterdorf → Ecke" }, relP(0, 0, 14)),
+      Object.assign({ titel: "Ecke → Beispielstadt" }, relP(135, 0, 4)), Object.assign({ titel: "Beispielstadt → Feld" }, relP(90, 0, 0.4))] });
+    wP.document.getElementById("inhalt").appendChild(ablageP);
+    const farbeVon = el => wP.getComputedStyle(el).color, wurzelP = wP.getComputedStyle(wP.document.documentElement);
+    const rgb = hex => { const n = parseInt(hex.trim().slice(1), 16); return "rgb(" + (n >> 16) + ", " + (n >> 8 & 255) + ", " + (n & 255) + ")"; };
+    const [pa, pb] = ablageP.querySelectorAll("svg");
+    gleich("Erste Zeile nur Text (kein Pfeil, kein Kompass); Farben aus den Variablen; schwach mit 50 % Deckkraft; windstill grau",
+      [ablageP.firstElementChild.querySelector("svg"), farbeVon(pa), farbeVon(pb), wP.getComputedStyle(pb).opacity, wP.getComputedStyle(pa).opacity,
+        farbeVon(ablageP.querySelector(".windstill"))],
+      [null, rgb(wurzelP.getPropertyValue("--wind-gegen")), rgb(wurzelP.getPropertyValue("--wind-ruecken")), "0.5", "1", rgb(wurzelP.getPropertyValue("--text2"))]);
+    ablageP.remove();
+    // Kontrast der Pfeilfarben zur Karte (mind. 3:1 für Grafiken) in Hell- und Dunkelmodus, aus css/app.css gelesen
+    const cssTextP = await (await fetch("../css/app.css", { cache: "no-store" })).text();
+    const blockP = t => { const v = {}; t.replace(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/g, (_, n, f) => { v[n] = f; }); return v; };
+    const hellP = blockP(cssTextP.slice(cssTextP.indexOf(":root {"), cssTextP.indexOf("@media (prefers-color-scheme: dark)")));
+    const dunkelP = blockP(cssTextP.slice(cssTextP.indexOf("@media (prefers-color-scheme: dark)"), cssTextP.indexOf("* { box-sizing")));
+    const leuchtP = hex => { const n = parseInt(hex.slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255].map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; })
+      .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0); };
+    const kontrastP = (a, b) => { const [x, y] = [leuchtP(a), leuchtP(b)].sort((p, q) => q - p); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };
+    const pruefKontrastP = v => ["wind-gegen", "wind-seite", "wind-ruecken"].map(n => v[n] ? kontrastP(v[n], v.karte) >= 3 : "fehlt");
+    gleich("Kontrast der Pfeilfarben zur Karte mind. 3:1 (hellP und dunkelP)", [pruefKontrastP(hellP), pruefKontrastP(dunkelP)], [[true, true, true], [true, true, true]]);
+    wP.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 66. Sonnenauf- und -untergang (N1)
+    // -------------------------------------------------------------
+    abschnitt("66. Sonnenauf- und -untergang (N1): Hinfahrt am Wohnort, Rückfahrt am Arbeitsort, „Jetzt“, Dunkelheit, Zwischenspeicher");
+    const orteN = [MUSTERDORF, BEISPIELSTADT];
+    gleich("Abruf der Vorhersage mit daily=sunrise,sunset, der Rückblick ohne", [w.vorhersageUrl(orteN).includes("&daily=sunrise,sunset&"),
+      w.rueckblickUrl(orteN, "2026-10-01", "2026-10-02").includes("daily")], [true, false]);
+    const gelesenN = w.vorhersageLesen(kopie(fx["wetter-open-meteo"]), 2);
+    const rohN = fx["wetter-open-meteo"];
+    gleich("Tageswerte gelesen: Auf- und Untergang als Zeitpunkte (ms) je Ort", [gelesenN[0].sonne.aufgang[3], gelesenN[0].sonne.untergang[3], gelesenN[1].sonne.untergang[3]],
+      [rohN[0].daily.sunrise[3] * 1000, rohN[0].daily.sunset[3] * 1000, rohN[1].daily.sunset[3] * 1000]);
+    if (Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Berlin") {
+      gleich("Tageswerte (Europe/Berlin): Datum in Ortszeit, auch über die Zeitumstellung am 25.10.; 27.10. 07:24 und 16:50 bzw. 16:49",
+        [gelesenN[0].sonne.tag.slice(0, 4), w.uhrzeit(gelesenN[0].sonne.aufgang[3]), w.uhrzeit(gelesenN[0].sonne.untergang[3]), w.uhrzeit(gelesenN[1].sonne.untergang[3])],
+        [["2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27"], "07:24", "16:50", "16:49"]);
+    }
+    const ohneDaily = kopie(fx["wetter-open-meteo"]).map(o => { delete o.daily; return o; });
+    gleich("Antwort ohne Tageswerte: sonne = null", w.vorhersageLesen(ohneDaily, 2).map(o => o.sonne), [null, null]);
+    const fahrtN = (von, bis) => Object.assign(kopie(STD_WETTER.hinfahrt), { von, bis, abfahrt: von, dauer: 60 });
+    const sonneBei = async (hin, rueck) => {
+      wetterDaten({ hinfahrt: fahrtN(...hin), rueckfahrt: fahrtN(...rueck) });
+      return (await laden(ruhig())).fahrten.map(f => f.sonne);
+    };
+    gleich("Standard (Di 27.10., 06:00–07:00 und 16:00–17:00): Sonnenaufgang am Wohnort 07:24, Fahrt im Dunkeln; Sonnenuntergang am Arbeitsort 16:49, ab 16:49 dunkel",
+      await sonneBei(["06:00", "07:00"], ["16:00", "17:00"]), ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel"]);
+    gleich("Teilweise bzw. ganz im Hellen: Hinfahrt 07:00–08:00 „bis 07:24 dunkel“, Rückfahrt 15:00–16:00 ohne Hinweis",
+      await sonneBei(["07:00", "08:00"], ["15:00", "16:00"]), ["🌅 Sonnenaufgang 07:24 · bis 07:24 dunkel", "🌇 Sonnenuntergang 16:49"]);
+    gleich("Hinfahrt 08:00–09:00 ohne Hinweis; Rückfahrt 17:00–18:00 ganz im Dunkeln",
+      await sonneBei(["08:00", "09:00"], ["17:00", "18:00"]), ["🌅 Sonnenaufgang 07:24", "🌇 Sonnenuntergang 16:49 · Fahrt im Dunkeln"]);
+    gleich("Ungewöhnliche Zeiten: Hinfahrt 18:00–19:00 im Dunkeln, Rückfahrt 06:30–07:30 bis 07:23 dunkel (Arbeitsort)",
+      await sonneBei(["18:00", "19:00"], ["06:30", "07:30"]), ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · bis 07:23 dunkel"]);
+    gleich("Grenzen: Ende genau beim Sonnenaufgang = im Dunkeln, Beginn genau beim Sonnenuntergang = im Dunkeln",
+      await sonneBei(["06:24", "07:24"], ["16:49", "17:49"]), ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · Fahrt im Dunkeln"]);
+    wetterDaten({ wegpunkte: [{ name: "Ecke", lat: 51, lon: 10.2 }], windTeilstrecken: [true, true] });
+    let ansN = await laden(drei(ruhig()));
+    gleich("Mit Wegpunkt: weiter Wohnort (07:24) und Arbeitsort (16:49)", ansN.fahrten.map(f => f.sonne),
+      ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel"]);
+    wetterDaten();
+    ansN = await laden(ruhig());
+    const karteN = w.document.createElement("div");
+    karteN.innerHTML = w.bildWetter(ABEND);
+    gleich("Fahrt-Karten: eigene Zeile unter den Werten", [...karteN.querySelectorAll(".karte .sonne")].map(z => [z.textContent, z.previousElementSibling.className]),
+      [["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "klein"], ["🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel", "klein"]]);
+    // Offline aus dem Zwischenspeicher; alter Zwischenspeicher ohne Sonne
+    wetterLeeren();
+    w.wetterSpeicherLaden();
+    netz();
+    gleich("Ohne Netz aus dem Zwischenspeicher: Sonnenzeiten weiter da", w.wetterAnsicht(ABEND).fahrten.map(f => f.sonne),
+      ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel"]);
+    const zwischenN = JSON.parse(localStorage.getItem(TEST_WETTER_SCHLUESSEL));
+    zwischenN.vorhersage.orte.forEach(o => { delete o.sonne; });
+    localStorage.setItem(TEST_WETTER_SCHLUESSEL, JSON.stringify(zwischenN));
+    wetterLeeren();
+    w.wetterSpeicherLaden();
+    const altN = w.document.createElement("div");
+    altN.innerHTML = w.bildWetter(ABEND);
+    gleich("Zwischenspeicher aus 5b (ohne Sonne): keine Sonnenzeile, kein Fehler, sonst unverändert",
+      [w.wetterAnsicht(ABEND).fahrten.map(f => f.sonne), altN.querySelectorAll(".sonne").length, altN.querySelectorAll(".karte h3").length, altN.textContent.includes("nicht angezeigt")],
+      [[null, null], 0, 2, false]);
+    // „Jetzt“ (Sa 31.10., kein Fahrtag): das nächste Ereignis des Tages am Wohnort
+    wetterDaten();
+    const jetztSonne = async uhr => { const j = zeit(SA, uhr); await laden(ruhig(), undefined, j); return w.wetterAnsicht(j).jetzt.fahrt.sonne; };
+    gleich("„Jetzt“: vor Sonnenaufgang der Aufgang (06:00 im Dunkeln, 07:15 bis 07:32 dunkel), tagsüber der Untergang (10:00, 16:00 ab 16:42 dunkel), danach „Dunkel seit …“",
+      [await jetztSonne("06:00"), await jetztSonne("07:15"), await jetztSonne("10:07"), await jetztSonne("16:00"), await jetztSonne("18:00")],
+      ["🌅 Sonnenaufgang 07:32 · Fahrt im Dunkeln", "🌅 Sonnenaufgang 07:32 · bis 07:32 dunkel", "🌇 Sonnenuntergang 16:42", "🌇 Sonnenuntergang 16:42 · ab 16:42 dunkel",
+        "🌙 Dunkel seit 16:42 (Sonnenuntergang)"]);
+
+    // -------------------------------------------------------------
+    // 67. Reiterleiste verankert (B3)
+    // -------------------------------------------------------------
+    abschnitt("67. Reiterleiste (B3): feste Seitenhöhe, nur der Inhalt scrollt, Zurücksetzen nur bei geschlossener Tastatur, Tipp auf den aktiven Reiter");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wB = await appLaden();
+    Object.assign(wB.frameElement.style, { width: "375px", height: "812px" });
+    const stilB = el => wB.getComputedStyle(el), navB = () => wB.document.querySelector("nav"), mainB = () => wB.document.getElementById("inhalt");
+    wB.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
+    gleich("Aufbau: Seite so hoch wie der Bildschirm, scrollt nicht; nur main scrollt; Reiterleiste ohne position: fixed; overscroll-behavior none auf html und body",
+      [stilB(wB.document.body).overflowY, stilB(wB.document.body).display, stilB(mainB()).overflowY, stilB(navB()).position, stilB(wB.document.querySelector("header")).position,
+        stilB(wB.document.documentElement).overscrollBehaviorY, stilB(wB.document.body).overscrollBehaviorY, stilB(wB.document.getElementById("toast")).position],
+      ["hidden", "flex", "auto", "relative", "static", "none", "none", "absolute"]);
+    const untenB = () => [Math.round(navB().getBoundingClientRect().bottom), wB.innerHeight, wB.document.scrollingElement.scrollHeight <= wB.innerHeight];
+    gleich("Reiterleiste schließt unten bündig ab (375 × 812), die Seite ist nicht höher als der Bildschirm", untenB(), [812, 812, true]);
+    mainB().scrollTop = 100000;
+    gleich("Inhalt ganz nach unten gescrollt: Reiterleiste bleibt unten, die Seite selbst scrollt nicht",
+      [mainB().scrollTop > 0, ...untenB(), wB.scrollY], [true, 812, 812, true, 0]);
+    const letzteZeile = [...mainB().querySelectorAll(".karte, .liste")].pop().getBoundingClientRect();
+    wahr("Letzter Inhalt über der Reiterleiste erreichbar", letzteZeile.bottom <= navB().getBoundingClientRect().top + 1);
+    // Tipp auf den aktiven Reiter
+    wB.document.querySelector('nav [data-tab="einstellungen"]').click();
+    for (let i = 0; i < 40 && mainB().scrollTop > 0; i++) await warten(50);
+    gleich("Tipp auf den aktiven Reiter: Inhalt scrollt nach oben, Reiter und Seite bleiben", [mainB().scrollTop, wB.eval("aktiverTab"), wB.eval("einstellungenSeite")], [0, "einstellungen", null]);
+    mainB().scrollTop = 300;
+    wB.document.querySelector('nav [data-tab="wartung"]').click();
+    gleich("Wechsel des Reiters: Inhalt beginnt oben", [wB.eval("aktiverTab"), mainB().scrollTop], ["wartung", 0]);
+    // Tastatur erkennen
+    wB.kleidungStufeFormular(2);
+    const feldB = wB.document.getElementById("ks-haende-regen");
+    feldB.focus();
+    const rB = feldB.getBoundingClientRect(), mB = mainB().getBoundingClientRect();
+    gleich("Feld unten auf der Seite antippen: das Feld wird im Inhalt sichtbar (über der Reiterleiste); Eingabe zählt als offene Tastatur",
+      [rB.top >= mB.top - 1 && rB.bottom <= mB.bottom + 1, wB.eingabeFokussiert(), wB.tastaturZu()], [true, true, false]);
+    feldB.blur();
+    const haken = wB.document.createElement("input");
+    haken.type = "checkbox";
+    mainB().appendChild(haken);
+    haken.focus();
+    gleich("Ein Haken öffnet keine Tastatur", [wB.eingabeFokussiert(), wB.tastaturZu()], [false, true]);
+    haken.remove();
+    // Zurücksetzen (Platzhalter für Sichtbereich und scrollTo)
+    const scrollsB = [];
+    const echtScrollB = wB.scrollTo;
+    wB.scrollTo = (...a) => scrollsB.push(a);
+    const sbB = (aend = {}) => { wB.sichtbereich = () => Object.assign({ scrollX: 0, scrollY: 0, innerHeight: 812, vvHeight: 812, vvOffsetTop: 0, scale: 1 }, aend); };
+    const verankert = aend => { scrollsB.length = 0; sbB(aend); return [wB.ansichtVerankern(), scrollsB.length]; };
+    gleich("Seite verschoben (scrollY 120 bzw. visualViewport.offsetTop 300) und Tastatur zu: zurückgesetzt",
+      [verankert({ scrollY: 120 }), verankert({ vvOffsetTop: 300 }), scrollsB[0]], [[true, 1], [true, 1], [0, 0]]);
+    gleich("Nichts verschoben: nichts zu tun", verankert({}), [false, 0]);
+    gleich("Tastatur offen (sichtbarer Bereich 300 px kleiner): nicht zurücksetzen, iOS schiebt das Feld selbst ins Bild", verankert({ scrollY: 120, vvHeight: 512 }), [false, 0]);
+    gleich("Kleine Abweichung des sichtbaren Bereichs (< 40 px) gilt als geschlossen", verankert({ scrollY: 120, vvHeight: 790 }), [true, 1]);
+    gleich("Gezoomt (scale 2): nicht zurücksetzen", verankert({ scrollY: 120, scale: 2 }), [false, 0]);
+    wB.document.getElementById("ks-kopf").focus();
+    gleich("Eingabefeld fokussiert (Tastatur offen): nicht zurücksetzen", verankert({ scrollY: 120 }), [false, 0]);
+    scrollsB.length = 0;
+    wB.document.getElementById("ks-kopf").blur();
+    await warten(600);
+    gleich("Feld verlassen (Tastatur zu): kurz danach zurückgesetzt", scrollsB.length > 0, true);
+    scrollsB.length = 0;
+    wB.document.dispatchEvent(new wB.Event("visibilitychange"));
+    await warten(500);
+    gleich("Zurück in die App: ebenfalls geprüft und zurückgesetzt", scrollsB.length > 0, true);
+    wB.scrollTo = echtScrollB;
+    gleich("Reiterleiste verändert keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    wB.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
@@ -4343,7 +4821,7 @@ async function start() {
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV1(d, v1) {
-  gleich("version = 9", d.version, 9);
+  gleich("version = 10", d.version, 10);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
   gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele; Wetter ohne Orte)", d.einstellungen, stdEinstellungen());
@@ -4371,7 +4849,7 @@ function pruefeUmwandlungV1(d, v1) {
 
 // Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV2(d, v2, wo) {
-  gleich(wo + ": version = 9", d.version, 9);
+  gleich(wo + ": version = 10", d.version, 10);
   gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
   gleich(wo + ": Einstellungen mit Standardwerten ergänzt (auch Wetter)", d.einstellungen, stdEinstellungen());
   gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));

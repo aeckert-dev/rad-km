@@ -251,6 +251,13 @@ const MIGRATIONEN = {
     const d = Object.assign({}, alt, { version: 9 });
     if (Array.isArray(alt.auftraege)) d.auftraege = alt.auftraege.map(a => istObjekt(a) ? Object.assign({}, a, { terminZeit: null }) : a);
     return d;
+  },
+  // Version 9 → 10: Vorlaufzeit am Termin (vorlauf) und der zuletzt in den
+  // Kalender übernommene Termin (imKalender); bei allen vorhandenen Aufträgen leer
+  9: alt => {
+    const d = Object.assign({}, alt, { version: 10 });
+    if (Array.isArray(alt.auftraege)) d.auftraege = alt.auftraege.map(a => istObjekt(a) ? Object.assign({}, a, { vorlauf: null, imKalender: null }) : a);
+    return d;
   }
 };
 
@@ -833,6 +840,20 @@ function pruefen(d) {
     if (termin !== null && (erledigt || !istGueltigesDatum(termin))) fehler(wo + ": termin muss bei geplanten Aufträgen ein Datum (JJJJ-MM-TT) oder null sein, bei erledigten null.");
     const terminZeit = x.terminZeit ?? null;
     if (terminZeit !== null && (termin === null || !istUhrzeit(terminZeit))) fehler(wo + ": terminZeit muss eine Uhrzeit im Format HH:MM oder null sein (nur zusammen mit einem Termin).");
+    const vorlauf = x.vorlauf ?? null;
+    if (vorlauf !== null && (terminZeit === null || !istVorlauf(vorlauf))) {
+      fehler(wo + ": vorlauf muss eine ganze Zahl von " + VORLAUF_MIN + " bis " + VORLAUF_MAX + " (Minuten) oder null sein (nur zusammen mit einer Uhrzeit am Termin).");
+    }
+    const ik = x.imKalender ?? null;
+    let imKalender = null;
+    if (ik !== null) {
+      if (erledigt || !istObjekt(ik)) fehler(wo + ": imKalender muss bei geplanten Aufträgen ein Objekt { termin, terminZeit, vorlauf } oder null sein, bei erledigten null.");
+      const kz = ik.terminZeit ?? null, kv = ik.vorlauf ?? null;
+      if (!istGueltigesDatum(ik.termin)) fehler(wo + ": imKalender.termin muss ein Datum (JJJJ-MM-TT) sein.");
+      if (kz !== null && !istUhrzeit(kz)) fehler(wo + ": imKalender.terminZeit muss eine Uhrzeit im Format HH:MM oder null sein.");
+      if (kv !== null && (kz === null || !istVorlauf(kv))) fehler(wo + ": imKalender.vorlauf muss eine ganze Zahl von " + VORLAUF_MIN + " bis " + VORLAUF_MAX + " oder null sein (nur mit Uhrzeit).");
+      imKalender = { termin: ik.termin, terminZeit: kz, vorlauf: kv };
+    }
     const datum = x.datum ?? null;
     if (erledigt ? !istGueltigesDatum(datum) : datum !== null) fehler(wo + ": datum muss bei erledigten Aufträgen ein gültiges Datum (JJJJ-MM-TT) sein, bei geplanten null.");
     if (erledigt) wo += " vom " + datumText(datum);
@@ -893,7 +914,7 @@ function pruefen(d) {
     });
     if (new Set(ausgeschlossen).size !== ausgeschlossen.length) fehler(wo + ": ausgeschlossen enthält eine Aufgabe doppelt.");
     return {
-      id, wartungsartId: art.id, status: x.status, termin, terminZeit, werkstatt: optText(x.werkstatt, wo + " (werkstatt)"),
+      id, wartungsartId: art.id, status: x.status, termin, terminZeit, vorlauf, imKalender, werkstatt: optText(x.werkstatt, wo + " (werkstatt)"),
       datum, kmStand: ks === null ? null : runden(ks), kmManuell: manuell && ks !== null, notiz: optText(x.notiz, wo + " (notiz)"),
       positionen, ausgeschlossen
     };

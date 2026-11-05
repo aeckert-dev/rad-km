@@ -17,7 +17,7 @@ function auftragFestlegen(key) {
   // Eine Auftragsart mit Fälligkeit hat höchstens einen geplanten Auftrag
   const geplant = hatFaelligkeit(art) && daten.auftraege.find(a => a.status === "geplant" && a.wartungsartId === artId);
   if (geplant) return geplant;
-  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, terminZeit: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
+  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
     notiz: "", positionen: [], ausgeschlossen: [] };
   daten.auftraege.push(a);
   return a;
@@ -201,6 +201,7 @@ function auftragKarte(o, lage, h) {
     o.positionen.map(p => positionHtml(p, lage)).join("") + '</div>';
   html += o.vorschlaege.map(x => vorschlagHtml(x, o)).join("");
   const key = esc(auftragKey(o));
+  html += kalenderKarteHtml(o.auftrag, key);
   return html + '<div class="knopfreihe">' +
     '<button type="button" data-action="auftrag-termin" data-key="' + key + '">' + (o.termin ? "Termin ändern" : "Termin planen") + '</button>' +
     '<button type="button" data-action="auftrag-ansehen" data-key="' + key + '">Positionen</button>' +
@@ -246,7 +247,7 @@ function auftragAnsicht(key) {
     '<div class="' + o.klasse + '">' + esc(o.text) + '</div>' +
     (o.regel && o.termin && o.regel.datum ? '<div class="klein">Ohne Termin: ' + esc(o.regel.text) + '</div>' : "") +
     (o.auftrag.notiz ? '<div class="klein umbrueche">' + esc(o.auftrag.notiz) + '</div>' : "") +
-    (o.auftrag.id && o.termin ? '<div class="knopfreihe"><button type="button" data-action="kalender" data-key="' + k + '">📅 In Kalender übernehmen</button></div>' : "") +
+    kalenderAnsichtHtml(o.auftrag, k) +
     '<h3>Positionen</h3>' + (zeilen || '<div class="klein">Noch keine Positionen.</div>') +
     o.vorschlaege.map(x => vorschlagHtml(x, o)).join("") +
     (aufgabenWahl.length ? '<label for="ap-aufgabe">Aufgabe hinzufügen</label><div class="suchzeile"><select id="ap-aufgabe">' +
@@ -335,20 +336,46 @@ function auftragTerminFormular(key) {
   const o = neu ? null : offenerVon(key);
   const art = neu ? artVon(key.slice(8)) : o && o.art;
   if (!art) return;
-  const a = o ? o.auftrag : { termin: null, terminZeit: null, werkstatt: "", notiz: "" };
+  const a = o ? o.auftrag : { termin: null, terminZeit: null, vorlauf: null, werkstatt: "", notiz: "" };
   fensterOeffnen(
     '<h2>' + (neu ? "Neuer Auftrag: " : "Termin: ") + esc(art.name) + '</h2>' +
     '<label for="t-datum">Termin' + (neu ? " (optional)" : "") + '</label><input type="date" id="t-datum" value="' + (a.termin || "") + '">' +
     // Schalter und Uhrzeit (das Uhrzeitfeld lässt sich auf dem iPhone nicht leeren)
     '<label class="haken"><input type="checkbox" id="t-zeit-an" data-change="termin-zeit-an"' + (a.terminZeit ? " checked" : "") + '><span>Mit Uhrzeit</span></label>' +
-    '<label for="t-zeit">Uhrzeit</label><input type="time" id="t-zeit" value="' + (a.terminZeit || "09:00") + '"' + (a.terminZeit ? "" : " disabled") + '>' +
+    '<label for="t-zeit">Uhrzeit</label><input type="time" id="t-zeit" data-input="termin-vorlauf" value="' + (a.terminZeit || "09:00") + '"' + (a.terminZeit ? "" : " disabled") + '>' +
     '<div class="feldhinweis">Ohne Uhrzeit gilt der Termin ganztägig, auch im Kalender.</div>' +
+    // Vorlaufzeit: ein Textfeld lässt sich auf dem iPhone leeren, daher ohne eigenen Schalter
+    '<label for="t-vorlauf">Vorlaufzeit (Minuten, optional)</label><input type="text" id="t-vorlauf" class="kurzfeld" inputmode="numeric" autocomplete="off" ' +
+    'placeholder="z. B. 30" data-input="termin-vorlauf" value="' + (a.terminZeit && a.vorlauf ? a.vorlauf : "") + '"' + (a.terminZeit ? "" : " disabled") + '>' +
+    '<div class="feldhinweis" id="t-vorlauf-hinweis">' + esc(vorlaufHinweis(a.terminZeit, a.terminZeit ? a.vorlauf : null)) + '</div>' +
     '<label for="t-werkstatt">Werkstatt</label><input type="text" id="t-werkstatt" value="' + esc(a.werkstatt) + '">' +
     '<label for="t-notiz">Notiz</label><textarea id="t-notiz">' + esc(a.notiz) + '</textarea>' +
     '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="auftrag-termin-speichern" data-key="' + esc(key) + '">' + (neu ? "Anlegen" : "Speichern") + '</button></div>' +
     (a.termin ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="auftrag-termin-entfernen" data-key="' + esc(key) + '">Termin entfernen</button></div>' : "")
   );
+}
+// Hinweis unter der Vorlaufzeit, z. B. "losfahren 09:30 – der Kalendereintrag beginnt dann"
+function vorlaufHinweis(zeit, vorlauf) {
+  if (zeit && vorlauf) return "losfahren " + losfahrenZeit(zeit, vorlauf) + " – der Kalendereintrag beginnt mit dem Losfahren.";
+  return "Für die Anfahrt bei einem Termin mit Uhrzeit, z. B. 30. Der Kalendereintrag beginnt dann mit dem Losfahren.";
+}
+// Vorlaufzeit aus dem Feld: Zahl, null (leer) oder undefined (ungültig)
+function vorlaufLesen(text) {
+  const t = String(text || "").trim();
+  if (t === "") return null;
+  const n = /^\d+$/.test(t) ? Number(t) : NaN;
+  return istVorlauf(n) ? n : undefined;
+}
+// Schalter "Mit Uhrzeit": Uhrzeit und Vorlaufzeit nur mit Uhrzeit bedienbar
+function terminZeitSchalten(an) {
+  document.getElementById("t-zeit").disabled = !an;
+  document.getElementById("t-vorlauf").disabled = !an;
+  terminVorlaufEingabe();
+}
+function terminVorlaufEingabe() {
+  const an = document.getElementById("t-zeit-an").checked, v = vorlaufLesen(wert("t-vorlauf")), z = wert("t-zeit");
+  document.getElementById("t-vorlauf-hinweis").textContent = vorlaufHinweis(an && istUhrzeit(z) ? z : null, an && v ? v : null);
 }
 function auftragTerminSpeichern(key) {
   const datum = wert("t-datum");
@@ -358,20 +385,33 @@ function auftragTerminSpeichern(key) {
   const zeit = wert("t-zeit");
   if (mitZeit && datum === "") { alert("Eine Uhrzeit geht nur zusammen mit einem Termin."); return; }
   if (mitZeit && !istUhrzeit(zeit)) { alert("Bitte eine gültige Uhrzeit eingeben, z. B. 09:30."); return; }
+  // Beim Ausschalten von "Mit Uhrzeit" entfällt auch die Vorlaufzeit
+  const vorlauf = mitZeit ? vorlaufLesen(wert("t-vorlauf")) : null;
+  if (vorlauf === undefined) { alert("Bitte als Vorlaufzeit ganze Minuten von " + VORLAUF_MIN + " bis " + VORLAUF_MAX + " eingeben, z. B. 30 – oder das Feld leer lassen."); return; }
+  const neu = key.startsWith("anlegen:");
+  const vorhanden = daten.auftraege.find(x => x.id === key && x.status === "geplant");
+  const vorher = vorhanden && vorhanden.termin ? kalenderStand(vorhanden) : null;
   const a = auftragFestlegen(key);
   if (!a) return;
-  Object.assign(a, { termin: datum || null, terminZeit: mitZeit ? zeit : null, werkstatt: wert("t-werkstatt").trim(), notiz: wert("t-notiz").trim() });
+  Object.assign(a, { termin: datum || null, terminZeit: mitZeit ? zeit : null, vorlauf, werkstatt: wert("t-werkstatt").trim(), notiz: wert("t-notiz").trim() });
   if (!speichern()) return;
   zeichnen();
-  if (key.startsWith("anlegen:")) { auftragAnsicht(a.id); meldung(artName(a.wartungsartId) + " angelegt"); }
+  // Neuer oder geänderter Termin (Datum, Uhrzeit, Vorlauf): gleich „In Kalender übernehmen“ anbieten
+  if (a.termin && !gleicherStand(vorher, kalenderStand(a))) { kalenderFenster(a.id, neu ? "angelegt" : "gespeichert"); return; }
+  if (neu) { auftragAnsicht(a.id); meldung(artName(a.wartungsartId) + " angelegt"); }
   else { fensterSchliessen(); meldung("Termin gespeichert"); }
 }
 async function auftragTerminEntfernen(key) {
-  if (!await frage("Termin wirklich entfernen?", "Entfernen", "Abbrechen", true)) return;
+  const vorhanden = daten.auftraege.find(x => x.id === key && x.status === "geplant");
+  const ik = vorhanden && vorhanden.imKalender;
+  if (!await frage("Termin wirklich entfernen?" + (ik ? "<br><br>Im Kalender steht der Termin (" + esc(kalenderStandText(ik)) + "); lösche ihn dort." : ""),
+    "Entfernen", "Abbrechen", true)) return;
   const a = auftragFestlegen(key);
   if (!a) return;
+  // imKalender bleibt: Die Karte erinnert daran, den Eintrag im Kalender zu löschen
   a.termin = null;
   a.terminZeit = null;
+  a.vorlauf = null;
   if (speichern()) { fensterSchliessen(); zeichnen(); }
 }
 async function auftragLoeschen(key) {
@@ -379,71 +419,116 @@ async function auftragLoeschen(key) {
   if (!a) return;
   const m = a.positionen.filter(p => p.art === "mangel").length;
   if (!await frage("Geplanten Auftrag „" + esc(artName(a.wartungsartId)) + "“ wirklich löschen?" +
-    (m ? "<br><br>" + (m === 1 ? "Der Mangel steht" : "Die " + m + " Mängel stehen") + " danach wieder ohne Auftrag oben im Reiter Wartung." : ""),
+    (m ? "<br><br>" + (m === 1 ? "Der Mangel steht" : "Die " + m + " Mängel stehen") + " danach wieder ohne Auftrag oben im Reiter Wartung." : "") +
+    (a.imKalender ? "<br><br>Im Kalender steht der Termin (" + esc(kalenderStandText(a.imKalender)) + "); lösche ihn dort." : ""),
     "Löschen", "Abbrechen", true)) return;
   mitRueckgaengig(() => { daten.auftraege = daten.auftraege.filter(x => x !== a); }, "Auftrag gelöscht");
 }
 
 // ---------- Termin in den Kalender (Kalenderdatei .ics, siehe kalender.js) ----------
-// Zwei Wege, weil nicht sicher ist, welcher aus der App auf dem Home-Bildschirm
-// zuverlässig in die Kalender-App führt: öffnen (iOS zeigt die Datei mit
-// „Hinzufügen“) oder teilen (wie bei der Sicherung).
-function kalenderFenster(key) {
+// „Im Kalender öffnen“ öffnet die Kalenderdatei; iOS zeigt sie mit „Hinzufügen“.
+// Die App merkt sich dabei den übernommenen Termin (imKalender) und weist auf
+// einen veralteten Eintrag hin: iOS legt bei erneuter Übernahme einen zweiten an.
+
+// Wann: "Fr. 20.11.2026, 10:00 Uhr (1 Stunde), losfahren 09:30 – im Kalender 09:30–11:00" bzw. "…, ganztägig"
+function kalenderWannText(a) {
+  const tag = WOCHENTAGE[new Date(a.termin + "T12:00:00").getDay()] + ". " + datumText(a.termin);
+  if (!a.terminZeit) return tag + ", ganztägig";
+  const ende = uhrzeitAus(minutenAus(a.terminZeit) + KALENDER_DAUER_MIN);
+  return tag + ", " + a.terminZeit + " Uhr (1 Stunde)" +
+    (a.vorlauf ? ", losfahren " + losfahrenZeit(a.terminZeit, a.vorlauf) + " – im Kalender " + uhrzeitAus(minutenAus(a.terminZeit) - a.vorlauf) + "–" + ende : "");
+}
+// Hinweis auf einen veralteten Eintrag im Kalender; "knopf" für den neuen Termin
+function kalenderVeraltetHtml(a, k, knopf) {
+  const alt = esc(kalenderStandText(a.imKalender));
+  if (!a.termin) {
+    return '<div class="hinweis warn">📅 Im Kalender steht noch der Termin (' + alt + ') – bitte dort löschen.' +
+      '<br><button type="button" data-action="kalender-geloescht" data-key="' + k + '">Im Kalender gelöscht</button></div>';
+  }
+  return '<div class="hinweis warn">📅 Im Kalender steht noch der alte Termin (' + alt + '). Erst dort den alten Eintrag löschen, dann den neuen übernehmen.' +
+    (knopf ? '<br>' + knopf : "") + '</div>';
+}
+// In der Karte im Reiter Wartung: Knopf öffnet direkt die Kalenderdatei
+function kalenderKarteHtml(a, k) {
+  if (!a.id) return "";
+  const knopf = '<button type="button" data-action="kalender-oeffnen" data-key="' + k + '">📅 In Kalender übernehmen</button>';
+  if (kalenderVeraltet(a)) return kalenderVeraltetHtml(a, k, knopf);
+  if (!a.termin) return "";
+  if (kalenderAktuell(a)) return '<div class="klein" style="margin-top:8px">📅 In den Kalender übernommen</div>';
+  return '<div class="knopfreihe">' + knopf + '</div>';
+}
+// In der Ansicht eines Auftrags: Knopf öffnet das Fenster mit Zusammenfassung
+function kalenderAnsichtHtml(a, k) {
+  if (!a.id) return "";
+  const knopf = '<button type="button" data-action="kalender" data-key="' + k + '">📅 In Kalender übernehmen</button>';
+  if (kalenderVeraltet(a)) return kalenderVeraltetHtml(a, k, knopf);
+  return a.termin ? '<div class="knopfreihe">' + knopf + '</div>' + (kalenderAktuell(a) ? '<div class="klein">Schon in den Kalender übernommen.</div>' : "") : "";
+}
+
+// Fenster „In Kalender übernehmen“; nach dem Speichern eines neuen oder
+// geänderten Termins als „Termin gespeichert“ bzw. „… angelegt“.
+// "bestaetigung": Text nach dem Öffnen der Kalenderdatei.
+let kalenderFensterArt = null; // { key, art } solange das Fenster offen ist
+function kalenderFenster(key, art = "kalender", bestaetigung = null) {
   const o = offenerVon(key);
   if (!o || !o.auftrag.id || !o.termin) return;
-  const a = o.auftrag;
-  const wann = WOCHENTAGE[new Date(a.termin + "T12:00:00").getDay()] + ". " + datumText(a.termin) +
-    (a.terminZeit ? ", " + a.terminZeit + " Uhr (1 Stunde)" : ", ganztägig");
-  const k = esc(key);
-  fensterOeffnen('<h2>In Kalender übernehmen</h2>' +
-    '<div class="karte"><div><strong>' + esc(kalenderTitel(o)) + '</strong></div><div>' + esc(wann) + '</div>' +
+  const a = o.auftrag, k = esc(key);
+  const titel = art === "gespeichert" ? "Termin gespeichert" : art === "angelegt" ? esc(o.art.name) + " angelegt" : "In Kalender übernehmen";
+  const unten = art === "kalender"
+    ? '<div class="knopfreihe"><button type="button" data-action="auftrag-ansehen" data-key="' + k + '">Zurück</button></div>'
+    : '<div class="knopfreihe">' + (art === "angelegt" ? '<button type="button" data-action="auftrag-ansehen" data-key="' + k + '">Positionen</button>' : "") +
+      '<button type="button" class="primaer" data-action="fenster-zu">Fertig</button></div>';
+  let stand = "";
+  if (bestaetigung) stand = bestaetigung;
+  else if (kalenderVeraltet(a)) stand = kalenderVeraltetHtml(a, k, "");
+  else if (kalenderAktuell(a)) stand = '<p class="klein">Dieser Termin wurde schon übernommen. Ein erneutes Übernehmen legt einen zweiten Eintrag an.</p>';
+  fensterOeffnen('<h2 id="kalender-fenster">' + titel + '</h2>' +
+    '<div class="karte"><div><strong>' + esc(kalenderTitel(o)) + '</strong></div><div>' + esc(kalenderWannText(a)) + '</div>' +
     '<div class="klein">Erinnerung am Vortag um ' + KALENDER_ERINNERUNG + ' Uhr · ' + (o.positionen.length ? positionenText(o.positionen.length) : "noch keine Positionen") + '</div></div>' +
-    '<button type="button" class="primaer voll" data-action="kalender-oeffnen" data-key="' + k + '">Im Kalender öffnen</button>' +
-    '<p class="klein">Öffnet die Kalenderdatei; tippe dort auf „Hinzufügen“.</p>' +
-    '<button type="button" class="voll" data-action="kalender-teilen" data-key="' + k + '">Als Datei teilen …</button>' +
-    '<p class="klein">Falls das Öffnen nicht klappt: Datei z. B. in „Dateien“ sichern und von dort öffnen.</p>' +
-    '<p class="klein">Hast du den Termin schon einmal übernommen und dann geändert, übernimm ihn erneut und lösche im Kalender den alten Eintrag, falls er doppelt erscheint.</p>' +
-    '<div class="knopfreihe"><button type="button" data-action="auftrag-ansehen" data-key="' + k + '">Zurück</button></div>');
+    stand +
+    '<button type="button" class="' + (bestaetigung ? "" : "primaer ") + 'voll" data-action="kalender-oeffnen" data-key="' + k + '">📅 Im Kalender öffnen</button>' +
+    '<p class="klein">Öffnet die Kalenderdatei; tippe dort auf „Hinzufügen“.</p>' + unten);
+  kalenderFensterArt = { key, art };
 }
-// Kalenderdatei als Blob bzw. Datei; ohne vorheriges "await" (iPhone: Teilen nur direkt nach einem Tipper)
-function kalenderInhalt(key) {
-  const o = offenerVon(key);
-  if (!o || !o.auftrag.id || !o.termin) return null;
-  return { text: kalenderDatei(o), dateiname: kalenderDateiname(o) };
-}
+// Kalenderdatei öffnen (ohne vorheriges "await": iOS öffnet sie nur direkt nach
+// einem Tipper), dann den übernommenen Termin merken und bestätigen
 function kalenderOeffnen(key) {
-  const k = kalenderInhalt(key);
-  if (!k) return;
-  const url = URL.createObjectURL(new Blob([k.text], { type: "text/calendar;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const o = offenerVon(key);
+  if (!o || !o.auftrag.id || !o.termin) return;
+  const url = URL.createObjectURL(new Blob([kalenderDatei(o)], { type: "text/calendar;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-}
-async function kalenderTeilen(key) {
-  const k = kalenderInhalt(key);
-  if (!k) return;
-  let datei = null;
-  try { datei = new File([k.text], k.dateiname, { type: "text/calendar" }); } catch (e) { /* ohne File: herunterladen */ }
-  if (datei && navigator.canShare && navigator.canShare({ files: [datei] })) {
-    try {
-      await navigator.share({ files: [datei] });
-      return;
-    } catch (err) {
-      if (err && err.name === "AbortError") return;
-      if (err && err.name === "NotAllowedError") { meldung("Bitte noch einmal auf „Als Datei teilen …“ tippen"); return; }
-    }
+  const a = daten.auftraege.find(x => x.id === o.auftrag.id);
+  const alt = kalenderVeraltet(a) ? a.imKalender : null;
+  a.imKalender = kalenderStand(a);
+  if (!speichern()) return;
+  zeichnen();
+  const neu = esc(kalenderStandText(a.imKalender));
+  const erinnern = alt ? '<div class="hinweis warn">📅 Alten Eintrag (' + esc(kalenderStandText(alt)) + ') im Kalender löschen nicht vergessen.</div>' : "";
+  const imFenster = fenster.open && !!document.getElementById("kalender-fenster") && kalenderFensterArt && kalenderFensterArt.key === key;
+  if (imFenster) {
+    kalenderFenster(key, kalenderFensterArt.art, '<div class="hinweis info">✓ An den Kalender übergeben (' + neu + ').</div>' + erinnern);
+  } else if (alt) {
+    fensterOeffnen('<h2>In Kalender übernommen</h2><p>Neuer Termin: ' + neu + '</p>' + erinnern +
+      '<div class="knopfreihe"><button type="button" class="primaer" data-action="fenster-zu">OK</button></div>');
+    kalenderFensterArt = null;
+  } else {
+    meldung("An den Kalender übergeben – dort „Hinzufügen“ tippen", { dauer: 4000 });
   }
-  const url = URL.createObjectURL(new Blob([k.text], { type: "text/calendar;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = k.dateiname;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+// "Im Kalender gelöscht": Hinweis zum entfernten Termin ausblenden
+function kalenderGeloescht(key) {
+  const a = daten.auftraege.find(x => x.id === key && x.status === "geplant");
+  if (!a || !a.imKalender) return;
+  a.imKalender = null;
+  if (!speichern()) return;
+  zeichnen();
+  if (fenster.open) auftragAnsicht(key);
+  meldung("Hinweis zum Kalender ausgeblendet");
 }
 
 // ---------- Erledigt eintragen (Abschluss) und erledigte Aufträge ----------
@@ -650,7 +735,7 @@ function abschlussSpeichern() {
     if (p.art === "aufgabe") pos.wartungsartId = p.wartungsartId; else pos.mangelId = p.mangelId;
     return pos;
   }).concat(weitere.map(id => ({ id: neueId(), art: "mangel", mangelId: id, status: "erledigt", notiz: "" })));
-  const satz = { status: "erledigt", termin: null, terminZeit: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
+  const satz = { status: "erledigt", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
     notiz: wert("p-notiz").trim(), positionen, ausgeschlossen: [] };
   const key = formAuftrag.key, artId = formAuftrag.artId;
 

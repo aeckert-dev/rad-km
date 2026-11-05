@@ -114,19 +114,28 @@ function fahrtKarte(f, alt) {
   html += '<div class="ampelzeile">' + ampelText(b) + '</div>';
   if (f.vorbei) return html + '</div>';
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
+    (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
     '<div style="margin-top:6px">👕 Kleidung <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' + kleidungBereicheHtml(f.kleidung) +
     (f.wind ? windHtml(f.wind) : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
   return html + '</div>';
 }
 
-// Wind: erste Zeile mit Himmelsrichtung und Böen, darunter eingerückt je Teilstrecke,
-// die zählt, zweizeilig: der Name klein, darunter eingerückt die Richtung relativ
-// zur Fahrtrichtung in normaler Schrift (W15)
+// Wind: erste Zeile mit Himmelsrichtung und Böen (nur Text), darunter je
+// Teilstrecke, die zählt, eine Zeile mit ihrem Namen und einem farbigen Pfeil
+// (B8): der Fahrer fährt nach oben, der Pfeil zeigt, wohin der Wind weht.
+// Die Pfeile stehen untereinander hinter dem längsten Namen.
 function windHtml(wind) {
   return '<div>🧭 ' + esc(wind.text) + '</div>' +
     (wind.teile.length ? '<div class="wind-teile">' + wind.teile.map(t =>
-      '<div class="wind-teil"><div class="klein">' + esc(t.titel) + '</div><div class="wind-text">' + esc(t.text) + '</div></div>').join("") + '</div>' : "");
+      '<span class="wind-name">' + esc(t.titel) + '</span>' + windPfeilHtml(t)).join("") + '</div>' : "");
+}
+// Pfeil im genauen Winkel als kleines SVG, mit Beschriftung für VoiceOver;
+// windstill ohne Pfeil
+function windPfeilHtml(t) {
+  if (t.windstill) return '<span class="klein windstill">windstill</span>';
+  return '<svg class="wind-pfeil ' + t.farbe + (t.schwach ? " schwach" : "") + '" viewBox="0 0 24 24" role="img" aria-label="' + esc(t.text) + '">' +
+    '<g transform="rotate(' + t.drehung + ' 12 12)"><path d="M12 20.5V4M5.5 10.5L12 4l6.5 6.5"/></g></svg>';
 }
 // Kleidung je Körperbereich; leere Bereiche entfallen, wegen Regen angepasste sind markiert
 function kleidungBereicheHtml(kl) {
@@ -212,8 +221,8 @@ function wetterKachel(jetzt) {
 
 // ---------- Wetter in den Einstellungen: Orte und Fahrzeiten ----------
 
-// Einstellungen → Wetter: Zeilen auf der Hauptseite (Orte und „Außerhalb der
-// Fahrten“ als Unterseiten, Fahrzeiten, Kleidung und Ampel-Grenzen als Fenster)
+// Einstellungen → Wetter: Zeilen auf der Hauptseite (Orte, „Außerhalb der
+// Fahrten“, Kleidung und Ampel-Grenzen als Unterseiten, Fahrzeiten als Fenster)
 function wetterEinstellungen() {
   const w = daten.einstellungen.wetter;
   const fahrtZeile = (art, titel) => {
@@ -514,52 +523,61 @@ const AMPEL_FELDER = [
   ["gelbTemperatur", "Temperatur und Glätte", "Gelb bei Temperatur unter", "°C", ""],
   ["glaetteTemperatur", "Temperatur und Glätte", "Glätte möglich bis Lufttemperatur", "°C", ""]
 ];
-function ampelFormular() {
+// Einstellungen → Ampel-Grenzen (Unterseite): Jedes Feld wird beim Verlassen
+// gespeichert und mit allen anderen geprüft (gelb unter rot); ungültig: Hinweis,
+// das Feld zeigt wieder den gespeicherten Wert.
+function ampelFormular() { unterseiteZeigen("ampel"); }
+function ampelSeite() {
   const g = daten.einstellungen.wetter.ampel;
   let gruppe = "";
   const felder = AMPEL_FELDER.map(([feld, gr, text, einheit, tastatur]) =>
     (gr !== gruppe ? (gruppe = gr, '<h3 style="margin-top:16px">' + gr + '</h3>') : "") +
     '<label for="ag-' + feld + '">' + text + ' (' + einheit + ')</label>' +
-    '<input type="text" id="ag-' + feld + '"' + (tastatur ? ' inputmode="' + tastatur + '"' : "") + ' autocomplete="off" value="' + zahlFeld(g[feld]) + '">').join("");
-  fensterOeffnen(
-    '<h2>Ampel-Grenzen</h2><p class="klein" style="margin-top:0">Gelten für die Ampel jeder Fahrt; gelb unter rot. ' +
+    '<input type="text" id="ag-' + feld + '" data-change="ampel-feld"' + (tastatur ? ' inputmode="' + tastatur + '"' : "") + ' autocomplete="off" value="' + zahlFeld(g[feld]) + '">').join("");
+  return '<p class="klein">Gelten für die Ampel jeder Fahrt; gelb unter rot. Jede Änderung wird beim Verlassen des Felds gespeichert. ' +
     'Das schon in Einträgen gespeicherte Wetter bleibt, wie es ist.</p>' + felder +
     '<div class="feldhinweis">Glätte: kalt (Luft bis zu dieser Temperatur oder Boden höchstens 0 °C) und nass.</div>' +
-    '<h3 style="margin-top:16px">Amtliche Warnungen</h3><label for="ag-rotWarnstufe">Rot ab</label><select id="ag-rotWarnstufe">' +
+    '<h3 style="margin-top:16px">Amtliche Warnungen</h3><label for="ag-rotWarnstufe">Rot ab</label><select id="ag-rotWarnstufe" data-change="ampel-feld">' +
     [1, 2, 3, 4].map(n => '<option value="' + n + '"' + (g.rotWarnstufe === n ? " selected" : "") + '>Stufe ' + n + '</option>').join("") + '</select>' +
     '<div class="feldhinweis">Niedrigere Stufen sind gelb. Warnungen vor Gewitter und Glätte sind bei jeder Stufe rot, Hitze und UV nur zur Info.</div>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
-    '<button type="button" class="primaer" data-action="ampel-speichern">Speichern</button></div>' +
-    '<div class="knopfreihe"><button type="button" class="voll" data-action="ampel-standard">Auf Standard zurücksetzen</button></div>'
-  );
+    '<div class="knopfreihe"><button type="button" class="voll" data-action="ampel-standard">Auf Standard zurücksetzen</button></div>';
 }
-function ampelSpeichern() {
+// Alle Felder der Seite lesen und prüfen; gültig: speichern. "geaendert" ist das
+// verlassene Feld (bei einem Fehler zeigt es wieder den gespeicherten Wert).
+function ampelSpeichern(geaendert = null) {
+  const alt = daten.einstellungen.wetter.ampel;
+  const zurueck = text => {
+    alert(text);
+    if (geaendert) geaendert.value = geaendert.id === "ag-rotWarnstufe" ? String(alt.rotWarnstufe) : zahlFeld(alt[geaendert.id.slice(3)]);
+  };
   const g = standardAmpel();
   for (const [feld, , text] of AMPEL_FELDER) {
     const v = zahlLesen(wert("ag-" + feld));
-    if (v === null) { alert("Bitte bei „" + text + "“ eine Zahl eingeben."); return; }
+    if (v === null) { zurueck("Bitte bei „" + text + "“ eine Zahl eingeben."); return; }
     g[feld] = v;
   }
   g.rotWarnstufe = Number(wert("ag-rotWarnstufe"));
-  if (!(g.gelbRegenWahrscheinlichkeit >= 0 && g.gelbRegenWahrscheinlichkeit <= 100)) { alert("Die Regenwahrscheinlichkeit muss zwischen 0 und 100 % liegen."); return; }
-  if (!(g.gelbNiederschlag > 0 && g.gelbNiederschlag < g.rotStarkregen)) { alert("Beim Niederschlag muss die Grenze für Gelb größer als 0 und kleiner als die für Rot sein."); return; }
-  if (!(g.gelbBoeen > 0 && g.gelbBoeen < g.rotBoeen)) { alert("Bei den Böen muss die Grenze für Gelb größer als 0 und kleiner als die für Rot sein."); return; }
+  if (!(g.gelbRegenWahrscheinlichkeit >= 0 && g.gelbRegenWahrscheinlichkeit <= 100)) { zurueck("Die Regenwahrscheinlichkeit muss zwischen 0 und 100 % liegen."); return; }
+  if (!(g.gelbNiederschlag > 0 && g.gelbNiederschlag < g.rotStarkregen)) { zurueck("Beim Niederschlag muss die Grenze für Gelb größer als 0 und kleiner als die für Rot sein."); return; }
+  if (!(g.gelbBoeen > 0 && g.gelbBoeen < g.rotBoeen)) { zurueck("Bei den Böen muss die Grenze für Gelb größer als 0 und kleiner als die für Rot sein."); return; }
+  if (gleicherInhalt(g, alt)) { if (geaendert && geaendert.tagName === "INPUT") geaendert.value = zahlFeld(alt[geaendert.id.slice(3)]); return; }
   daten.einstellungen.wetter.ampel = g;
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung("Ampel-Grenzen gespeichert"); }
+  if (speichern()) { if (geaendert && geaendert.tagName === "INPUT") geaendert.value = zahlFeld(g[geaendert.id.slice(3)]); meldung("Ampel-Grenzen gespeichert"); }
 }
 async function ampelStandard() {
   if (!await frage("Ampel-Grenzen auf die Standardwerte zurücksetzen?", "Zurücksetzen", "Abbrechen")) return;
-  mitRueckgaengig(() => { daten.einstellungen.wetter.ampel = standardAmpel(); }, "Ampel-Grenzen zurückgesetzt");
+  mitRueckgaengig(() => { daten.einstellungen.wetter.ampel = standardAmpel(); }, "Ampel-Grenzen zurückgesetzt", () => {});
 }
 
 // ---------- Kleidungsregeln (Einstellungen → Wetter) ----------
 
-// Bereich einer Stufe: "ab 20 °C", "7–11 °C", "unter −6 °C"
+// Bereich einer Stufe: "ab 20 °C", "7 bis 11 °C", "−6 bis −1 °C", "unter −6 °C"
+// ("bis" statt Strich, damit negative Grenzen lesbar bleiben)
 function stufeBereich(k, i) {
   const s = k.stufen[i], oben = k.stufen[i - 1];
   const grenze = x => minus(zahlFeld(x.ab));
   if (s.ab === null) return "unter " + grenze(oben) + " °C";
-  return oben ? grenze(s) + "–" + grenze(oben) + " °C" : "ab " + grenze(s) + " °C";
+  return oben ? grenze(s) + " bis " + grenze(oben) + " °C" : "ab " + grenze(s) + " °C";
 }
 // Kurztext je Bereich für die Liste: "Oberkörper T-Shirt · Beine kurze Hose"
 function bereicheKurz(bereiche) {
@@ -574,17 +592,17 @@ function bereicheLesen(praefix) {
   return Object.fromEntries(BEREICH_SCHLUESSEL.map(b => [b, teileVon(wert(praefix + "-" + b)).join(", ")]));
 }
 
-// Übersicht der Kleidungsregeln: Schalter für die Rückmeldung, Stufen mit
-// Auswertung der Rückmeldungen, Regenzusatz. Jede Stufe und jeder Regenzusatz
-// hat ein eigenes Formular; Änderungen werden dort sofort gespeichert.
-function kleidungFormular() {
+// Einstellungen → Kleidung (Unterseite): Schalter für die Rückmeldung, Stufen
+// mit Auswertung der Rückmeldungen, Regenzusatz. Jede Stufe und jeder
+// Regenzusatz hat eine eigene Unterseite („‹ Kleidung“) mit „Speichern“.
+function kleidungFormular() { unterseiteZeigen("kleidung"); }
+function kleidungSeite() {
   const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten();
   const frueher = Object.keys(aus).filter(id => !k.stufen.some(s => s.id === id)).reduce((x, id) => x + aus[id].anzahl, 0);
   const zeile = (aktion, i, titel, unten) => '<div class="zeile"><button type="button" class="inhalt" data-action="' + aktion + '" data-i="' + i + '">' +
     '<div class="text"><div>' + titel + '</div>' + unten.map(u => '<div class="klein umbrechen">' + u + '</div>').join("") + '</div>' +
     '<span class="klein" style="padding-right:16px">›</span></button></div>';
-  fensterOeffnen(
-    '<h2>Kleidung</h2>' +
+  return (
     '<label class="haken"><input type="checkbox" id="k-rueckmeldung" data-change="kleidung-rueckmeldung"' + (k.rueckmeldung ? " checked" : "") + '>' +
     '<span>Rückmeldung zur Kleidung<br><span class="klein">Karte „Wie war die Kleidung?“ im Reiter Wetter und die Knöpfe in den Einträgen. ' +
     'Ausgeschaltet bleiben gegebene Rückmeldungen und die Auswertung erhalten.</span></span></label>' +
@@ -600,7 +618,6 @@ function kleidungFormular() {
     (k.regen.length ? '<div class="liste">' + k.regen.map((r, i) => zeile("kleidung-regen", i, "ab " + zahlFeld(r.ab) + " %", [esc(bereicheKurz(r.bereiche))])).join("") + '</div>'
       : '<div class="liste"><div class="leer">Kein Regenzusatz.</div></div>') +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-regen-neu">+ Regenzusatz</button></div>' +
-    '<div class="knopfreihe"><button type="button" class="primaer" data-action="fenster-zu">Fertig</button></div>' +
     '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>'
   );
 }
@@ -611,16 +628,21 @@ function kleidungRueckmeldungSchalten(an) {
 }
 function rueckmeldungAn() { return daten.einstellungen.wetter.kleidung.rueckmeldung; }
 
-// Formular einer Stufe (i = Nummer in der Liste; null = neue Stufe)
-function kleidungStufeFormular(i) {
+// Formular einer Stufe als Unterseite (i = Nummer in der Liste; null = neue Stufe)
+function kleidungStufeFormular(i) { unterseiteZeigen("kleidung-stufe", i); }
+function kleidungStufeTitel(i) {
+  const k = daten.einstellungen.wetter.kleidung;
+  return i === null || !k.stufen[i] ? "Neue Stufe" : "Stufe " + stufeBereich(k, i);
+}
+function kleidungStufeSeite(i) {
   const k = daten.einstellungen.wetter.kleidung, n = k.stufen.length;
+  if (i !== null && !k.stufen[i]) return kleidungSeite();
   const neu = i === null, letzte = !neu && i === n - 1;
   const vorschlag = k.stufen[n - 2].ab - 3;
   const s = neu ? { ab: vorschlag, bereiche: bereicheAus(), haendeBeiRegen: null } : k.stufen[i];
   const z = neu ? null : rueckmeldungenAuswerten()[s.id];
-  fensterOeffnen(
-    '<h2>' + (neu ? "Neue Stufe" : "Stufe " + stufeBereich(k, i)) + '</h2>' +
-    (letzte ? '<p class="klein" style="margin-top:0">Die letzte Stufe gilt unterhalb der vorigen (' + stufeBereich(k, i) + ').</p>'
+  return (
+    (letzte ? '<p class="klein">Die letzte Stufe gilt unterhalb der vorigen (' + stufeBereich(k, i) + ').</p>'
       : '<label for="ks-ab">Ab gefühlter Temperatur (°C)</label><input type="text" id="ks-ab" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '">' +
         '<div class="feldhinweis">Ein Grenzwert gehört zu dieser Stufe; die Stufen werden nach ihrer Grenze sortiert.</div>') +
     bereichFelder("ks", s.bereiche) +
@@ -664,14 +686,19 @@ async function kleidungStufeWeg(i) {
   }, "Stufe entfernt", () => kleidungFormular());
 }
 
-// Formular eines Regenzusatzes (i = Nummer; null = neu)
-function kleidungRegenFormular(i) {
+// Formular eines Regenzusatzes als Unterseite (i = Nummer; null = neu)
+function kleidungRegenFormular(i) { unterseiteZeigen("kleidung-regen", i); }
+function kleidungRegenTitel(i) {
+  const k = daten.einstellungen.wetter.kleidung;
+  return i === null || !k.regen[i] ? "Neuer Regenzusatz" : "Regenzusatz ab " + zahlFeld(k.regen[i].ab) + " %";
+}
+function kleidungRegenSeite(i) {
   const k = daten.einstellungen.wetter.kleidung, neu = i === null;
+  if (!neu && !k.regen[i]) return kleidungSeite();
   const r = neu ? { ab: k.regen.length ? Math.min(100, k.regen[k.regen.length - 1].ab + 10) : 40, bereiche: bereicheAus() } : k.regen[i];
-  fensterOeffnen(
-    '<h2>' + (neu ? "Neuer Regenzusatz" : "Regenzusatz ab " + zahlFeld(r.ab) + " %") + '</h2>' +
+  return (
     '<label for="kr-ab">Ab Regenwahrscheinlichkeit (%)</label><input type="text" id="kr-ab" class="kurzfeld" inputmode="numeric" autocomplete="off" value="' + zahlFeld(r.ab) + '">' +
-    '<div class="feldhinweis">Das Regenzeug kommt in seinem Bereich dazu (siehe Zwiebelprinzip in der Übersicht).</div>' +
+    '<div class="feldhinweis">Das Regenzeug kommt in seinem Bereich dazu (siehe Zwiebelprinzip auf der Seite Kleidung).</div>' +
     bereichFelder("kr", r.bereiche) +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="kleidung-regen-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +

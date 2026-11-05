@@ -6,8 +6,9 @@ ist für das iPhone optimiert.
 
 - Kilometer pro Tag erfassen, mit Vorlagen in zwei Klicks
 - Wetter für den Arbeitsweg: Ampel, Kleidung je Körperbereich, amtliche Warnungen
-  des DWD, beste Abfahrtszeit und Wind je Hin- und Rückfahrt (mit
-  Himmelsrichtung und Böen, je Teilstrecke relativ zur Fahrtrichtung), ab dem Vorabend für
+  des DWD, beste Abfahrtszeit, Sonnenauf- bzw. -untergang mit Hinweis auf
+  Dunkelheit und Wind je Hin- und Rückfahrt (mit Himmelsrichtung und Böen, je
+  Teilstrecke als farbiger Pfeil relativ zur Fahrtrichtung), ab dem Vorabend für
   den nächsten Fahrtag; zu allen übrigen Zeiten die Ampel für eine spontane Runde
   ab jetzt, am Wohnort oder am aktuellen Standort
 - Bis zu 3 Wegpunkte: Wind je Teilstrecke, Temperatur, Regen und Warnungen auch
@@ -29,8 +30,10 @@ ist für das iPhone optimiert.
   (z. B. Bremsbeläge, Ölwechsel) und Mängel hängen als **Positionen** daran;
   Fälligkeit nach Intervall (Monate und/oder km), jährlichem Zeitfenster oder
   einmalig, Vorschläge „zu diesem Auftrag nehmen?“
-- Termin eines Auftrags (auf Wunsch mit Uhrzeit) mit einem Tipper in den
-  Kalender des iPhones übernehmen, mit Positionen und Erinnerung am Vortag
+- Termin eines Auftrags (auf Wunsch mit Uhrzeit und Vorlaufzeit für die
+  Anfahrt) mit einem Tipper in den Kalender des iPhones übernehmen, mit
+  Positionen und Erinnerung am Vortag; nach einer Terminänderung erinnert die
+  App daran, den alten Eintrag im Kalender zu löschen
 - Mängelliste; Mängel werden einem Auftrag zugeordnet oder als Reparatur angelegt
 - Löschen mit „Rückgängig“
 - Datensicherung als JSON-Datei, die vor dem Teilen geprüft wird; gespeicherte
@@ -74,7 +77,7 @@ festgelegt hast:
 
 | Dienst | Wofür | Was gesendet wird |
 |---|---|---|
-| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort und den Wegpunkten bzw. des weiteren Orts; ist „aktueller Standort“ gewählt, außerhalb der Fahrten auch die des Standorts |
+| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes, mit Sonnenauf- und -untergang (in derselben Abfrage) | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort und den Wegpunkten bzw. des weiteren Orts; ist „aktueller Standort“ gewählt, außerhalb der Fahrten auch die des Standorts |
 | [Deutscher Wetterdienst](https://www.dwd.de/) (GeoServer `maps.dwd.de`) | amtliche Warnungen für die Gemeinde jedes Orts (auch der Wegpunkte und des aktuellen Standorts); der Name der Gemeinde ist zugleich der Name des Standorts | dieselben gerundeten Koordinaten |
 | [Bright Sky](https://brightsky.dev/) (`api.brightsky.dev`) | nur wenn der DWD nicht erreichbar ist: dieselben amtlichen Warnungen des DWD | dieselben gerundeten Koordinaten |
 | Ortssuche von Open-Meteo (`geocoding-api.open-meteo.com`) | Ort beim Festlegen suchen | nur der eingegebene Name |
@@ -158,6 +161,11 @@ brauchst; Verlauf und Einstellungen kommen weiter unten bzw. auf eigene Seiten.
 | 📊 **Fahrten** (bis 5a.1 „Statistik“) | umschaltbar **Einträge** (alle Einträge, zusammengefasst) und **Statistik** (Diagramm, Kennzahlen, Jahresziele, Wetter auf dem Arbeitsweg) |
 | ⚙️ **Einstellungen** | Hauptseite mit Abschnitten; die Zeilen mit „›“ öffnen eine eigene Seite (zurück mit „‹ Einstellungen“ oder erneutem Antippen des Reiters) |
 
+Die Reiterleiste steht immer unten; nur der Inhalt darüber scrollt (seit 5c,
+siehe „Versionen“). Ein Tipp auf den Reiter, der schon offen ist, scrollt den
+Inhalt nach oben (ein Tipp auf die Statusleiste erreicht ihn nicht); in den
+Einstellungen führt er von einer Unterseite zur Hauptseite.
+
 Die Hauptseite der Einstellungen:
 
 - **Fahrrad** → Seite mit allen Angaben und „Ändern“
@@ -166,8 +174,9 @@ Die Hauptseite der Einstellungen:
 - **Fahrten:** Vorlagen → Seite; Fahrtage und Hinweis → Seite; Weg zu den
   Jahreszielen (Fahrten → Statistik)
 - **Wetter:** Orte und Strecke → Seite (Wohn- und Arbeitsort, Wegpunkte,
-  Teilstrecken, weiterer Ort); Wetter außerhalb der Fahrten → Seite; Hinfahrt,
-  Rückfahrt, Kleidung und Ampel-Grenzen öffnen wie bisher ihr Formular
+  Teilstrecken, weiterer Ort); Wetter außerhalb der Fahrten → Seite; Kleidung
+  → Seite (Stufe und Regenzusatz je eine weitere Seite mit „‹ Kleidung“);
+  Ampel-Grenzen → Seite (seit 5c); Hinfahrt und Rückfahrt öffnen ihr Formular
 - **Wartung:** Wartungsarten → Seite
 - **Über Rad-km:** App-Version und Datenversion
 
@@ -432,10 +441,14 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     beim Wetter ins Netz?“).
 - **Je Fahrt:** Ampel mit kurzer Begründung, die Werte (niedrigste Temperatur
   und gefühlte Temperatur, Regenwahrscheinlichkeit und Niederschlag),
-  Kleidung, Wind mit Böen und, wenn nötig, das beste Abfahrtsfenster.
+  Sonnenauf- bzw. -untergang, Kleidung, Wind mit Böen und, wenn nötig, das
+  beste Abfahrtsfenster.
 - **Ampel:** Geprüft wird die Fahrzeit an Wohnort, Wegpunkten und Arbeitsort;
   es zählt der ungünstigste Wert. Die Grenzen (Standardwerte in der Tabelle) lassen sich
-  unter **Einstellungen → Wetter → Ampel-Grenzen** ändern.
+  unter **Einstellungen → Wetter → Ampel-Grenzen** ändern (eine Unterseite; jedes
+  Feld wird beim Verlassen gespeichert und mit den anderen geprüft, z. B. Gelb
+  unter Rot – ein ungültiger Wert wird abgelehnt und das Feld zeigt wieder den
+  gespeicherten).
 
   | Farbe | Wann |
   |---|---|
@@ -503,10 +516,13 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Braucht die Rückfahrt andere Kleidung, steht ein Hinweis darunter, z. B.
     „Für die Rückfahrt einpacken: Regenhose, Gamaschen; nicht mehr nötig:
     Schal.“
-- **Kleidung anpassen** (Einstellungen → Wetter → Kleidung): Oben der Schalter
-  **Rückmeldung zur Kleidung**, darunter die Stufen von warm nach kalt mit ihrer
-  Kleidung und der Auswertung der Rückmeldungen, dann der Regenzusatz.
-  - Antippen einer Stufe öffnet ihr Formular: Grenze („ab … °C“; die letzte
+- **Kleidung anpassen** (Einstellungen → Wetter → Kleidung, eine Unterseite mit
+  „‹ Einstellungen“): Oben der Schalter **Rückmeldung zur Kleidung**, darunter
+  die Stufen von warm nach kalt mit ihrer Kleidung und der Auswertung der
+  Rückmeldungen, dann der Regenzusatz. Bereiche stehen mit „bis“, z. B.
+  „−6 bis −1 °C“ (seit 5c statt „−6––1 °C“).
+  - Antippen einer Stufe öffnet ihr Formular als eigene Unterseite (z. B.
+    „Stufe 7 bis 11 °C“, zurück mit „‹ Kleidung“): Grenze („ab … °C“; die letzte
     Stufe gilt darunter), die sechs Bereiche (leer = nichts; mehrere Teile mit
     Komma) und optional **Hände bei Regen**. **Speichern** übernimmt sie sofort
     und führt zurück zur Liste. Die Stufen werden nach ihrer Grenze sortiert;
@@ -516,8 +532,12 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     kältesten Grenze), **Stufe entfernen** im Formular entfernt sie (mit
     Rückfrage und „Rückgängig“; mindestens zwei bleiben). Wird die letzte
     entfernt, gilt die Stufe davor darunter.
-  - Der Regenzusatz ebenso: Schwelle in % und das Regenzeug je Bereich; eine
-    Schwelle gibt es nur einmal.
+  - Der Regenzusatz ebenso (eigene Unterseite): Schwelle in % und das Regenzeug
+    je Bereich; eine Schwelle gibt es nur einmal.
+  - Seit 5c sind Kleidung, Stufe, Regenzusatz und Ampel-Grenzen Unterseiten
+    statt Fenster: Lange Listen in einem Fenster blieben auf dem iPhone beim
+    Scrollen hängen. Eine Unterseite mit Formular wird beim Zurückkehren in die
+    App nicht neu gezeichnet; deine Eingaben bleiben stehen.
   - **Auf Standard zurücksetzen** stellt Stufen und Regenzusatz aus der Tabelle
     oben wieder her (mit Rückfrage und „Rückgängig“); der Schalter und deine
     Rückmeldungen bleiben.
@@ -587,20 +607,29 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   kommt, und den Böen (Höchstwert), z. B. **„🧭 Wind 15 km/h aus Südwest, Böen
   bis 36 km/h“**. Sie gilt für alle Orte der Strecke (Wohnort, Wegpunkte,
   Arbeitsort), in der Ansicht „Jetzt“ für den angezeigten Ort.
-  - **Je Teilstrecke** steht am Fahrtag darunter, eingerückt, eine eigene Zeile
-    mit der Richtung relativ zur Fahrtrichtung und der Stärke, z. B.
-    „Musterdorf → Ecke: schräg von hinten rechts 16 km/h“, und zwar seit
-    Release 5a zweizeilig: der Name der Teilstrecke („Musterdorf → Ecke“) klein,
-    darunter eingerückt in normaler Schrift die Windangabe („schräg von hinten
-    rechts 16 km/h“). Grundlage sind die
-    Richtung der Teilstrecke (Luftlinie, ohne Wegpunkte von Wohn- zu
-    Arbeitsort) und der mittlere Wind der Fahrzeit an ihren beiden Enden. Die
-    Stärke ist die volle mittlere Windgeschwindigkeit dort (nicht nur der Anteil
-    in Fahrtrichtung). Auch ohne Wegpunkte gibt es eine solche Zeile
-    („Musterdorf → Beispielstadt: Gegenwind 20 km/h“).
-  - **Acht Abschnitte** zu je 45°: Gegenwind, schräg von vorn links, schräg von
-    vorn rechts, von links, von rechts, schräg von hinten links, schräg von
-    hinten rechts, Rückenwind. Gegenwind reicht bis 22,5° beiderseits der
+  - **Je Teilstrecke** steht am Fahrtag darunter (nicht eingerückt) eine Zeile
+    mit dem Namen der Teilstrecke, z. B. „Musterdorf → Ecke“, und dahinter nur
+    ein **farbiger Pfeil** (seit 5c, vorher Text). Die Pfeile stehen
+    untereinander hinter dem längsten Namen.
+    - Der Fahrer fährt immer „nach oben“; der Pfeil zeigt, **wohin der Wind
+      weht**: Gegenwind = Pfeil nach unten, Rückenwind = nach oben, Wind von
+      rechts = nach links. Der Pfeil steht im genauen Winkel (nicht auf acht
+      Richtungen gerundet).
+    - Farbe nach dem Abschnitt (siehe unten): **rot** Gegenwind, **orange**
+      schräg von vorn und von links/rechts, **grün** schräg von hinten und
+      Rückenwind; bei schwachem Wind blass. In Hell- und Dunkelmodus mit einem
+      Kontrast von mindestens 3:1 zur Karte.
+    - VoiceOver liest je Pfeil die Richtung und Stärke vor, z. B. „Gegenwind
+      14 km/h“ oder „von schräg hinten rechts 4 km/h, schwach“ („von“ immer
+      vorne, Gegen- und Rückenwind ohne „von“).
+    - Grundlage sind die Richtung der Teilstrecke (Luftlinie, ohne Wegpunkte von
+      Wohn- zu Arbeitsort) und der mittlere Wind der Fahrzeit an ihren beiden
+      Enden; die Stärke ist die volle mittlere Windgeschwindigkeit dort (nicht
+      nur der Anteil in Fahrtrichtung). Auch ohne Wegpunkte gibt es eine solche
+      Zeile.
+  - **Acht Abschnitte** zu je 45° (für Farbe und Beschriftung): Gegenwind, von
+    schräg vorn links, von schräg vorn rechts, von links, von rechts, von
+    schräg hinten links, von schräg hinten rechts, Rückenwind. Gegenwind reicht bis 22,5° beiderseits der
     Fahrtrichtung, schräg von vorn bis 67,5°, von links/rechts bis 112,5°,
     schräg von hinten bis 157,5°, darüber Rückenwind. Ein Wind genau auf einer
     Grenze zählt zum Abschnitt weiter vorn (dem ungünstigeren), z. B. 22,5° als
@@ -609,27 +638,45 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     keine, ohne Arbeitsort und in der Ansicht „Jetzt“ (Richtung der Fahrt
     unbekannt) steht nur die erste Zeile.
   - Die Rückfahrt zeigt die Teilstrecken in umgekehrter Reihenfolge und
-    Richtung, z. B. „Beispielstadt → Ecke: schräg von vorn rechts 14 km/h“.
-  - **Schwacher Wind** (unter 10 km/h) mit Richtung und dem Zusatz
-    „(schwach)“: „🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h“ und
-    „Ecke → Beispielstadt: Gegenwind 4 km/h (schwach)“. Es entscheidet der
-    angezeigte, gerundete Wert (9 km/h ist schwach, 10 km/h nicht). Bei
-    gerundet 0 km/h steht **„Windstill“** ohne Richtung, je Teilstrecke
-    „windstill“.
+    Richtung (die Pfeile also gedreht).
+  - **Schwacher Wind** (unter 10 km/h): erste Zeile mit dem Zusatz
+    „(schwach)“, z. B. „🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h“;
+    je Teilstrecke ein blasser Pfeil (VoiceOver: „Gegenwind 4 km/h, schwach“).
+    Es entscheidet der angezeigte, gerundete Wert (9 km/h ist schwach, 10 km/h
+    nicht). Bei gerundet 0 km/h steht **„Windstill“** ohne Richtung, je
+    Teilstrecke statt des Pfeils „windstill“ klein in Grau.
   - Beispiel mit dem Wegpunkt „Ecke“ (erst nach Ost, dann nach Nord) bei
     Südwestwind:
 
     ```
     Hinfahrt:  🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h
-                  Musterdorf → Ecke: schräg von hinten rechts 16 km/h
-                  Ecke → Beispielstadt: schräg von hinten links 14 km/h
+               Musterdorf → Ecke     ↖ grün   (von schräg hinten rechts 16 km/h)
+               Ecke → Beispielstadt  ↗ grün   (von schräg hinten links 14 km/h)
     Rückfahrt: 🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h
-                  Beispielstadt → Ecke: schräg von vorn rechts 14 km/h
-                  Ecke → Musterdorf: schräg von vorn links 16 km/h
+               Beispielstadt → Ecke  ↙ orange (von schräg vorn rechts 14 km/h)
+               Ecke → Musterdorf     ↘ orange (von schräg vorn links 16 km/h)
     ```
+
+    (In Klammern, was VoiceOver vorliest; angezeigt wird nur der Pfeil.)
   - Nur zur Info, nicht in der Ampel. Die Kachel in der Übersicht zeigt keinen
     Wind (nur Ampeln und den wichtigsten Grund, z. B. Böen). Bei vergangenen
     Fahrten steht nur die Ampel.
+- **Sonnenauf- und -untergang** (seit 5c): Die Karte der Hinfahrt zeigt den
+  Sonnenaufgang am Wohnort, die der Rückfahrt den Sonnenuntergang am
+  Arbeitsort, mit Hinweis, wenn die Fahrt ganz oder teilweise im Dunkeln liegt:
+  - „🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln“ (die Fahrt endet spätestens
+    beim Sonnenaufgang), „🌅 Sonnenaufgang 07:24 · bis 07:24 dunkel“ (die Sonne
+    geht während der Fahrt auf), ohne Zusatz ganz im Hellen.
+  - „🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel“ bzw. „· Fahrt im Dunkeln“.
+  - Geprüft wird immer gegen Auf- und Untergang, auch bei ungewöhnlichen
+    Fahrzeiten. Es zählen Sonnenauf- und -untergang, keine Dämmerung.
+  - „Jetzt“: das nächste Ereignis des Tages am angezeigten Ort – vor
+    Sonnenaufgang der Aufgang, tagsüber der Untergang, danach „🌙 Dunkel seit
+    16:42 (Sonnenuntergang)“.
+  - Die Zeiten kommen mit der Vorhersage von Open-Meteo (Tageswerte
+    `sunrise`/`sunset`) und liegen im Zwischenspeicher, also auch ohne Netz.
+    Ein Zwischenspeicher aus 5b hat sie noch nicht; dann fehlt die Zeile bis
+    zum nächsten Abruf.
 - **Laden und Stand:** Die App lädt beim Start, beim Wechsel in Übersicht oder
   Wetter und beim Zurückkehren in die App neu, wenn die Vorhersage älter als 15
   Minuten oder die Warnungen älter als 10 Minuten sind; sonst mit
@@ -691,31 +738,66 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
   - Die Texte sind dieselben wie bisher (siehe unten „Fälligkeit mit
     Zeitfenster“ und „Fälligkeit mit Intervall“).
 - **Offene Aufträge:** Status „geplant“, optional mit Termin (Datum, auf
-  Wunsch mit Uhrzeit), Werkstatt und Notiz.
+  Wunsch mit Uhrzeit und Vorlaufzeit), Werkstatt und Notiz.
   - **Uhrzeit:** Im Formular „Termin planen“ bzw. „Termin ändern“ den Schalter
     **„Mit Uhrzeit“** einschalten und die Uhrzeit wählen. Ohne Uhrzeit gilt der
     Termin ganztägig. Angezeigt wird z. B. „Termin am 20.11.2026 um 09:30 Uhr
     bei Beispiel-Werkstatt“. „Termin entfernen“ und „Erledigt eintragen“
     entfernen auch die Uhrzeit.
-  - **In Kalender übernehmen:** In der Ansicht eines geplanten Auftrags mit
-    Termin steht der Knopf **„📅 In Kalender übernehmen“**. Er zeigt den Termin
-    (Titel, Tag, ganztägig bzw. Uhrzeit, Erinnerung) und bietet zwei Wege:
-    - **„Im Kalender öffnen“** öffnet die Kalenderdatei (`.ics`); iOS zeigt
-      den Termin, ein Tipper auf **„Hinzufügen“** übernimmt ihn.
-    - **„Als Datei teilen …“** öffnet das Teilen-Menü mit der Datei (z. B. in
-      „Dateien“ sichern und von dort öffnen); ohne Teilen-Menü wird sie
-      heruntergeladen.
-    - Welcher Weg in der App auf dem Home-Bildschirm zuverlässig funktioniert,
-      wird noch auf dem iPhone geprüft; der andere entfällt später.
+  - **Vorlaufzeit** (seit 5c, optional): Minuten für die Anfahrt (1–240, z. B.
+    30), nur bei einem Termin mit Uhrzeit; leer = keine. Darunter steht gleich,
+    wann du losfahren musst. Angezeigt wird sie in Karte, Übersicht und
+    Kalenderfenster, z. B. „Termin am 06.11.2026 um 10:00 Uhr bei Werkstatt
+    Muster, losfahren 09:30 (in 1 Tag)“. Beim Ausschalten von „Mit Uhrzeit“
+    entfällt sie.
+  - **In Kalender übernehmen:**
+    - In der **Karte** im Reiter Wartung steht bei jedem Termin (mit oder ohne
+      Uhrzeit) **„📅 In Kalender übernehmen“**; ein Tipper öffnet direkt die
+      Kalenderdatei (`.ics`), iOS zeigt den Termin, ein Tipper auf
+      **„Hinzufügen“** übernimmt ihn.
+    - In der **Ansicht des Auftrags** („Positionen“) führt derselbe Knopf zu
+      einem Fenster mit Zusammenfassung (Titel, Tag, Uhrzeit, Losfahren,
+      Erinnerung, Positionen) und **„📅 Im Kalender öffnen“**.
+    - Nach dem **Speichern eines neuen oder geänderten Termins** (Datum,
+      Uhrzeit oder Vorlauf) bleibt das Fenster offen als **„Termin gespeichert“**
+      (bzw. „… angelegt“ mit „Positionen“) mit „Im Kalender öffnen“ und „Fertig“.
+      Ändern sich nur Werkstatt oder Notiz, schließt es wie bisher.
+    - „Als Datei teilen …“ gibt es seit 5c nicht mehr; „Im Kalender öffnen“ hat
+      sich auf dem iPhone bewährt.
     - Inhalt: Titel „Kleine Inspektion – Werkstatt“ (ohne Werkstatt nur der
-      Name), Termin ganztägig bzw. 1 Stunde ab der Uhrzeit (Ortszeit),
-      Beschreibung mit den Positionen (Aufgaben mit Bauteil, Mängel mit Datum),
-      der Notiz und dem erwarteten Kilometerstand, Erinnerung **am Vortag um
-      18:00**. Die Kennung (UID) ist je Auftrag fest. Hast du den Termin schon
-      übernommen und dann geändert, übernimm ihn erneut und lösche im Kalender
-      den alten Eintrag, falls er doppelt erscheint.
-    - Die Kalenderdatei entsteht nur auf dem Gerät; es geht nichts ins Netz,
-      und deine Daten bleiben unverändert.
+      Name), Termin ganztägig bzw. 1 Stunde ab der Uhrzeit; **mit Vorlaufzeit
+      beginnt der Eintrag mit dem Losfahren** (z. B. 09:30–11:00 für einen
+      Termin um 10:00 mit 30 min Vorlauf), der Titel nennt dann die Terminzeit
+      („… (Termin 10:00)“) und die Beschreibung beginnt mit „Termin 10:00 Uhr,
+      losfahren 09:30 (30 min Vorlauf)“. Dazu die Positionen (Aufgaben mit
+      Bauteil, Mängel mit Datum), die Notiz und der erwartete Kilometerstand,
+      Erinnerung **am Vortag um 18:00**. Die Kennung (UID) ist je Auftrag fest.
+    - **Zeiten in UTC** (seit 5c): Beginn und Ende mit Uhrzeit stehen in UTC
+      mit „Z“, umgerechnet aus der deutschen Zeit (Europe/Berlin, Sommer- und
+      Winterzeit). Ohne Zeitzone deutete ein Exchange-/Outlook-Kalender sie als
+      UTC, der Termin stand dann nach dem Abgleich 1 Stunde später. Eine
+      Uhrzeit, die es am Tag der Zeitumstellung nicht gibt (29.03. 02:30), gilt
+      als 03:30 Sommerzeit, eine doppelte (25.10. 02:30) beim ersten Mal. Die
+      Erinnerung bleibt relativ zum Beginn und wird aus echten Zeitpunkten
+      berechnet, liegt also auch am Wochenende der Zeitumstellung am Vortag um
+      18:00. Ganztägige Termine bleiben ohne Uhrzeit (`VALUE=DATE`).
+    - **Veralteter Eintrag im Kalender:** iOS legt bei einer erneuten Übernahme
+      einen zweiten Eintrag an, statt den alten zu ersetzen. Deshalb merkt sich
+      die App beim Antippen von „Im Kalender öffnen“, welcher Termin (Datum,
+      Uhrzeit, Vorlauf) übernommen wurde (ob du in iOS wirklich „Hinzufügen“
+      tippst, sieht sie nicht). Weicht der Termin später davon ab, steht in
+      Karte und Auftragsfenster z. B. „Im Kalender steht noch der alte Termin
+      (Fr 06.11., 09:00). Erst dort den alten Eintrag löschen, dann den neuen
+      übernehmen.“ mit „In Kalender übernehmen“. Nach dem Übernehmen erinnert
+      die Bestätigung noch einmal: „Alten Eintrag (Fr 06.11., 09:00) im Kalender
+      löschen nicht vergessen.“ Steht der Termin so im Kalender, zeigt die Karte
+      „📅 In den Kalender übernommen“.
+    - **Termin entfernt:** Die Karte zeigt „Im Kalender steht noch der Termin
+      (…) – bitte dort löschen.“ mit **„Im Kalender gelöscht“**, das den Hinweis
+      ausblendet. Auch die Rückfragen „Termin entfernen“ und „Auftrag löschen“
+      nennen den Eintrag im Kalender. Nach „Erledigt eintragen“ entfällt der
+      Hinweis.
+    - Die Kalenderdatei entsteht nur auf dem Gerät; es geht nichts ins Netz.
   - Hat ein Auftrag mit Fälligkeit (Intervall, Zeitfenster oder einmalig) noch
     keinen geplanten Auftrag, zeigt die App trotzdem den nächsten (vorgemerkt,
     ohne Termin). Gespeichert wird er erst, wenn du etwas daran änderst (Termin,
@@ -977,7 +1059,8 @@ Der Reiter **Fahrten** (bis 5a.1 „Statistik“) zeigt unter **Statistik**:
 
 - Hauptseite mit den Abschnitten Fahrrad, Datensicherung, Fahrten (Vorlagen,
   Fahrtage und Hinweis), Wetter (Orte und Strecke, Wetter außerhalb der
-  Fahrten, Hinfahrt, Rückfahrt, Kleidung, Ampel-Grenzen), Wartung
+  Fahrten, Hinfahrt, Rückfahrt, Kleidung und Ampel-Grenzen als Unterseiten),
+  Wartung
   (Wartungsarten) und Über Rad-km; siehe „Aufbau: die fünf Reiter“. Welche
   Seite offen ist, merkt sich die App nur, solange sie geöffnet ist.
 - **Fahrtage** (Einstellungen → Fahrtage und Hinweis): deine üblichen Fahrtage zum Ankreuzen (Voreinstellung
@@ -998,7 +1081,7 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `9` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `10` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
@@ -1023,6 +1106,8 @@ Allgemeine Regeln:
 - **Ja/Nein-Merkmale** (`arbeitsweg`, `einmalig`, `aktiv`) als `true` oder
   `false`; fehlt das Feld, gilt `false`. Ausnahme sind die Schalter
   `hinweisHeuteAn` und `abfahrtAn` (ab Version 7): Fehlen sie, gilt `true`.
+- **Optionale Felder ohne Wert** (`terminZeit`, `vorlauf`, `imKalender` …)
+  dürfen fehlen oder `null` sein.
 - **Uhrzeiten** als Text im Format `"HH:MM"`, z. B. `"06:00"`.
 
 ### `kurzinfo` (nur in der Sicherungsdatei)
@@ -1201,6 +1286,8 @@ Reparatur) wird er bei Bedarf angelegt. Die Standard-Wartungsarten (ab Version
 | `status` | `"geplant"` oder `"erledigt"` | ja | |
 | `termin` | Datum oder `null` | nein | Nur bei geplanten Aufträgen: Termin |
 | `terminZeit` | Uhrzeit `"HH:MM"` oder `null` | nein | Ab Version 9, nur zusammen mit einem Termin: Uhrzeit des Termins; `null` = ganztägig |
+| `vorlauf` | ganze Zahl 1–240 oder `null` | nein | Ab Version 10, nur zusammen mit `terminZeit`: Vorlaufzeit für die Anfahrt in Minuten; der Kalendereintrag beginnt so viel früher |
+| `imKalender` | Objekt oder `null` | nein | Ab Version 10, nur bei geplanten Aufträgen: der zuletzt mit „Im Kalender öffnen“ übernommene Termin `{ "termin": Datum, "terminZeit": Uhrzeit oder null, "vorlauf": Zahl oder null }` (`vorlauf` nur mit `terminZeit`). Weicht der Termin davon ab, weist die App auf den alten Eintrag im Kalender hin. Darf auch stehen, wenn der Termin inzwischen entfernt ist |
 | `werkstatt` | Text | nein | Werkstatt |
 | `datum` | Datum oder `null` | bei erledigten | Datum der Erledigung; bei geplanten `null` |
 | `kmStand` | Zahl oder `null` | nein | Nur bei erledigten: Kilometerstand bei der Erledigung |
@@ -1249,8 +1336,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ```json
 {
-  "version": 9,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5b", "eintraege": 4,
+  "version": 10,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5c", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1326,14 +1413,16 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
       "fensterVon": null, "fensterBis": null, "gueltigAbJahr": null, "einmalig": false, "bauteil": "Bremse vorn", "zuordnung": "grosse-inspektion" }
   ],
   "auftraege": [
-    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "terminZeit": null, "werkstatt": "Beispiel-Werkstatt",
+    { "id": "p1", "wartungsartId": "grosse-inspektion", "status": "erledigt", "termin": null, "terminZeit": null, "vorlauf": null, "imKalender": null,
+      "werkstatt": "Beispiel-Werkstatt",
       "datum": "2025-01-15", "kmStand": 175.5, "kmManuell": true, "notiz": "Bremsen eingestellt",
       "positionen": [
         { "id": "pos1", "art": "aufgabe", "wartungsartId": "kette", "status": "erledigt", "notiz": "" },
         { "id": "pos2", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "nicht-gemacht", "notiz": "noch 2 mm" },
         { "id": "pos3", "art": "mangel", "mangelId": "m1", "status": "erledigt", "notiz": "" }
       ], "ausgeschlossen": [] },
-    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "terminZeit": "09:30", "werkstatt": "Beispiel-Werkstatt",
+    { "id": "a2", "wartungsartId": "kleine-inspektion", "status": "geplant", "termin": "2025-06-02", "terminZeit": "09:30", "vorlauf": 30,
+      "imKalender": { "termin": "2025-05-30", "terminZeit": "10:00", "vorlauf": null }, "werkstatt": "Beispiel-Werkstatt",
       "datum": null, "kmStand": null, "kmManuell": false, "notiz": "",
       "positionen": [
         { "id": "pos4", "art": "aufgabe", "wartungsartId": "bremse-vorn", "status": "offen", "notiz": "" },
@@ -1455,15 +1544,34 @@ damit nichts verloren geht.
   `terminZeit` (`null`, also ganztägig) bei jedem Auftrag. Die umgewandelten
   Daten werden beim nächsten Speichern als Version 9 abgelegt; ein Hinweis
   erscheint nicht.
-- Daten aus Version 1 bis 7 werden in einem Schritt über die Zwischenversionen
-  auf Version 9 gebracht.
+- **Version 9 → 10** (Release 5c): Alle Daten bleiben unverändert (auch Termin
+  und Uhrzeit). Ergänzt werden `vorlauf: null` (keine Vorlaufzeit) und
+  `imKalender: null` bei jedem Auftrag. Ob ein Termin schon im Kalender steht,
+  weiß die App bei vorhandenen Aufträgen nicht; ein Hinweis auf einen alten
+  Eintrag erscheint erst nach der nächsten Übernahme in den Kalender. Die
+  umgewandelten Daten werden beim nächsten Speichern als Version 10 abgelegt.
+- Daten aus Version 1 bis 8 werden in einem Schritt über die Zwischenversionen
+  auf Version 10 gebracht.
+
+**App-Versionen:** Die Zahl `version` oben gilt für die Daten. Die App selbst
+zählt ab Release 5c so: fortlaufende Buchstaben für jedes Release (5c, 5d …)
+und eine neue Zahl für ein neues Thema (6, 6a …). Korrekturen wie „5a.1“ gibt
+es nicht mehr; sie bekommen den nächsten Buchstaben.
+
+**Release 5c** (Datenversion 10): Kalender in UTC (richtige Uhrzeit nach dem
+Abgleich mit Exchange/Outlook), Vorlaufzeit am Termin, „In Kalender
+übernehmen“ in der Karte und nach dem Speichern, Hinweis auf einen veralteten
+Kalendereintrag (ohne „Als Datei teilen …“), Kleidung und Ampel-Grenzen als
+Unterseiten, Temperaturbereiche mit „bis“, Windpfeile je Teilstrecke,
+Sonnenauf- und -untergang und eine Reiterleiste, die unten bleibt (feste
+Seitenhöhe, nur der Inhalt scrollt).
 
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1 bis 8 auf Version 9 (`tests/daten-v1.json`
-  bis `tests/daten-v8.json`, erfundene Werte; auch dass geänderte
+- die Umwandlung von Version 1 bis 9 auf Version 10 (`tests/daten-v1.json`
+  bis `tests/daten-v9.json`, erfundene Werte; auch dass geänderte
   Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
   werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
@@ -1578,8 +1686,8 @@ damit nichts verloren geht.
   auch über Mitternacht, Erinnerung am Vortag um 18:00, Titel mit und ohne
   Werkstatt, Maskierung, Beschreibung, feste UID, Falten nach 75 Bytes ohne
   geteilte Zeichen, Dateiname, Knopf nur bei geplanten Aufträgen mit Termin,
-  Fenster, „Im Kalender öffnen“, „Als Datei teilen …“ mit Abbruch und
-  Download, Daten unverändert),
+  Fenster, „Im Kalender öffnen“ (seit 5c in UTC und ohne „Als Datei teilen …“;
+  merkt sich den übernommenen Termin)),
 - Release 5b, Aufteilung der Reiter (IA): Reihenfolge der Übersicht (Wetter,
   Erfassen mit Fahrtagen ohne Eintrag, Kilometerstand, Summen, Jahr, diese
   Woche, Sicherungszeile), Ampel und Erfassen ohne Scrollen in der Größe eines
@@ -1589,7 +1697,45 @@ damit nichts verloren geht.
   Hauptseite und allen Unterseiten (Titel, „‹ Einstellungen“, Reiter erneut
   antippen, Unterseite bleibt beim Reiterwechsel), Wege aus Wetter und
   Übersicht, alle bisherigen Bedienelemente weiter erreichbar, Daten
-  unverändert; die bestehenden Tests gehen die neuen Wege.
+  unverändert; die bestehenden Tests gehen die neuen Wege,
+- Release 5c, Datenversion 10: die Umwandlung 9 → 10 mit `tests/daten-v9.json`
+  beim Laden und beim Import (alle Daten erhalten, `vorlauf` und `imKalender`
+  = `null`, Speicher erst beim Speichern geändert, „Sicherung prüfen“
+  identisch, Export → Import) und die Prüfung von `vorlauf` (1–240, ganze
+  Zahl, nur mit Uhrzeit) und `imKalender` (nur bei geplanten Aufträgen, Datum,
+  Uhrzeit, Vorlauf nur mit Uhrzeit),
+- Release 5c, Kalender und Termin: Umrechnung aus Europe/Berlin nach UTC im
+  Winter, im Sommer und an beiden Tagen der Zeitumstellung (auch 02:30, das es
+  einmal nicht und einmal doppelt gibt), die Kalenderdatei mit „Z“ und der
+  Erinnerung als echte Dauer (14 bzw. 16 Stunden am Wochenende der
+  Umstellung), ganztägig unverändert; die Vorlaufzeit (Beginn mit dem
+  Losfahren, Titel mit Terminzeit, Beschreibung, Formular mit Hinweis,
+  gesperrt ohne Uhrzeit, ungültige Werte, Anzeige in Karte und Übersicht);
+  der Knopf in der Karte (öffnet direkt die Datei, merkt sich den Termin), das
+  Fenster „Termin gespeichert“ bzw. „… angelegt“, nur Werkstatt geändert, der
+  Hinweis auf einen veralteten Eintrag in Karte und Fenster mit der
+  Reihenfolge „erst löschen, dann übernehmen“, die Bestätigung „Alten Eintrag
+  … löschen nicht vergessen“, „Termin entfernen“ mit „Im Kalender gelöscht“,
+  „Erledigt eintragen“ und „Auftrag löschen“; „Als Datei teilen …“ entfernt,
+- Release 5c, Unterseiten: Kleidung, Stufe, Regenzusatz und Ampel-Grenzen ohne
+  Fenster, „‹ Kleidung“, Titel, Eingaben bleiben beim Zurückkehren in die App
+  und bei „Neue Version“, Ampel-Grenzen je Feld gespeichert und geprüft;
+  Bereiche mit „bis“ (z. B. „−6 bis −1 °C“),
+- Release 5c, Windpfeile: Drehung im genauen Winkel, Farbe je Abschnitt an den
+  Grenzen, Beschriftung für VoiceOver, schwach (50 %), windstill als Text,
+  nicht eingerückt, Pfeile untereinander, Kontrast mindestens 3:1 in Hell- und
+  Dunkelmodus (aus `css/app.css` gelesen),
+- Release 5c, Sonne: Abruf mit `daily=sunrise,sunset` (nur Vorhersage),
+  Hinfahrt am Wohnort, Rückfahrt am Arbeitsort (auch mit Wegpunkt), ganz,
+  teilweise und nicht im Dunkeln mit den Grenzen, „Jetzt“ vor, während und nach
+  dem Tag, ohne Netz aus dem Zwischenspeicher und ein Zwischenspeicher aus 5b
+  ohne Sonnenzeiten,
+- Release 5c, Reiterleiste: feste Seitenhöhe, nur der Inhalt scrollt, keine
+  fest positionierte Leiste, `overscroll-behavior: none`, Leiste unten bündig
+  auch ganz unten im Inhalt (375 × 812), Tipp auf den aktiven Reiter, ein Feld
+  unten auf der Seite wird beim Antippen sichtbar, Zurücksetzen nur bei
+  geschlossener Tastatur und ohne Zoom (nach dem Verlassen eines Felds und
+  beim Zurückkehren in die App).
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -1598,7 +1744,9 @@ nicht berührt.
 ersetzen `fetch` durch einen Platzhalter, der mit aufgezeichneten Antworten
 antwortet (`tests/wetter-*.json`, aufgezeichnet am 25.10.2026 für erfundene
 Koordinaten; Ortsnamen, Warngebiete und Kennungen sind durch erfundene ersetzt;
-`tests/wetter-rueckblick.json` ist der Rückblick für den 12.–23.10.2026).
+`tests/wetter-rueckblick.json` ist der Rückblick für den 12.–23.10.2026; die
+Sonnenauf- und -untergangszeiten in `tests/wetter-open-meteo*.json` sind
+erfunden und werden in den Tests in der Ortszeit des Testgeräts gesetzt).
 Für die einzelnen Fälle setzen die Tests die aufgezeichnete Vorhersage auf
 ruhiges Wetter und ändern dann gezielt einzelne Werte; für Wegpunkte setzen sie
 die Vorhersage eines weiteren Orts aus den Aufzeichnungen zusammen. Die Tests laufen in jeder
@@ -1658,14 +1806,14 @@ fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
 | `js/berechnungen.js` | Kilometerstand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
 | `js/statistik.js` | Reiter Fahrten (Einträge \| Statistik): Fahrtage und Kennzahlen, Diagramm (SVG, ohne Bibliothek), Jahresziele mit Formular, Wetter-Statistik und „Wetter nachtragen …“ |
 | `js/wartung.js` | Werkstatt (Berechnung): Fälligkeit (Zeitfenster, Intervall), offene Aufträge, berechnete Standard-Zuordnung, Vorschläge |
-| `js/kalender.js` | Kalenderdatei (`.ics`) zum Termin eines geplanten Auftrags |
-| `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten (für Einstellungen → Wartungsarten): Aufträge, Termin, „In Kalender übernehmen“, Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
-| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung, Wind, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick |
-| `js/wetter-ansicht.js` | Reiter Wetter und Kachel, Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ und „Außerhalb der Fahrten“, Fahrzeiten), Ampel-Grenzen, Kleidungsregeln, Rückmeldung nach der Fahrt |
+| `js/kalender.js` | Kalenderdatei (`.ics`) zum Termin eines geplanten Auftrags (Zeiten in UTC aus Europe/Berlin, Vorlaufzeit), Stand im Kalender (`imKalender`) |
+| `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten (für Einstellungen → Wartungsarten): Aufträge, Termin mit Vorlaufzeit, „In Kalender übernehmen“ (Karte, Fenster, Hinweis auf veralteten Eintrag), Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
+| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung, Wind (Pfeilrichtung und -farbe), Sonnenauf- und -untergang, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick |
+| `js/wetter-ansicht.js` | Reiter Wetter und Kachel (mit Windpfeilen und Sonnenzeile), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“, „Außerhalb der Fahrten“, „Kleidung“ mit Stufe und Regenzusatz, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (für Fahrten → Einträge), Eintragsformular, Kilometerstand für ein Datum |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Datensicherung: Export, Prüfung vor dem Teilen, Vergleich mit einer Sicherung, Import |
-| `js/oberflaeche.js` | Bausteine der Oberfläche: Fenster, Rückfrage, Meldung, Rückgängig; `zeichnen()`, Reiter, Umschalter, Wege zu den Einstellungen |
+| `js/oberflaeche.js` | Bausteine der Oberfläche: Fenster, Rückfrage, Meldung, Rückgängig; `zeichnen()`, Reiter, Unterseiten, Umschalter, Wege zu den Einstellungen, Verankern der Reiterleiste |
 | `js/bedienung.js` | Zuordnung der Klicks und Eingaben (`data-action`, `data-change`) zu den Funktionen |
 | `js/start.js` | Anmeldung des Service Workers, Hinweis „Neue Version verfügbar“, Start der App |
 | `sw.js` | Service Worker (siehe unten) |

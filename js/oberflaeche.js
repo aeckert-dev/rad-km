@@ -114,12 +114,14 @@ const offeneGruppen = new Set();
 let wartungAnsicht = "aktuell";
 let fahrtenAnsicht = "eintraege";
 let einstellungenSeite = null;
+// Nummer der Stufe bzw. des Regenzusatzes auf deren Unterseite (null = neu)
+let einstellungenWert = null;
 
 const TITEL = { uebersicht: "Übersicht", wetter: "Wetter", wartung: "Wartung", fahrten: "Fahrten", einstellungen: "Einstellungen" };
 
 function zeichnen() {
   const unterseite = aktiverTab === "einstellungen" && einstellungenSeite ? EINSTELLUNGEN_SEITEN[einstellungenSeite] : null;
-  document.getElementById("seitentitel").textContent = unterseite ? unterseite.titel : TITEL[aktiverTab];
+  document.getElementById("seitentitel").textContent = unterseite ? (typeof unterseite.titel === "function" ? unterseite.titel(einstellungenWert) : unterseite.titel) : TITEL[aktiverTab];
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("aktiv", b.dataset.tab === aktiverTab));
   const bildschirme = { uebersicht: bildUebersicht, wetter: bildWetter, wartung: bildWartung, fahrten: bildFahrten, einstellungen: bildEinstellungen };
   let html = ladeFehler ? '<div class="hinweis fehler">' + esc(ladeFehler) + '</div>' : "";
@@ -129,6 +131,72 @@ function zeichnen() {
   }
   html += bildschirme[aktiverTab]();
   document.getElementById("inhalt").innerHTML = html;
+}
+
+// Unterseite der Einstellungen zeigen (statt eines Fensters), oben beginnen
+function unterseiteZeigen(seite, wert = null) {
+  fensterSchliessen();
+  aktiverTab = "einstellungen";
+  einstellungenSeite = seite;
+  einstellungenWert = wert;
+  zeichnen();
+  nachOben();
+}
+// Ist eine Unterseite mit Formular offen? Dann nicht von selbst neu zeichnen
+// (z. B. beim Zurückkehren in die App), damit Eingaben nicht verloren gehen.
+function formularSeiteOffen() {
+  return aktiverTab === "einstellungen" && !!einstellungenSeite && !!(EINSTELLUNGEN_SEITEN[einstellungenSeite] || {}).formular;
+}
+
+// Inhalt (der einzige Scrollbereich) nach oben; "sanft" beim Tipp auf den aktiven Reiter
+function nachOben(sanft = false) {
+  const inhalt = document.getElementById("inhalt");
+  if (sanft && typeof inhalt.scrollTo === "function") inhalt.scrollTo({ top: 0, behavior: "smooth" });
+  else inhalt.scrollTop = 0;
+}
+
+/* ---------- Reiterleiste verankern (B3) ----------
+   Die Seite selbst scrollt nie (nur der Inhalt). Hat iOS sie trotzdem
+   verschoben (z. B. bleibt nach dem Schließen der Tastatur
+   visualViewport.offsetTop stehen), setzt die App sie zurück – aber nur bei
+   geschlossener Tastatur: Bei offener Tastatur schiebt iOS die Seite selbst,
+   damit das Feld sichtbar bleibt. */
+function sichtbereich() {
+  const vv = window.visualViewport;
+  return { scrollX: window.scrollX, scrollY: window.scrollY, innerHeight: window.innerHeight,
+    vvHeight: vv ? vv.height : window.innerHeight, vvOffsetTop: vv ? vv.offsetTop : 0, scale: vv ? vv.scale : 1 };
+}
+// Ein fokussiertes Feld, das eine Tastatur öffnet (nicht Haken, Knöpfe, Datum/Uhrzeit-Auswahl zählen mit)
+function eingabeFokussiert() {
+  const el = document.activeElement;
+  if (!el || el === document.body) return false;
+  if (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return true;
+  return el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit", "reset", "file", "range", "color"].includes(el.type);
+}
+// Tastatur geschlossen: kein fokussiertes Eingabefeld und der sichtbare Bereich so hoch wie das Fenster
+function tastaturZu(b = sichtbereich()) {
+  return !eingabeFokussiert() && Math.abs(b.innerHeight - b.vvHeight) < 40;
+}
+// Zurücksetzen, wenn die Seite verschoben ist; liefert true, wenn zurückgesetzt wurde
+function ansichtVerankern() {
+  const b = sichtbereich();
+  if (!tastaturZu(b) || Math.abs(b.scale - 1) > 0.01) return false; // nicht bei offener Tastatur oder beim Zoomen
+  if (b.scrollX === 0 && b.scrollY === 0 && Math.abs(b.vvOffsetTop) < 1) return false;
+  window.scrollTo(0, 0);
+  return true;
+}
+// Wann geprüft wird: nach dem Verlassen eines Felds (wenn die Tastatur zu ist),
+// bei Änderungen des sichtbaren Bereichs, beim Zurückkehren in die App
+function ansichtVerankernStarten() {
+  const spaeter = () => { ansichtVerankern(); setTimeout(ansichtVerankern, 350); };
+  document.addEventListener("focusout", () => setTimeout(spaeter, 50));
+  window.addEventListener("pageshow", spaeter);
+  window.addEventListener("scroll", () => ansichtVerankern(), { passive: true });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) spaeter(); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", () => ansichtVerankern());
+    window.visualViewport.addEventListener("scroll", () => ansichtVerankern());
+  }
 }
 
 // Umschalter oben in einem Reiter, z. B. „Aktuell | Verlauf“: [[Wert, Text], …]

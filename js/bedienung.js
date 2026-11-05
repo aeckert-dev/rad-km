@@ -9,17 +9,25 @@
 
 const AKTIONEN = {
   "tab": el => {
-    // Erneutes Antippen der Einstellungen führt zur Hauptseite
-    if (el.dataset.tab === "einstellungen" && aktiverTab === "einstellungen") einstellungenSeite = null;
+    // Antippen des aktiven Reiters scrollt nach oben (ein Tipp auf die
+    // Statusleiste erreicht den inneren Scrollbereich nicht); in den
+    // Einstellungen führt es von einer Unterseite zur Hauptseite
+    const aktiv = el.dataset.tab === aktiverTab;
+    if (aktiv && !(aktiverTab === "einstellungen" && einstellungenSeite)) {
+      nachOben(true);
+      if (aktiverTab === "uebersicht" || aktiverTab === "wetter") wetterBeiBedarf();
+      return;
+    }
+    if (el.dataset.tab === "einstellungen" && aktiv) einstellungenSeite = null;
     aktiverTab = el.dataset.tab;
     zeichnen();
-    window.scrollTo(0, 0);
+    nachOben();
     if (aktiverTab === "uebersicht" || aktiverTab === "wetter") wetterBeiBedarf();
   },
   "fenster-zu": () => fensterSchliessen(),
   "kalender": el => kalenderFenster(el.dataset.key),
   "kalender-oeffnen": el => kalenderOeffnen(el.dataset.key),
-  "kalender-teilen": el => kalenderTeilen(el.dataset.key),
+  "kalender-geloescht": el => kalenderGeloescht(el.dataset.key),
   "gruppe": el => gruppeUmschalten(el.dataset.key),
 
   "vorlage-erfassen": el => {
@@ -92,13 +100,14 @@ const AKTIONEN = {
   "jahresziel-loeschen": el => jahreszielLoeschen(Number(el.dataset.jahr)),
   "prognose": () => prognoseFenster(),
   "fahrten-ansicht": el => { fahrtenAnsicht = el.dataset.wert; zeichnen(); },
-  "zu-fahrten": el => { aktiverTab = "fahrten"; fahrtenAnsicht = el.dataset.wert; zeichnen(); window.scrollTo(0, 0); },
+  "zu-fahrten": el => { aktiverTab = "fahrten"; fahrtenAnsicht = el.dataset.wert; zeichnen(); nachOben(); },
   "einstellungen-seite": el => {
     aktiverTab = "einstellungen";
     einstellungenSeite = el.dataset.seite || null;
+    einstellungenWert = null;
     zeichnen();
     const ziel = el.dataset.anker && document.getElementById(el.dataset.anker);
-    if (ziel) ziel.scrollIntoView(); else window.scrollTo(0, 0);
+    if (ziel) ziel.scrollIntoView(); else nachOben();
   },
   "statistik-monat": el => { statistikMonat = Number(el.dataset.monat); zeichnen(); },
   "statistik-tabelle": () => { statistikTabelleOffen = !statistikTabelleOffen; zeichnen(); },
@@ -118,7 +127,6 @@ const AKTIONEN = {
   "wetter-aktualisieren": () => { wetterAktualisieren(true); standortBeiBedarf(true); },
   "ort-ausserhalb": el => ortAusserhalbSetzen(el.dataset.wert),
   "ampel-bearbeiten": () => ampelFormular(),
-  "ampel-speichern": () => ampelSpeichern(),
   "ampel-standard": () => ampelStandard(),
   "kleidung-bearbeiten": () => kleidungFormular(),
   "kleidung-stufe": el => kleidungStufeFormular(Number(el.dataset.i)),
@@ -154,15 +162,17 @@ const AENDERUNGEN = {
   "art-typ": () => artTypGeaendert(),
   "fahrtag": () => fahrtageGeaendert(),
   "hinweis-heute-an": el => hinweisHeuteAnGeaendert(el.checked),
-  "termin-zeit-an": el => { document.getElementById("t-zeit").disabled = !el.checked; },
+  "termin-zeit-an": el => terminZeitSchalten(el.checked),
   "hinweis-heute-ab": el => hinweisHeuteAbGeaendert(el.value),
   "fahrt-abfahrt-an": el => { const f = document.getElementById("fz-abfahrt"); if (f) f.disabled = !el.checked; },
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),
   "teilstrecke-wind": el => teilstreckeWind(Number(el.dataset.i), el.checked),
   "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
+  "ampel-feld": el => ampelSpeichern(el),
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
+  "termin-vorlauf": () => terminVorlaufEingabe(),
   "ort-karte": () => ortKarteAktualisieren(),
   "protokoll-km": () => protokollKmEingabe(),
   "prognose-datum": () => prognoseAnzeigen()
@@ -195,7 +205,7 @@ fenster.addEventListener("click", ev => { if (ev.target === fenster) fensterSchl
 // nach einer neuen Version fragen und das Wetter bei Bedarf neu laden
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
-  if (!fenster.open) zeichnen();
+  if (!fenster.open && !formularSeiteOffen()) zeichnen();
   updatePruefen();
   wetterBeiBedarf();
 });

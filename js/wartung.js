@@ -232,10 +232,17 @@ function aufgabeStatus(art, h = heute()) {
   return Object.assign(st, { letzte, seitKm: letzte ? kmSeit(letzte, h) : null });
 }
 
-// Text zum Termin eines geplanten Auftrags (mit Uhrzeit, falls eingetragen)
-function terminText(termin, werkstatt, h, zeit = null) {
+// Uhrzeit zum Losfahren: Termin minus Vorlaufzeit, "09:30"; am Vortag "am Vortag 23:45"
+function losfahrenZeit(zeit, vorlauf) {
+  const m = minutenAus(zeit) - vorlauf;
+  return (m < 0 ? "am Vortag " : "") + uhrzeitAus(m);
+}
+// Text zum Termin eines geplanten Auftrags (mit Uhrzeit und Vorlaufzeit, falls eingetragen):
+// "Termin am 06.11.2026 um 10:00 Uhr bei Werkstatt Muster, losfahren 09:30 (in 1 Tag)"
+function terminText(termin, werkstatt, h, zeit = null, vorlauf = null) {
   const t = tageZwischen(h, termin);
   return "Termin am " + datumText(termin) + (zeit ? " um " + zeit + " Uhr" : "") + (werkstatt ? " bei " + werkstatt : "") +
+    (zeit && vorlauf ? ", losfahren " + losfahrenZeit(zeit, vorlauf) : "") +
     (t > 0 ? " (in " + tageText(t) + ")" : t === 0 ? " (heute)" : " (vor " + tageText(-t) + ", noch nicht als erledigt eingetragen)");
 }
 
@@ -268,7 +275,7 @@ function werkstattLage(h = heute()) {
     if (!hatFaelligkeit(art) || offene.some(o => o.art.id === art.id)) return;
     const regel = auftragsartStatus(art, h);
     if (regel.erledigt) return;
-    offene.push(offenerAuftrag({ id: null, wartungsartId: art.id, status: "geplant", termin: null, terminZeit: null, werkstatt: "", datum: null,
+    offene.push(offenerAuftrag({ id: null, wartungsartId: art.id, status: "geplant", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: "", datum: null,
       kmStand: null, kmManuell: false, notiz: "", positionen: [], ausgeschlossen: [] }, art, true, h, regel));
   });
   // Reihenfolge: überfällig, mit Datum, ohne Datum (km ohne Schätzung), ohne Fälligkeit
@@ -322,7 +329,7 @@ function offenerAuftrag(auftrag, art, vorgemerkt, h, regel = hatFaelligkeit(art)
   const o = { auftrag, art, vorgemerkt, regel, termin: auftrag.termin, datum: null, text: "", klasse: "" };
   if (auftrag.termin) {
     o.datum = auftrag.termin;
-    o.text = terminText(auftrag.termin, auftrag.werkstatt, h, auftrag.terminZeit);
+    o.text = terminText(auftrag.termin, auftrag.werkstatt, h, auftrag.terminZeit, auftrag.vorlauf);
     o.klasse = auftrag.termin < h ? "status-orange" : "status-gruen";
   } else if (regel) {
     Object.assign(o, { datum: regel.datum, text: regel.text, klasse: regel.klasse });

@@ -23,6 +23,10 @@ sind immer erfunden.
   verändern; Prüfungen und Datensicherung lesen nur.
 - Für das iPhone optimiert, Hell- und Dunkelmodus über die Farbvariablen in
   `:root` (`css/app.css`).
+- Seitenaufbau: feste Seitenhöhe, nur `main` scrollt, die Reiterleiste ist
+  nicht `position: fixed` (B3, 5c). Zum Scrollen nach oben `nachOben()` statt
+  `window.scrollTo`. Längere Formulare als Unterseite der Einstellungen
+  (`EINSTELLUNGEN_SEITEN`, ggf. `formular: true`) statt als Fenster.
 
 ## Datei → Inhalt (nur die betroffenen Dateien lesen)
 
@@ -35,14 +39,14 @@ sind immer erfunden.
 | `js/berechnungen.js` | km-Stand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
 | `js/statistik.js` | Reiter Fahrten (Einträge \| Statistik), Fahrtage/Kennzahlen, Diagramm, Jahresziele, Wetter-Statistik, „Wetter nachtragen“ |
 | `js/wartung.js` | Werkstatt-Berechnung: Fälligkeit (`intervallStatus`, `saisonStatus`), `werkstattLage`, Standard-Zuordnung, Vorschläge |
-| `js/kalender.js` | Kalenderdatei (.ics) zum Termin eines geplanten Auftrags |
-| `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten-Liste, Aufträge, Termin, Kalender-Fenster, Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
-| `js/wetter.js` | Wetter-Logik: Abruf, Zwischenspeicher, Standort, Ampel, Kleidung, Wind, Abfahrt, Rückblick |
-| `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Wetter-Einstellungen (Hauptseite, Orte und Strecke, außerhalb), Ampel-Grenzen, Kleidung, Rückmeldung |
+| `js/kalender.js` | Kalenderdatei (.ics) zum Termin eines geplanten Auftrags (UTC aus Europe/Berlin, Vorlaufzeit), Stand im Kalender (`imKalender`) |
+| `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten-Liste, Aufträge, Termin mit Vorlaufzeit, Kalender (Knopf in der Karte, Fenster, veralteter Eintrag), Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
+| `js/wetter.js` | Wetter-Logik: Abruf, Zwischenspeicher, Standort, Ampel, Kleidung, Wind (Pfeilrichtung/-farbe), Sonnenauf-/untergang, Abfahrt, Rückblick |
+| `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Windpfeile, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, außerhalb, Kleidung mit Stufe/Regenzusatz, Ampel-Grenzen), Rückmeldung |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (Fahrten → Einträge), Eintragsformular, Prognosefenster |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Export, Prüfung, Vergleich, Import |
-| `js/oberflaeche.js` | Fenster, Rückfrage, Meldung, Rückgängig, `zeichnen()`, Reiter, Umschalter, Wege |
+| `js/oberflaeche.js` | Fenster, Rückfrage, Meldung, Rückgängig, `zeichnen()`, Reiter, Unterseiten (`unterseiteZeigen`), Umschalter, Wege, Verankern der Reiterleiste |
 | `js/bedienung.js` | `AKTIONEN`: Zuordnung von `data-action`/`data-change` zu Funktionen |
 | `js/start.js` | Service Worker anmelden, „Neue Version verfügbar“, Start |
 | `sw.js` | Service Worker: vollständiger Satz aller Dateien offline, Update erst nach „Neu laden“ |
@@ -58,7 +62,9 @@ sind immer erfunden.
 
 ## Releases
 
-- `APP_VERSION` in `js/grundlagen.js` für jedes Release anpassen.
+- `APP_VERSION` in `js/grundlagen.js` für jedes Release anpassen. Zählweise
+  ab 5c: fortlaufende Buchstaben (5c, 5d …), eine neue Zahl für ein neues
+  Thema (6, 6a …); keine „.1“-Korrekturen mehr.
 - **Tests:** Jedes Release erweitert `tests/test.html` um Tests für alle neuen
   Funktionen (bei neuer Datenversion auch die Umwandlung aus allen älteren
   Versionen, mit einer erfundenen Testdatei in `tests/`). Die Ergebnisse
@@ -70,5 +76,7 @@ sind immer erfunden.
 - Bei Änderungen an `sw.js`, an der Dateiliste oder am Start der App
   zusätzlich `node tests/offline-update-test.js` ausführen (Offline-Start,
   neue Version, „Neu laden“, Übergang von 5a.1, Daten unverändert).
+- Was sich nur am iPhone prüfen lässt (Scrollen, Tastatur, Kalender-App,
+  Farben), steht im Pull Request ausdrücklich unter „Am iPhone prüfen“.
 - README (Bedienung, JSON-Format und ggf. Dateistruktur) mit jedem Release
   aktualisieren.
