@@ -96,6 +96,7 @@ const AKTIONEN = {
   "einstellungen-seite": el => {
     aktiverTab = "einstellungen";
     einstellungenSeite = el.dataset.seite || null;
+    einstellungenWert = null;
     zeichnen();
     const ziel = el.dataset.anker && document.getElementById(el.dataset.anker);
     if (ziel) ziel.scrollIntoView(); else window.scrollTo(0, 0);
@@ -118,7 +119,6 @@ const AKTIONEN = {
   "wetter-aktualisieren": () => { wetterAktualisieren(true); standortBeiBedarf(true); },
   "ort-ausserhalb": el => ortAusserhalbSetzen(el.dataset.wert),
   "ampel-bearbeiten": () => ampelFormular(),
-  "ampel-speichern": () => ampelSpeichern(),
   "ampel-standard": () => ampelStandard(),
   "kleidung-bearbeiten": () => kleidungFormular(),
   "kleidung-stufe": el => kleidungStufeFormular(Number(el.dataset.i)),
@@ -160,6 +160,7 @@ const AENDERUNGEN = {
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),
   "teilstrecke-wind": el => teilstreckeWind(Number(el.dataset.i), el.checked),
   "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
+  "ampel-feld": el => ampelSpeichern(el),
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
@@ -196,7 +197,7 @@ fenster.addEventListener("click", ev => { if (ev.target === fenster) fensterSchl
 // nach einer neuen Version fragen und das Wetter bei Bedarf neu laden
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
-  if (!fenster.open) zeichnen();
+  if (!fenster.open && !formularSeiteOffen()) zeichnen();
   updatePruefen();
   wetterBeiBedarf();
 });

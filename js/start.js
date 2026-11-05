@@ -38,7 +38,8 @@ function updatePruefen() {
 }
 function swNachricht(nachricht) {
   const typ = nachricht && nachricht.typ;
-  if (typ === "neue-version" && !neueVersion) { neueVersion = true; zeichnen(); }
+  // Eine offene Unterseite mit Formular zeigt den Hinweis erst beim nächsten Zeichnen
+  if (typ === "neue-version" && !neueVersion) { neueVersion = true; if (!formularSeiteOffen()) zeichnen(); }
   if (typ === "aktiviert") location.reload();
 }
 // "Neu laden": neue Version übernehmen, dann neu laden. Alle Daten sind

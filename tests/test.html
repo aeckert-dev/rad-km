@@ -1873,6 +1873,9 @@ async function start() {
     const kleidungJetzt = () => kopie(w.eval("daten.einstellungen.wetter.kleidung"));
     const feld = id => w.document.getElementById(id);
     const fensterInhaltHtml = () => w.document.getElementById("fensterinhalt").innerHTML;
+    const inhaltHtml = () => w.document.getElementById("inhalt").innerHTML;
+    // Feld ändern und verlassen (löst "change" aus)
+    const aendere = (id, v) => { feld(id).value = v; feld(id).dispatchEvent(new w.Event("change", { bubbles: true })); };
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
@@ -1977,8 +1980,8 @@ async function start() {
       [Object.keys(w5d.rueckmeldungenAuswerten()).sort(), w5d.eval("daten.einstellungen.wetter.kleidung.stufen").map(x => x.id).filter(id => ["kalt", "kuehl", "frost"].includes(id))],
       [["frost", "gibt-es-nicht", "kalt", "kuehl"], []]);
     w5d.kleidungFormular();
-    wahr("Kleidungsregeln: „4 Rückmeldungen zu früheren Stufen“", w5d.document.getElementById("fensterinhalt").textContent.includes("4 Rückmeldungen zu früheren Stufen"),
-      w5d.document.getElementById("fensterinhalt").textContent);
+    wahr("Kleidungsregeln: „4 Rückmeldungen zu früheren Stufen“", w5d.document.getElementById("inhalt").textContent.includes("4 Rückmeldungen zu früheren Stufen"),
+      w5d.document.getElementById("inhalt").textContent);
     w5d.eintragAnsicht("e-tag1");
     const detail5 = w5d.document.getElementById("fensterinhalt").textContent;
     wahr("Detailansicht eines umgewandelten Eintrags: die damals empfohlene Kleidung", detail5.includes("👕 Jacke, leichter Pullover, dünne Handschuhe, kleiner Schal + Regenjacke, Regenhose"), detail5);
@@ -2144,15 +2147,19 @@ async function start() {
       ["Kleidung 8 Stufen · Regenzusatz ab 40 % / 60 % · Rückmeldung an · Standard ›", "Ampel-Grenzen Böen 40 / 60 km/h · Niederschlag 0,5 / 5 mm/h · Regen ab 50 % · Standard ›"]);
     w.document.querySelector('#inhalt [data-action="ampel-bearbeiten"]').click();
     const AF = ["gelbRegenWahrscheinlichkeit", "gelbNiederschlag", "rotStarkregen", "gelbBoeen", "rotBoeen", "gelbTemperatur", "glaetteTemperatur"];
-    gleich("Formular mit den aktuellen Werten (Komma)", [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), AF.map(f => feld("ag-" + f).value), feld("ag-rotWarnstufe").value],
+    gleich("Formular mit den aktuellen Werten (Komma)", [ohneTags(w.document.getElementById("seitentitel").innerHTML), AF.map(f => feld("ag-" + f).value), feld("ag-rotWarnstufe").value],
       ["Ampel-Grenzen", ["50", "0,5", "5", "40", "60", "0", "1"], "2"]);
-    feld("ag-rotBoeen").value = "55";
-    feld("ag-gelbNiederschlag").value = "0,3";
-    feld("ag-gelbTemperatur").value = "-1";
-    feld("ag-rotWarnstufe").value = "3";
-    w.document.querySelector('#fensterinhalt [data-action="ampel-speichern"]').click();
+    gleich("Ampel-Grenzen als Unterseite (kein Fenster) mit „‹ Einstellungen“, ohne „Speichern“",
+      [w.eval("fenster.open"), w.eval("einstellungenSeite"), w.document.querySelector("#inhalt .zurueck").textContent, !!w.document.querySelector('#inhalt [data-action="ampel-speichern"]')],
+      [false, "ampel", "‹ Einstellungen", false]);
+    aendere("ag-rotBoeen", "55");
+    gleich("Ein Feld verlassen: sofort gespeichert", [w.eval("daten.einstellungen.wetter.ampel.rotBoeen"), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel.rotBoeen, toast()[0]],
+      [55, 55, "Ampel-Grenzen gespeichert"]);
+    aendere("ag-gelbNiederschlag", "0,3");
+    aendere("ag-gelbTemperatur", "-1");
+    aendere("ag-rotWarnstufe", "3");
     const meineAmpel = Object.assign(kopie(STD_WETTER.ampel), { rotBoeen: 55, gelbNiederschlag: 0.3, gelbTemperatur: -1, rotWarnstufe: 3 });
-    gleich("Gespeichert (auch im Speicher), Fenster zu", [kopie(w.eval("daten.einstellungen.wetter.ampel")), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel,
+    gleich("Alle Felder gespeichert (auch im Speicher), kein Fenster", [kopie(w.eval("daten.einstellungen.wetter.ampel")), JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel,
       toast()[0], w.eval("fenster.open")], [meineAmpel, meineAmpel, "Ampel-Grenzen gespeichert", false]);
     gleich("Kurzfassung ohne „Standard“", w.ampelKurztext(meineAmpel), "Böen 40 / 55 km/h · Niederschlag 0,3 / 5 mm/h · Regen ab 50 %");
     gleich("Neue Grenzen wirken: Böen 56 rot, −0,5 °C grün, −1,5 °C gelb, 0,4 mm/h gelb, Warnung Stufe 2 nur noch gelb", [
@@ -2161,20 +2168,19 @@ async function start() {
     const ampelFehler = (f, v) => {
       alerts.length = 0;
       w.ampelFormular();
-      feld("ag-" + f).value = v;
-      w.ampelSpeichern();
-      return [alerts.length, JSON.stringify(w.eval("daten.einstellungen.wetter.ampel")) === JSON.stringify(meineAmpel)];
+      aendere("ag-" + f, v);
+      return [alerts.length, JSON.stringify(w.eval("daten.einstellungen.wetter.ampel")) === JSON.stringify(meineAmpel), feld("ag-" + f).value === w.zahlFeld(meineAmpel[f])];
     };
-    gleich("Ungültig (Gelb nicht unter Rot, kein Wert, Text, über 100 %): Hinweis, nichts gespeichert",
+    gleich("Ungültig (Gelb nicht unter Rot, kein Wert, Text, über 100 %): Hinweis, nichts gespeichert, das Feld zeigt wieder den gespeicherten Wert",
       [ampelFehler("gelbBoeen", "55"), ampelFehler("gelbNiederschlag", "5"), ampelFehler("rotBoeen", ""), ampelFehler("gelbTemperatur", "kalt"),
-        ampelFehler("gelbRegenWahrscheinlichkeit", "120")], Array(5).fill([1, true]));
-    w.fensterSchliessen();
+        ampelFehler("gelbRegenWahrscheinlichkeit", "120")], Array(5).fill([1, true, true]));
     frageAntwort = false;
     await w.ampelStandard();
     gleich("„Auf Standard zurücksetzen“ mit Rückfrage: „Abbrechen“ ändert nichts", kopie(w.eval("daten.einstellungen.wetter.ampel")), meineAmpel);
     frageAntwort = true;
     await w.ampelStandard();
-    gleich("„Auf Standard zurücksetzen“: Standardwerte, Meldung mit „Rückgängig“", [kopie(w.eval("daten.einstellungen.wetter.ampel")), toast()], [STD_WETTER.ampel, ["Ampel-Grenzen zurückgesetzt", true]]);
+    gleich("„Auf Standard zurücksetzen“: Standardwerte (auch in den Feldern der Seite), Meldung mit „Rückgängig“",
+      [kopie(w.eval("daten.einstellungen.wetter.ampel")), toast(), feld("ag-rotBoeen").value, w.eval("einstellungenSeite")], [STD_WETTER.ampel, ["Ampel-Grenzen zurückgesetzt", true], "60", "ampel"]);
     w.rueckgaengig();
     gleich("… mit „Rückgängig“ wieder die eigenen Grenzen", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.ampel, meineAmpel);
 
@@ -2186,26 +2192,30 @@ async function start() {
     w.speichern();
     alerts.length = 0;
     w.kleidungFormular();
-    const listeZeilen = aktion => [...w.document.querySelectorAll('#fensterinhalt [data-action="' + aktion + '"]')].map(b => ohneTags(b.innerHTML));
+    gleich("Kleidung als Unterseite (kein Fenster) mit „‹ Einstellungen“", [w.eval("fenster.open"), w.eval("einstellungenSeite"), w.document.getElementById("seitentitel").textContent,
+      w.document.querySelector("#inhalt .zurueck").textContent], [false, "kleidung", "Kleidung", "‹ Einstellungen"]);
+    const listeZeilen = aktion => [...w.document.querySelectorAll('#inhalt [data-action="' + aktion + '"]')].map(b => ohneTags(b.innerHTML));
     gleich("Liste: Schalter „Rückmeldung zur Kleidung“ an, 8 Stufen von warm nach kalt mit Bereichen und Auswertung, Regenzusatz ab 40 / 60 %",
       [feld("k-rueckmeldung").checked, listeZeilen("kleidung-stufe").length, listeZeilen("kleidung-stufe")[0], listeZeilen("kleidung-stufe")[3],
         listeZeilen("kleidung-stufe")[7].slice(0, 28), listeZeilen("kleidung-regen")],
       [true, 8, "ab 20 °C Oberkörper T-Shirt · Beine kurze Hose · Füße Sneakersocken Rückmeldungen: noch keine ›",
-        "7–11 °C Kopf leichte Mütze · Hände Unterziehhandschuhe · Oberkörper 2 T-Shirts, warmer Pullover · Beine Hose · Füße Socken · bei Regen Hände Übergangshandschuhe Rückmeldungen: noch keine ›",
+        "7 bis 11 °C Kopf leichte Mütze · Hände Unterziehhandschuhe · Oberkörper 2 T-Shirts, warmer Pullover · Beine Hose · Füße Socken · bei Regen Hände Übergangshandschuhe Rückmeldungen: noch keine ›",
         "unter −6 °C Kopf warme Mütze", ["ab 40 % Oberkörper Regenjacke ›", "ab 60 % Beine Regenhose · Füße Gamaschen ›"]]);
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe"][data-i="3"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="3"]').click();
     const BF = ["kopf", "hals", "haende", "oberkoerper", "beine", "fuesse"];
+    gleich("Stufe als eigene Unterseite (kein Fenster) mit „‹ Kleidung“", [w.eval("fenster.open"), w.eval("einstellungenSeite"), w.eval("einstellungenWert"),
+      w.document.querySelector("#inhalt .zurueck").textContent, w.document.querySelector("#inhalt .zurueck").dataset.seite], [false, "kleidung-stufe", 3, "‹ Kleidung", "kleidung"]);
     gleich("Formular einer Stufe: Grenze, alle sechs Bereiche (auch leere), „Hände bei Regen“",
-      [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value), feld("ks-haende-regen").value],
-      ["Stufe 7–11 °C", "7", ["leichte Mütze", "", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"], "Übergangshandschuhe"]);
+      [ohneTags(w.document.getElementById("seitentitel").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value), feld("ks-haende-regen").value],
+      ["Stufe 7 bis 11 °C", "7", ["leichte Mütze", "", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"], "Übergangshandschuhe"]);
     feld("ks-ab").value = "8";
     feld("ks-hals").value = " Tuch ";
     feld("ks-oberkoerper").value = "2 T-Shirts,  warmer Pullover , ";
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-speichern"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe-speichern"]').click();
     gleich("Speichern: Stufe gespeichert (auch im Speicher), zurück zur Liste", [kleidungJetzt().stufen[3], JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung.stufen[3].ab,
-      toast()[0], w.eval("fenster.open"), ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML)],
+      toast()[0], w.eval("einstellungenSeite"), ohneTags(w.document.getElementById("seitentitel").innerHTML)],
       [{ id: "stufe4", ab: 8, bereiche: B("leichte Mütze", "Tuch", "Unterziehhandschuhe", "2 T-Shirts, warmer Pullover", "Hose", "Socken"), haendeBeiRegen: "Übergangshandschuhe" }, 8,
-        "Stufe gespeichert", true, "Kleidung"]);
+        "Stufe gespeichert", "kleidung", "Kleidung"]);
     gleich("Wirkt sofort: gefühlt 8 °C → geänderte Stufe, 7,9 °C → nächstkältere", [w.kleidungFuer(8, null).bereiche.hals, w.kleidungFuer(7.9, null).stufe.id], ["Tuch", "stufe5"]);
     w.kleidungStufeFormular(3);
     feld("ks-ab").value = "16";
@@ -2215,8 +2225,8 @@ async function start() {
     wetterDaten();
     w.speichern();
     w.kleidungFormular();
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-neu"]').click();
-    gleich("„+ Stufe“: leeres Formular, Grenze 3 °C unter der kältesten", [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value)],
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe-neu"]').click();
+    gleich("„+ Stufe“: leeres Formular, Grenze 3 °C unter der kältesten", [ohneTags(w.document.getElementById("seitentitel").innerHTML), feld("ks-ab").value, BF.map(b => feld("ks-" + b).value)],
       ["Neue Stufe", "-9", ["", "", "", "", "", ""]]);
     const stufeFehler = (ab, fuesse) => { alerts.length = 0; w.kleidungStufeFormular(null); feld("ks-ab").value = ab; feld("ks-fuesse").value = fuesse; w.kleidungStufeSpeichern(""); return alerts.slice(-1)[0]; };
     const vorStufenFehler = JSON.stringify(kleidungJetzt());
@@ -2233,15 +2243,15 @@ async function start() {
       kj.stufen[7].id.startsWith("s"), new Set(kj.stufen.map(x => x.id)).size, kj.stufen[8].id, kj.stufen[8].ab, w.kleidungFuer(-10, null).bereiche.fuesse, toast()[0]],
       [9, -10, "Thermosocken", null, true, 9, "stufe8", null, "Thermosocken", "Stufe hinzugefügt"]);
     w.kleidungStufeFormular(8);
-    gleich("Letzte Stufe: ohne Grenze („darunter“)", [!!feld("ks-ab"), ohneTags(fensterInhaltHtml()).includes("Die letzte Stufe gilt unterhalb der vorigen (unter −10 °C).")], [false, true]);
+    gleich("Letzte Stufe: ohne Grenze („darunter“)", [!!feld("ks-ab"), ohneTags(inhaltHtml()).includes("Die letzte Stufe gilt unterhalb der vorigen (unter −10 °C).")], [false, true]);
     feld("ks-kopf").value = "Sturmhaube";
     w.kleidungStufeSpeichern("8");
     gleich("Letzte Stufe ändern: bleibt die letzte", [kleidungJetzt().stufen[8].bereiche.kopf, kleidungJetzt().stufen[8].ab], ["Sturmhaube", null]);
     w.kleidungStufeFormular(0);
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-weg"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-stufe-weg"]').click();
     await warten(0);
     kj = kleidungJetzt();
-    gleich("Stufe entfernen (mit Rückfrage und „Rückgängig“), zurück zur Liste", [kj.stufen.length, w.stufeBereich(kj, 0), toast(), ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML)],
+    gleich("Stufe entfernen (mit Rückfrage und „Rückgängig“), zurück zur Liste", [kj.stufen.length, w.stufeBereich(kj, 0), toast(), ohneTags(w.document.getElementById("seitentitel").innerHTML)],
       [8, "ab 15 °C", ["Stufe entfernt", true], "Kleidung"]);
     w.rueckgaengig();
     gleich("… „Rückgängig“ holt sie zurück", kleidungJetzt().stufen.length, 9);
@@ -2249,20 +2259,20 @@ async function start() {
     await w.kleidungStufeWeg(8);
     kj = kleidungJetzt();
     gleich("Die letzte Stufe entfernen: die Stufe davor gilt dann darunter", [fragen.slice(-1)[0], kj.stufen.length, kj.stufen[7].id, kj.stufen[7].ab],
-      ["Stufe „unter −10 °C“ entfernen? Die Stufe −10–−6 °C gilt dann darunter.", 8, kj.stufen[7].id, null]);
+      ["Stufe „unter −10 °C“ entfernen? Die Stufe −10 bis −6 °C gilt dann darunter.", 8, kj.stufen[7].id, null]);
     while (kleidungJetzt().stufen.length > 2) await w.kleidungStufeWeg(0);
     await w.kleidungStufeWeg(0);
     w.kleidungStufeFormular(0);
-    gleich("Mindestens zwei Stufen bleiben (kein „Stufe entfernen“ mehr)", [kleidungJetzt().stufen.length, !!w.document.querySelector('#fensterinhalt [data-action="kleidung-stufe-weg"]')], [2, false]);
+    gleich("Mindestens zwei Stufen bleiben (kein „Stufe entfernen“ mehr)", [kleidungJetzt().stufen.length, !!w.document.querySelector('#inhalt [data-action="kleidung-stufe-weg"]')], [2, false]);
     wetterDaten();
     w.speichern();
     w.kleidungFormular();
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-regen"][data-i="1"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-regen"][data-i="1"]').click();
     gleich("Formular eines Regenzusatzes: Schwelle und alle sechs Bereiche", [feld("kr-ab").value, BF.map(b => feld("kr-" + b).value)], ["60", ["", "", "", "", "Regenhose", "Gamaschen"]]);
     feld("kr-fuesse").value = "Gamaschen, Überschuhe";
     w.kleidungRegenSpeichern("1");
     gleich("Regenzusatz ändern", [kleidungJetzt().regen[1].bereiche.fuesse, w.kleidungFuer(8, 70).bereiche.fuesse, toast()[0]], ["Gamaschen, Überschuhe", "Socken, Gamaschen, Überschuhe", "Regenzusatz gespeichert"]);
-    w.document.querySelector('#fensterinhalt [data-action="kleidung-regen-neu"]').click();
+    w.document.querySelector('#inhalt [data-action="kleidung-regen-neu"]').click();
     gleich("„+ Regenzusatz“: 10 % über dem letzten, Bereiche leer", [feld("kr-ab").value, BF.map(b => feld("kr-" + b).value)], ["70", ["", "", "", "", "", ""]]);
     const regenFehler = (ab, kopf) => { alerts.length = 0; w.kleidungRegenFormular(null); feld("kr-ab").value = ab; feld("kr-kopf").value = kopf; w.kleidungRegenSpeichern(""); return alerts.slice(-1)[0]; };
     gleich("Ungültig (kein Regenzeug, über 100 %, doppelte Schwelle): Hinweis, nichts gespeichert",
@@ -2288,7 +2298,8 @@ async function start() {
     w.rueckgaengig();
     gleich("… mit „Rückgängig“ wieder die eigenen Regeln", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung, meineKleidung);
     gleich("Kurzfassung für eigene Regeln", w.kleidungKurztext(meineKleidung), "8 Stufen · Regenzusatz ab 30 % / 60 % · Rückmeldung aus");
-    w.fensterSchliessen();
+    w.document.querySelector("#inhalt .zurueck").click();
+    gleich("„‹ Einstellungen“ führt zurück zur Hauptseite", [w.eval("einstellungenSeite"), w.document.getElementById("seitentitel").textContent], [null, "Einstellungen"]);
 
     // -------------------------------------------------------------
     // 40. Rückmeldung zur Kleidung
@@ -2307,14 +2318,14 @@ async function start() {
     w.rueckmeldungGeben("r1", "hin", "zu-kalt");
     gleich("„Zu kalt“: gespeichert, Grenzen unverändert, Meldung mit Auswertung der Stufe und „Rückgängig“", [eintrag("r1").wetter.hin.rueckmeldung, grenzen(kleidungJetzt()),
       JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.find(e => e.id === "r1").wetter.hin.rueckmeldung, toast()],
-      ["zu-kalt", STD_GRENZEN, "zu-kalt", ["Rückmeldung „zu kalt“ gespeichert · Stufe 7–11 °C: 1× zu kalt (bei Regen: 1× zu kalt)", true]]);
+      ["zu-kalt", STD_GRENZEN, "zu-kalt", ["Rückmeldung „zu kalt“ gespeichert · Stufe 7 bis 11 °C: 1× zu kalt (bei Regen: 1× zu kalt)", true]]);
     gleich("Keine Wirkung auf die Empfehlung (gefühlt 7,5 °C bleibt Stufe ab 7 °C)", kf(7.5, null).stufe.id, "stufe4");
     w.rueckgaengig();
     gleich("„Rückgängig“: Rückmeldung wie vorher", localStorage.getItem(TEST_SCHLUESSEL), vorRm);
     w.rueckmeldungGeben("r1", "hin", "zu-kalt");
     w.rueckmeldungGeben("r1", "hin", "passte");
     gleich("Rückmeldung ändern („zu kalt“ → „passte“): zählt nur noch als „passte“", [eintrag("r1").wetter.hin.rueckmeldung, w.auswertungText(w.rueckmeldungenAuswerten().stufe4), toast()[0]],
-      ["passte", "1× passte (bei Regen: 1× passte)", "Rückmeldung „passte“ gespeichert · Stufe 7–11 °C: 1× passte (bei Regen: 1× passte)"]);
+      ["passte", "1× passte (bei Regen: 1× passte)", "Rückmeldung „passte“ gespeichert · Stufe 7 bis 11 °C: 1× passte (bei Regen: 1× passte)"]);
     const vorGleich = datenText();
     w.rueckmeldungGeben("r1", "hin", "passte");
     w.rueckmeldungGeben("r1", "hin", "super");
@@ -2327,12 +2338,12 @@ async function start() {
       [w.auswertungText(aus.stufe4), w.auswertungText(aus.stufe5), w.auswertungText(aus.stufe1), aus.weg.anzahl, toast()[0], grenzen(kleidungJetzt())],
       ["1× zu kalt, 1× passte (bei Regen: 1× passte)", "1× passte", "noch keine", 1, "Rückmeldung „zu kalt“ gespeichert", STD_GRENZEN]);
     w.kleidungFormular();
-    let detail = ohneTags(fensterInhaltHtml());
+    let detail = ohneTags(inhaltHtml());
     wahr("Kleidungsregeln: Auswertung je Stufe und „1 Rückmeldung zu früheren Stufen“",
-      detail.includes("7–11 °C Kopf leichte Mütze") && detail.includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)") &&
-      detail.includes("3–7 °C") && detail.includes("Rückmeldungen: 1× passte") && detail.includes("1 Rückmeldung zu früheren Stufen"), detail);
+      detail.includes("7 bis 11 °C Kopf leichte Mütze") && detail.includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)") &&
+      detail.includes("3 bis 7 °C") && detail.includes("Rückmeldungen: 1× passte") && detail.includes("1 Rückmeldung zu früheren Stufen"), detail);
     w.kleidungStufeFormular(3);
-    wahr("Formular der Stufe zeigt ihre Auswertung", ohneTags(fensterInhaltHtml()).includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)"), ohneTags(fensterInhaltHtml()));
+    wahr("Formular der Stufe zeigt ihre Auswertung", ohneTags(inhaltHtml()).includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)"), ohneTags(inhaltHtml()));
     rmDaten();
     w.eintragAnsicht("r4");
     detail = ohneTags(fensterInhaltHtml());
@@ -4536,6 +4547,65 @@ async function start() {
     wC.URL.createObjectURL = echtUrlC;
     wC.HTMLAnchorElement.prototype.click = echtKlickC;
     wC.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 64. Kleidung und Ampel-Grenzen als Unterseiten (B4), „bis“ (B5)
+    // -------------------------------------------------------------
+    abschnitt("64. Kleidung und Ampel-Grenzen als Unterseiten statt Fenster (B4); Temperaturbereiche mit „bis“ (B5)");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wU = await appLaden();
+    const inhaltU = () => wU.document.getElementById("inhalt");
+    const titelU = () => wU.document.getElementById("seitentitel").textContent;
+    const tippeU = sel => inhaltU().querySelector(sel).click();
+    wU.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
+    tippeU('[data-action="kleidung-bearbeiten"]');
+    gleich("Einstellungen → Kleidung: Unterseite „Kleidung“, kein Fenster", [titelU(), wU.eval("fenster.open"), wU.document.querySelectorAll("dialog[open]").length], ["Kleidung", false, 0]);
+    const kopfVorher = wU.eval("daten.einstellungen.wetter.kleidung.stufen[6].bereiche.kopf");
+    tippeU('[data-action="kleidung-stufe"][data-i="6"]');
+    gleich("Stufe antippen: Unterseite „Stufe −6 bis −1 °C“ mit „‹ Kleidung“, kein Fenster",
+      [titelU(), inhaltU().querySelector(".zurueck").textContent, wU.eval("fenster.open")], ["Stufe −6 bis −1 °C", "‹ Kleidung", false]);
+    wU.document.getElementById("ks-kopf").value = "Eingabe noch nicht gespeichert";
+    wU.document.dispatchEvent(new wU.Event("visibilitychange"));
+    gleich("Zurück in die App (visibilitychange): Unterseite mit Formular wird nicht neu gezeichnet, die Eingabe bleibt",
+      wU.document.getElementById("ks-kopf").value, "Eingabe noch nicht gespeichert");
+    wU.swNachricht({ typ: "neue-version" });
+    gleich("„Neue Version“ während des Formulars: Eingabe bleibt, Hinweis erst danach", [wU.document.getElementById("ks-kopf").value, inhaltU().textContent.includes("Neue Version verfügbar")],
+      ["Eingabe noch nicht gespeichert", false]);
+    tippeU('[data-action="kleidung-bearbeiten"]');
+    gleich("„Abbrechen“: zurück zur Kleidung, nichts gespeichert, jetzt mit Hinweis „Neue Version verfügbar“",
+      [titelU(), wU.eval("daten.einstellungen.wetter.kleidung.stufen[6].bereiche.kopf"), inhaltU().textContent.includes("Neue Version verfügbar")], ["Kleidung", kopfVorher, true]);
+    wU.eval("neueVersion = false");
+    tippeU('[data-action="kleidung-stufe"][data-i="7"]');
+    gleich("Letzte Stufe: „Stufe unter −6 °C“", titelU(), "Stufe unter −6 °C");
+    tippeU(".zurueck");
+    gleich("„‹ Kleidung“ führt zur Kleidung", [titelU(), wU.eval("einstellungenSeite")], ["Kleidung", "kleidung"]);
+    tippeU('[data-action="kleidung-regen"][data-i="0"]');
+    gleich("Regenzusatz: Unterseite „Regenzusatz ab 40 %“ mit „‹ Kleidung“", [titelU(), inhaltU().querySelector(".zurueck").textContent, wU.eval("fenster.open")],
+      ["Regenzusatz ab 40 %", "‹ Kleidung", false]);
+    tippeU(".zurueck");
+    tippeU('[data-action="kleidung-regen-neu"]');
+    gleich("„+ Regenzusatz“: Unterseite „Neuer Regenzusatz“", titelU(), "Neuer Regenzusatz");
+    tippeU(".zurueck");
+    tippeU('[data-action="kleidung-stufe-neu"]');
+    gleich("„+ Stufe“: Unterseite „Neue Stufe“", titelU(), "Neue Stufe");
+    wU.document.querySelector('nav [data-tab="einstellungen"]').click();
+    gleich("Reiter Einstellungen antippen: Hauptseite", [titelU(), wU.eval("einstellungenSeite")], ["Einstellungen", null]);
+    tippeU('[data-action="ampel-bearbeiten"]');
+    gleich("Einstellungen → Ampel-Grenzen: Unterseite, kein Fenster, Felder mit data-change", [titelU(), wU.eval("fenster.open"),
+      inhaltU().querySelectorAll('input[data-change="ampel-feld"]').length, !!inhaltU().querySelector('select[data-change="ampel-feld"]')], ["Ampel-Grenzen", false, 7, true]);
+    wU.eval("aktiverTab = 'fahrten'; zeichnen()");
+    wU.eval("aktiverTab = 'einstellungen'; einstellungenSeite = 'fahrtage'; zeichnen()");
+    wU.document.getElementById("e-hinweis-ab").value = "19:00";
+    wU.document.dispatchEvent(new wU.Event("visibilitychange"));
+    gleich("Unterseite ohne Formular (Fahrtage, speichert sofort) wird beim Zurückkehren wie bisher neu gezeichnet", wU.document.getElementById("e-hinweis-ab").value, "18:00");
+    // B5: Bereiche mit „bis“
+    const kU = wU.eval("daten.einstellungen.wetter.kleidung");
+    gleich("Bereiche der Stufen: „ab 20 °C“, „15 bis 20 °C“, „−1 bis 3 °C“, „−6 bis −1 °C“, „unter −6 °C“",
+      [0, 1, 4, 5, 6, 7].map(i => wU.stufeBereich(kU, i)), ["ab 20 °C", "15 bis 20 °C", "3 bis 7 °C", "−1 bis 3 °C", "−6 bis −1 °C", "unter −6 °C"]);
+    gleich("Tageswerte (weiterer Ort) ebenfalls mit „bis“", wU.tageswerteText({ tmin: -3.2, tmax: 2, gefuehltMin: -7, gefuehltMax: -1, regenWahrscheinlichkeit: 20, niederschlag: 0,
+      wind: 10, boeen: 25, gewitter: false }), "−3 °C bis 2 °C (gefühlt −7 °C bis −1 °C) · Regen 20 %, 0 mm · Wind bis 10 km/h, Böen bis 25 km/h");
+    gleich("Unterseiten verändern keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    wU.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

@@ -78,7 +78,9 @@ function vorlageVerschieben(id, richtung) {
 // Hauptseite mit Abschnitten; jede Zeile mit „›“ öffnet eine Unterseite im
 // Reiter (zurück mit „‹ Einstellungen“ oder erneutem Antippen des Reiters)
 // oder ein Fenster. Welche Unterseite offen ist, merkt sich die App nur im
-// Arbeitsspeicher (einstellungenSeite).
+// Arbeitsspeicher (einstellungenSeite, bei Stufe und Regenzusatz dazu deren
+// Nummer in einstellungenWert). "zurueck": übergeordnete Unterseite;
+// "formular": Seite mit Eingaben, die nicht von selbst neu gezeichnet wird.
 const EINSTELLUNGEN_SEITEN = {
   fahrrad: { titel: "Fahrrad", bild: () => fahrradSeite() },
   sicherung: { titel: "Datensicherung", bild: () => sicherungSeite() },
@@ -86,6 +88,10 @@ const EINSTELLUNGEN_SEITEN = {
   fahrtage: { titel: "Fahrtage", bild: () => fahrtageSeite() },
   orte: { titel: "Orte und Strecke", bild: () => wetterOrteSeite() },
   ausserhalb: { titel: "Außerhalb der Fahrten", bild: () => wetterAusserhalbSeite() },
+  kleidung: { titel: "Kleidung", bild: () => kleidungSeite() },
+  "kleidung-stufe": { titel: i => kleidungStufeTitel(i), bild: i => kleidungStufeSeite(i), zurueck: "kleidung", formular: true },
+  "kleidung-regen": { titel: i => kleidungRegenTitel(i), bild: i => kleidungRegenSeite(i), zurueck: "kleidung", formular: true },
+  ampel: { titel: "Ampel-Grenzen", bild: () => ampelSeite(), formular: true },
   wartungsarten: { titel: "Wartungsarten", bild: () => wartungsartenBereich() }
 };
 
@@ -97,7 +103,11 @@ function seitenZeile(seite, titel, text) {
 
 function bildEinstellungen() {
   const seite = einstellungenSeite && EINSTELLUNGEN_SEITEN[einstellungenSeite];
-  if (seite) return '<button type="button" class="leise zurueck" data-action="einstellungen-seite" data-seite="">‹ Einstellungen</button>' + seite.bild();
+  if (seite) {
+    const zurueck = seite.zurueck ? EINSTELLUNGEN_SEITEN[seite.zurueck].titel : "Einstellungen";
+    return '<button type="button" class="leise zurueck" data-action="einstellungen-seite" data-seite="' + (seite.zurueck || "") + '">‹ ' + zurueck + '</button>' +
+      seite.bild(einstellungenWert);
+  }
   const f = daten.fahrrad, es = daten.einstellungen;
   let html = '<h2 style="margin-top:8px">Fahrrad</h2>';
   html += f ? '<div class="liste">' + seitenZeile("fahrrad", esc(f.name), "seit " + datumText(f.startdatum) + " · Start-Kilometerstand " + kmText(f.startKm) + " km") + '</div>'

@@ -114,12 +114,14 @@ const offeneGruppen = new Set();
 let wartungAnsicht = "aktuell";
 let fahrtenAnsicht = "eintraege";
 let einstellungenSeite = null;
+// Nummer der Stufe bzw. des Regenzusatzes auf deren Unterseite (null = neu)
+let einstellungenWert = null;
 
 const TITEL = { uebersicht: "Übersicht", wetter: "Wetter", wartung: "Wartung", fahrten: "Fahrten", einstellungen: "Einstellungen" };
 
 function zeichnen() {
   const unterseite = aktiverTab === "einstellungen" && einstellungenSeite ? EINSTELLUNGEN_SEITEN[einstellungenSeite] : null;
-  document.getElementById("seitentitel").textContent = unterseite ? unterseite.titel : TITEL[aktiverTab];
+  document.getElementById("seitentitel").textContent = unterseite ? (typeof unterseite.titel === "function" ? unterseite.titel(einstellungenWert) : unterseite.titel) : TITEL[aktiverTab];
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("aktiv", b.dataset.tab === aktiverTab));
   const bildschirme = { uebersicht: bildUebersicht, wetter: bildWetter, wartung: bildWartung, fahrten: bildFahrten, einstellungen: bildEinstellungen };
   let html = ladeFehler ? '<div class="hinweis fehler">' + esc(ladeFehler) + '</div>' : "";
@@ -129,6 +131,21 @@ function zeichnen() {
   }
   html += bildschirme[aktiverTab]();
   document.getElementById("inhalt").innerHTML = html;
+}
+
+// Unterseite der Einstellungen zeigen (statt eines Fensters), oben beginnen
+function unterseiteZeigen(seite, wert = null) {
+  fensterSchliessen();
+  aktiverTab = "einstellungen";
+  einstellungenSeite = seite;
+  einstellungenWert = wert;
+  zeichnen();
+  window.scrollTo(0, 0);
+}
+// Ist eine Unterseite mit Formular offen? Dann nicht von selbst neu zeichnen
+// (z. B. beim Zurückkehren in die App), damit Eingaben nicht verloren gehen.
+function formularSeiteOffen() {
+  return aktiverTab === "einstellungen" && !!einstellungenSeite && !!(EINSTELLUNGEN_SEITEN[einstellungenSeite] || {}).formular;
 }
 
 // Umschalter oben in einem Reiter, z. B. „Aktuell | Verlauf“: [[Wert, Text], …]
