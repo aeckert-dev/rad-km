@@ -5,13 +5,37 @@
    KALENDER
    Erzeugt aus einem geplanten Auftrag mit Termin eine Kalenderdatei nach
    RFC 5545, die iOS in die Kalender-App übernimmt. Ohne Uhrzeit ganztägig,
-   mit Uhrzeit 1 Stunde; Erinnerung am Vortag um 18:00. Die Kennung (UID) ist
-   je Auftrag fest. Zeiten ohne Zeitzone (Ortszeit des iPhones).
+   mit Uhrzeit 1 Stunde; mit Vorlaufzeit beginnt der Eintrag mit dem
+   Losfahren. Erinnerung am Vortag um 18:00. Die Kennung (UID) ist je Auftrag
+   fest. Zeiten mit Uhrzeit in UTC („Z“), umgerechnet aus der Ortszeit in
+   Europe/Berlin (Sommer- und Winterzeit); ohne Zeitzone deutet ein
+   Exchange-/Outlook-Kalender sie sonst als UTC (1 Stunde später).
    Liest nur, verändert keine Daten.
    ===================================================================== */
 
 const KALENDER_DAUER_MIN = 60;
 const KALENDER_ERINNERUNG = "18:00"; // am Vortag
+const KALENDER_ZEITZONE = "Europe/Berlin";
+
+// Ortszeit in Europe/Berlin zu einem Zeitpunkt (ms): Abstand zu UTC in Minuten
+const berlinFormat = new Intl.DateTimeFormat("en-US", { timeZone: KALENDER_ZEITZONE, hourCycle: "h23",
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+function berlinAbstand(ms) {
+  const t = Object.fromEntries(berlinFormat.formatToParts(new Date(ms)).map(x => [x.type, x.value]));
+  const alsUtc = Date.UTC(Number(t.year), Number(t.month) - 1, Number(t.day), Number(t.hour) % 24, Number(t.minute), Number(t.second));
+  return Math.round((alsUtc - Math.floor(ms / 1000) * 1000) / 60000);
+}
+// Zeitpunkt (ms) zu Datum "JJJJ-MM-TT" und Minuten nach Mitternacht in Europe/Berlin.
+// Eine Uhrzeit, die es wegen der Umstellung auf Sommerzeit nicht gibt (02:30),
+// gilt eine Stunde später (03:30 Sommerzeit); eine doppelte (Umstellung auf
+// Winterzeit) beim ersten Mal (Sommerzeit).
+function berlinZeitpunkt(iso, minuten) {
+  const [j, m, t] = iso.split("-").map(Number);
+  const naiv = Date.UTC(j, m - 1, t, 0, minuten);
+  const vorher = berlinAbstand(naiv - 3 * 3600000), nachher = berlinAbstand(naiv + 3 * 3600000);
+  const passend = [vorher, nachher].map(a => naiv - a * 60000).filter(ms => berlinAbstand(ms) * 60000 === naiv - ms);
+  return passend.length ? Math.min(...passend) : naiv - vorher * 60000;
+}
 
 // Text für iCalendar maskieren: \ ; , und Zeilenumbrüche
 function icsText(t) {
@@ -33,9 +57,9 @@ function icsFalten(zeile) {
   teile.push(teil);
   return teile.join("\r\n ");
 }
-// "2026-11-12" → "20261112"; mit Uhrzeit "09:30" → "20261112T093000"
-const icsDatum = (iso, zeit) => iso.replace(/-/g, "") + (zeit ? "T" + zeit.replace(":", "") + "00" : "");
-// Zeitpunkt in UTC für DTSTAMP: "20261101T120000Z"
+// "2026-11-12" → "20261112" (ganztägige Termine)
+const icsDatum = iso => iso.replace(/-/g, "");
+// Zeitpunkt in UTC (DTSTAMP, DTSTART, DTEND): "20261101T120000Z"
 const icsUtc = ms => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
 // Minuten → Dauer "PT15H30M" (negativ: vor dem Beginn)
 function icsDauer(minuten) {
@@ -46,9 +70,12 @@ function icsDauer(minuten) {
 // Minuten seit Mitternacht
 const minutenVon = zeit => Number(zeit.slice(0, 2)) * 60 + Number(zeit.slice(3, 5));
 
-// Titel: "Kleine Inspektion – Werkstatt Muster" bzw. ohne Werkstatt nur der Name
+// Titel: "Kleine Inspektion – Werkstatt Muster" bzw. ohne Werkstatt nur der Name;
+// mit Vorlaufzeit beginnt der Eintrag mit dem Losfahren, daher die Terminzeit dazu:
+// "Kleine Inspektion – Werkstatt Muster (Termin 10:00)"
 function kalenderTitel(o) {
-  return o.art.name + (o.auftrag.werkstatt ? " – " + o.auftrag.werkstatt : "");
+  const a = o.auftrag;
+  return o.art.name + (a.werkstatt ? " – " + a.werkstatt : "") + (a.terminZeit && a.vorlauf ? " (Termin " + a.terminZeit + ")" : "");
 }
 // Beschreibung: Positionen (Aufgaben mit Bauteil, Mängel mit Datum), Notiz, erwarteter km-Stand
 function kalenderBeschreibung(o) {
@@ -63,6 +90,8 @@ function kalenderBeschreibung(o) {
     }
   });
   const teile = [];
+  const a = o.auftrag;
+  if (a.terminZeit && a.vorlauf) teile.push("Termin " + a.terminZeit + " Uhr, losfahren " + losfahrenZeit(a.terminZeit, a.vorlauf) + " (" + a.vorlauf + " min Vorlauf)");
   if (aufgaben.length) teile.push("Aufgaben:\n" + aufgaben.join("\n"));
   if (maengel.length) teile.push("Mängel:\n" + maengel.join("\n"));
   if (!aufgaben.length && !maengel.length) teile.push("Noch keine Positionen.");
@@ -81,6 +110,13 @@ function kalenderDateiname(o) {
   return "termin-" + (name || "auftrag") + "-" + o.auftrag.termin + ".ics";
 }
 
+// Zeitpunkte (ms) eines Termins mit Uhrzeit: Beginn (Losfahren), Termin, Ende, Erinnerung
+function kalenderZeitpunkte(a) {
+  const termin = berlinZeitpunkt(a.termin, minutenVon(a.terminZeit));
+  return { termin, beginn: termin - (a.vorlauf || 0) * 60000, ende: termin + KALENDER_DAUER_MIN * 60000,
+    erinnerung: berlinZeitpunkt(plusTage(a.termin, -1), minutenVon(KALENDER_ERINNERUNG)) };
+}
+
 // Kalenderdatei (Text mit CRLF) zu einem offenen Auftrag mit gespeichertem Termin
 function kalenderDatei(o, jetzt = Date.now()) {
   const a = o.auftrag;
@@ -90,12 +126,10 @@ function kalenderDatei(o, jetzt = Date.now()) {
     "BEGIN:VEVENT", "UID:" + kalenderUid(a), "DTSTAMP:" + icsUtc(jetzt)];
   let vorBeginn; // Minuten von der Erinnerung (Vortag 18:00) bis zum Beginn
   if (a.terminZeit) {
-    const beginn = minutenVon(a.terminZeit);
-    const ende = beginn + KALENDER_DAUER_MIN;
-    const endeDatum = ende >= 24 * 60 ? plusTage(a.termin, 1) : a.termin;
-    const endeZeit = zweistellig(Math.floor(ende % (24 * 60) / 60)) + ":" + zweistellig(ende % 60);
-    zeilen.push("DTSTART:" + icsDatum(a.termin, a.terminZeit), "DTEND:" + icsDatum(endeDatum, endeZeit), "TRANSP:OPAQUE");
-    vorBeginn = 24 * 60 - minutenVon(KALENDER_ERINNERUNG) + beginn;
+    // Beginn mit dem Losfahren, Ende 1 Stunde nach dem Termin; als echte Zeitpunkte
+    const z = kalenderZeitpunkte(a);
+    zeilen.push("DTSTART:" + icsUtc(z.beginn), "DTEND:" + icsUtc(z.ende), "TRANSP:OPAQUE");
+    vorBeginn = Math.round((z.beginn - z.erinnerung) / 60000);
   } else {
     zeilen.push("DTSTART;VALUE=DATE:" + icsDatum(a.termin), "DTEND;VALUE=DATE:" + icsDatum(plusTage(a.termin, 1)), "TRANSP:TRANSPARENT");
     vorBeginn = 24 * 60 - minutenVon(KALENDER_ERINNERUNG);
@@ -104,4 +138,22 @@ function kalenderDatei(o, jetzt = Date.now()) {
     "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsText(titel), "TRIGGER:" + icsDauer(-vorBeginn), "END:VALARM",
     "END:VEVENT", "END:VCALENDAR");
   return zeilen.map(icsFalten).join("\r\n") + "\r\n";
+}
+
+/* ---------- Was steht im Kalender? ----------
+   Beim Antippen von „Im Kalender öffnen“ merkt sich die App im Auftrag
+   (imKalender), welcher Termin übernommen wurde: Datum, Uhrzeit, Vorlauf. iOS
+   legt bei einer erneuten Übernahme einen zweiten Eintrag an; weicht der
+   Termin später ab, weist die App darauf hin, den alten Eintrag zu löschen. */
+
+// Der Stand eines Termins, wie er im Kalender stünde
+const kalenderStand = a => ({ termin: a.termin, terminZeit: a.terminZeit || null, vorlauf: a.terminZeit ? a.vorlauf || null : null });
+const gleicherStand = (x, y) => !!x && !!y && x.termin === y.termin && (x.terminZeit || null) === (y.terminZeit || null) && (x.vorlauf || null) === (y.vorlauf || null);
+// Steht im Kalender ein anderer (oder ein inzwischen entfernter) Termin?
+function kalenderVeraltet(a) { return !!a.imKalender && !(a.termin && gleicherStand(a.imKalender, kalenderStand(a))); }
+// Steht genau dieser Termin schon im Kalender?
+function kalenderAktuell(a) { return !!a.termin && gleicherStand(a.imKalender, kalenderStand(a)); }
+// "Fr 06.11., 09:00", "Fr 06.11., ganztägig", "Fr 06.11., 10:00, losfahren 09:30"
+function kalenderStandText(k) {
+  return wochentag(k.termin) + " " + kurzDatum(k.termin) + ", " + (k.terminZeit ? k.terminZeit + (k.vorlauf ? ", losfahren " + losfahrenZeit(k.terminZeit, k.vorlauf) : "") : "ganztägig");
 }

@@ -4085,7 +4085,7 @@ async function start() {
     // -------------------------------------------------------------
     // 60. Termin in den Kalender (Release 5b, D4): Kalenderdatei (.ics)
     // -------------------------------------------------------------
-    abschnitt("60. Termin in den Kalender: Kalenderdatei (.ics), Knopf, „Im Kalender öffnen“ und „Als Datei teilen …“");
+    abschnitt("60. Termin in den Kalender: Kalenderdatei (.ics), Knopf, „Im Kalender öffnen“ (seit 5c in UTC und ohne „Als Datei teilen …“)");
     localStorage.setItem(TEST_SCHLUESSEL, v8Text);
     const wK = await appLaden();
     wK.heute = () => "2026-11-01";
@@ -4126,12 +4126,12 @@ async function start() {
     // Mit Uhrzeit: 1 Stunde, Erinnerung am Vortag 18:00
     const mitUhr = (zeit, key = "a-klein") => { wK.eval("daten.auftraege.find(a => a.id === '" + key + "').terminZeit = " + JSON.stringify(zeit)); return wK.kalenderDatei(oK(key), JETZT_K); };
     let k930 = mitUhr("09:30");
-    gleich("Mit Uhrzeit 09:30: DTSTART/DTEND 09:30–10:30 in Ortszeit (ohne Zeitzone), belegt, Erinnerung 15 h 30 min vorher (Vortag 18:00)",
+    gleich("Mit Uhrzeit 09:30 (Winterzeit): DTSTART/DTEND 09:30–10:30 als 08:30Z–09:30Z, belegt, Erinnerung 15 h 30 min vorher (Vortag 18:00)",
       [wertVon(k930, "DTSTART"), wertVon(k930, "DTEND"), wertVon(k930, "TRANSP"), wertVon(k930, "TRIGGER"), wertVon(k930, "DTSTART;VALUE=DATE")],
-      ["20261120T093000", "20261120T103000", "OPAQUE", "-PT15H30M", undefined]);
+      ["20261120T083000Z", "20261120T093000Z", "OPAQUE", "-PT15H30M", undefined]);
     const k2330 = mitUhr("23:30");
     gleich("23:30: Ende am Folgetag 00:30, Erinnerung 29 h 30 min vorher", [wertVon(k2330, "DTSTART"), wertVon(k2330, "DTEND"), wertVon(k2330, "TRIGGER")],
-      ["20261120T233000", "20261121T003000", "-PT29H30M"]);
+      ["20261120T223000Z", "20261120T233000Z", "-PT29H30M"]);
     const k0000 = mitUhr("00:00");
     gleich("00:00: Erinnerung 6 h vorher; 18:00: genau 24 h vorher", [wertVon(k0000, "TRIGGER"), wertVon(mitUhr("18:00"), "TRIGGER"), wertVon(mitUhr("18:05"), "TRIGGER")],
       ["-PT6H", "-PT24H", "-PT24H5M"]);
@@ -4154,9 +4154,9 @@ async function start() {
     wK.auftragAnsicht("a-klein");
     knopfK().click();
     const fensterK = wK.document.getElementById("fensterinhalt").textContent.replace(/\s+/g, " ");
-    wahr("Fenster: Titel, „Fr. 20.11.2026, ganztägig“, Erinnerung am Vortag um 18:00 Uhr, 2 Positionen, beide Wege und „Zurück“",
+    wahr("Fenster: Titel, „Fr. 20.11.2026, ganztägig“, Erinnerung am Vortag um 18:00 Uhr, 2 Positionen, „Im Kalender öffnen“ (ohne „Als Datei teilen …“) und „Zurück“",
       fensterK.includes("In Kalender übernehmen") && fensterK.includes("Kleine Inspektion – Rad & Co, Süd; Filiale") && fensterK.includes("Fr. 20.11.2026, ganztägig") &&
-      fensterK.includes("Erinnerung am Vortag um 18:00 Uhr · 2 Positionen") && fensterK.includes("Im Kalender öffnen") && fensterK.includes("Als Datei teilen …") &&
+      fensterK.includes("Erinnerung am Vortag um 18:00 Uhr · 2 Positionen") && fensterK.includes("Im Kalender öffnen") && !fensterK.includes("Als Datei teilen") && !fensterK.includes("Dateien") &&
       !!wK.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"][data-key="a-klein"]'), fensterK);
     mitUhr("09:30");
     wK.kalenderFenster("a-klein");
@@ -4172,25 +4172,12 @@ async function start() {
     gleich("„Im Kalender öffnen“: Kalenderdatei als text/calendar geöffnet, ohne download-Attribut",
       [blobs.length, blobs[0] && blobs[0].type, klicks[0], blobs[0] && ohneStempel(await blobs[0].text()) === ohneStempel(wK.kalenderDatei(oK("a-klein")))],
       [1, "text/calendar;charset=utf-8", { href: "blob:test-1", download: null }, true]);
-    // „Als Datei teilen …“: Teilen-Menü (Platzhalter) mit der Datei; ohne Teilen herunterladen
-    let geteiltK = [], teilenK = "ok";
-    Object.defineProperty(wK.navigator, "share", { value: async angaben => { geteiltK.push(angaben); if (teilenK !== "ok") throw new wK.DOMException("Platzhalter", teilenK); }, configurable: true, writable: true });
-    Object.defineProperty(wK.navigator, "canShare", { value: () => true, configurable: true, writable: true });
-    await wK.kalenderTeilen("a-klein");
-    const dateiK = geteiltK[0] && geteiltK[0].files[0];
-    gleich("„Als Datei teilen …“: nur die Datei geteilt (Name, Typ, Inhalt)",
-      [geteiltK.length, Object.keys(geteiltK[0] || {}), dateiK && dateiK.name, dateiK && dateiK.type, dateiK && ohneStempel(await dateiK.text()) === ohneStempel(wK.kalenderDatei(oK("a-klein")))],
-      [1, ["files"], "termin-kleine-inspektion-2026-11-20.ics", "text/calendar", true]);
-    teilenK = "AbortError";
-    klicks.length = 0;
-    await wK.kalenderTeilen("a-klein");
-    gleich("Teilen abgebrochen: nichts heruntergeladen", klicks.length, 0);
-    Object.defineProperty(wK.navigator, "canShare", { value: () => false, configurable: true, writable: true });
-    await wK.kalenderTeilen("a-klein");
-    gleich("Ohne Teilen-Menü: Download mit Dateinamen", klicks.slice(-1)[0], { href: "blob:test-" + blobs.length, download: "termin-kleine-inspektion-2026-11-20.ics" });
+    gleich("Keine Funktion „Als Datei teilen …“ mehr", [wK.eval("typeof kalenderTeilen"), wK.eval("'kalender-teilen' in AKTIONEN")], ["undefined", false]);
     wK.URL.createObjectURL = echtUrl;
     wK.HTMLAnchorElement.prototype.click = echtKlick;
-    gleich("Kalender ändert keine Daten", localStorage.getItem(TEST_SCHLUESSEL), datenVorK);
+    const nachK = JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)), vorK = kopie(wK.datenEinlesen(datenVorK));
+    gleichInhalt("„Im Kalender öffnen“ merkt sich nur den übernommenen Termin (imKalender), sonst bleiben die Daten unverändert",
+      nachK, Object.assign({}, vorK, { auftraege: vorK.auftraege.map(a => a.id === "a-klein" ? Object.assign({}, a, { imKalender: { termin: "2026-11-20", terminZeit: null, vorlauf: null } }) : a) }));
     wK.fensterSchliessen();
     wK.frameElement.remove();
     wV8.frameElement.remove();
@@ -4373,6 +4360,182 @@ async function start() {
     wirft("imKalender mit ungültiger Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-11-13", terminZeit: "9:00" } })), "imKalender.terminZeit");
     wirft("imKalender mit Vorlauf ohne Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-11-13", vorlauf: 30 } })), "imKalender.vorlauf");
     wV9.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 63. Kalender und Termin (Release 5c: B10, B9, B6, B7)
+    // -------------------------------------------------------------
+    abschnitt("63. Kalender in UTC (B10), Vorlaufzeit (B9), „In Kalender übernehmen“ in der Karte und nach dem Speichern (B6), veralteter Eintrag (B7)");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wC = await appLaden();
+    wC.heute = () => "2026-11-05";
+    const fragenC = [], alertsC = [];
+    wC.frage = async t => { fragenC.push(t); return true; };
+    wC.alert = m => alertsC.push(String(m));
+    const fC = id => wC.document.getElementById(id);
+    const aC = id => wC.eval("daten.auftraege").find(a => a.id === id);
+    const setzeC = (id, felder) => wC.eval("Object.assign(daten.auftraege.find(a => a.id === '" + id + "'), " + JSON.stringify(felder) + ")");
+    const icsC = id => wC.kalenderDatei(wC.offenerVon(id), Date.UTC(2026, 10, 5, 12));
+    const textC = () => wC.document.getElementById("inhalt").textContent.replace(/\s+/g, " ");
+    const fensterC = () => wC.document.getElementById("fensterinhalt").textContent.replace(/\s+/g, " ");
+    // B10: Umrechnung aus Europe/Berlin (unabhängig von der Zeitzone des Geräts)
+    const bz = (d, z) => new Date(wC.berlinZeitpunkt(d, wC.minutenAus(z))).toISOString().slice(0, 16);
+    gleich("Europe/Berlin → UTC: Winter (06.11.) und Sommer (10.07.) 09:30",
+      [bz("2026-11-06", "09:30"), bz("2026-07-10", "09:30"), bz("2026-01-01", "00:00"), bz("2026-12-31", "23:30")],
+      ["2026-11-06T08:30", "2026-07-10T07:30", "2025-12-31T23:00", "2026-12-31T22:30"]);
+    gleich("Tag der Umstellung auf Sommerzeit (So 29.03.2026): 01:59 Winterzeit, 02:30 gibt es nicht (gilt als 03:30 Sommerzeit), 03:00 und 09:00 Sommerzeit",
+      [bz("2026-03-29", "01:59"), bz("2026-03-29", "02:30"), bz("2026-03-29", "03:00"), bz("2026-03-29", "09:00"), bz("2026-03-28", "18:00")],
+      ["2026-03-29T00:59", "2026-03-29T01:30", "2026-03-29T01:00", "2026-03-29T07:00", "2026-03-28T17:00"]);
+    gleich("Tag der Umstellung auf Winterzeit (So 25.10.2026): 02:30 doppelt (gilt beim ersten Mal, Sommerzeit), 03:00 und 09:00 Winterzeit",
+      [bz("2026-10-25", "01:30"), bz("2026-10-25", "02:30"), bz("2026-10-25", "03:00"), bz("2026-10-25", "09:00"), bz("2026-10-24", "18:00")],
+      ["2026-10-24T23:30", "2026-10-25T00:30", "2026-10-25T02:00", "2026-10-25T08:00", "2026-10-24T16:00"]);
+    const icsWerte = (id, felder) => { setzeC(id, felder); const t = icsC(id); return [wertVon(t, "DTSTART"), wertVon(t, "DTEND"), wertVon(t, "TRIGGER")]; };
+    gleich("Kalenderdatei Winter: Fr 06.11. 09:30–10:30 → 08:30Z–09:30Z, Erinnerung 15 h 30 min vorher (Do 18:00)",
+      icsWerte("a-klein", { termin: "2026-11-06", terminZeit: "09:30" }), ["20261106T083000Z", "20261106T093000Z", "-PT15H30M"]);
+    gleich("Kalenderdatei Sommer: Fr 10.07. 09:30 → 07:30Z, Erinnerung 15 h 30 min vorher",
+      icsWerte("a-klein", { termin: "2026-07-10", terminZeit: "09:30" }), ["20260710T073000Z", "20260710T083000Z", "-PT15H30M"]);
+    gleich("Termin am Tag der Umstellung auf Sommerzeit (29.03. 09:00): 07:00Z; Erinnerung Sa 18:00 Winterzeit = 14 h vorher (echte Dauer)",
+      icsWerte("a-klein", { termin: "2026-03-29", terminZeit: "09:00" }), ["20260329T070000Z", "20260329T080000Z", "-PT14H"]);
+    gleich("Termin am Tag der Umstellung auf Winterzeit (25.10. 09:00): 08:00Z; Erinnerung Sa 18:00 Sommerzeit = 16 h vorher",
+      icsWerte("a-klein", { termin: "2026-10-25", terminZeit: "09:00" }), ["20261025T080000Z", "20261025T090000Z", "-PT16H"]);
+    gleich("Termin am Montag nach der Umstellung (30.03. 09:00): 07:00Z, Erinnerung wieder 15 h vorher",
+      icsWerte("a-klein", { termin: "2026-03-30", terminZeit: "09:00" }), ["20260330T070000Z", "20260330T080000Z", "-PT15H"]);
+    const ganzC = icsC("a-rep");
+    gleich("Ganztägig unverändert: VALUE=DATE, Erinnerung relativ 6 h vor Beginn (Vortag 18:00)",
+      [wertVon(ganzC, "DTSTART;VALUE=DATE"), wertVon(ganzC, "DTEND;VALUE=DATE"), wertVon(ganzC, "DTSTART"), wertVon(ganzC, "TRIGGER")], ["20261205", "20261206", undefined, "-PT6H"]);
+    wahr("Alle Zeiten mit Uhrzeit enden auf „Z“ (keine schwebende Ortszeit mehr)", eigenschaften(icsC("a-klein")).filter(l => /^(DTSTART|DTEND|DTSTAMP):/.test(l)).every(l => /\d{8}T\d{6}Z$/.test(l)));
+    // B9: Vorlaufzeit
+    setzeC("a-klein", { termin: "2026-11-06", terminZeit: "10:00", vorlauf: 30 });
+    const icsV = icsC("a-klein");
+    gleich("Mit Vorlauf 30 min (Termin 10:00): Eintrag ab dem Losfahren 09:30 bis 11:00 (08:30Z–10:00Z), Erinnerung weiter am Vortag 18:00",
+      [wertVon(icsV, "DTSTART"), wertVon(icsV, "DTEND"), wertVon(icsV, "TRIGGER")], ["20261106T083000Z", "20261106T100000Z", "-PT15H30M"]);
+    gleich("Titel mit Terminzeit: „Kleine Inspektion – Rad & Co, Süd; Filiale (Termin 10:00)“", icsLesen(wertVon(icsV, "SUMMARY")), "Kleine Inspektion – Rad & Co, Süd; Filiale (Termin 10:00)");
+    gleich("Beschreibung beginnt mit „Termin 10:00 Uhr, losfahren 09:30 (30 min Vorlauf)“", icsLesen(wertVon(icsV, "DESCRIPTION")).split("\n\n")[0], "Termin 10:00 Uhr, losfahren 09:30 (30 min Vorlauf)");
+    setzeC("a-klein", { vorlauf: null });
+    gleich("Ohne Vorlauf: Titel ohne Terminzeit, Beginn 10:00", [icsLesen(wertVon(icsC("a-klein"), "SUMMARY")), wertVon(icsC("a-klein"), "DTSTART")],
+      ["Kleine Inspektion – Rad & Co, Süd; Filiale", "20261106T090000Z"]);
+    gleich("Losfahren: 10:00 − 30 = 09:30; 00:15 − 30 = am Vortag 23:45; 240 min", [wC.losfahrenZeit("10:00", 30), wC.losfahrenZeit("00:15", 30), wC.losfahrenZeit("14:00", 240)],
+      ["09:30", "am Vortag 23:45", "10:00"]);
+    setzeC("a-klein", { termin: "2026-11-20", terminZeit: "09:30", vorlauf: null });
+    // Formular
+    wC.auftragTerminFormular("a-klein");
+    gleich("Formular: Feld „Vorlaufzeit (Minuten, optional)“ leer und bedienbar (Termin mit Uhrzeit), Zifferntastatur",
+      [fC("t-vorlauf").value, fC("t-vorlauf").disabled, fC("t-vorlauf").inputMode, wC.document.querySelector('label[for="t-vorlauf"]').textContent], ["", false, "numeric", "Vorlaufzeit (Minuten, optional)"]);
+    const eingabe = (id, v) => { fC(id).value = v; fC(id).dispatchEvent(new wC.Event("input", { bubbles: true })); };
+    fC("t-zeit").value = "10:00";
+    eingabe("t-vorlauf", "30");
+    wahr("Hinweis unter dem Feld: „losfahren 09:30 – der Kalendereintrag beginnt mit dem Losfahren.“", fC("t-vorlauf-hinweis").textContent.startsWith("losfahren 09:30 –"), fC("t-vorlauf-hinweis").textContent);
+    fC("t-zeit-an").checked = false;
+    fC("t-zeit-an").dispatchEvent(new wC.Event("change", { bubbles: true }));
+    gleich("Schalter „Mit Uhrzeit“ aus: Uhrzeit und Vorlaufzeit gesperrt", [fC("t-zeit").disabled, fC("t-vorlauf").disabled], [true, true]);
+    fC("t-zeit-an").checked = true;
+    fC("t-zeit-an").dispatchEvent(new wC.Event("change", { bubbles: true }));
+    [["0", "0"], ["241", "241"], ["abc", "Text"], ["12,5", "12,5"]].forEach(([v, t]) => {
+      fC("t-vorlauf").value = v;
+      wC.auftragTerminSpeichern("a-klein");
+      gleich("Vorlaufzeit „" + t + "“: abgelehnt, nichts geändert", [alertsC.slice(-1)[0], aC("a-klein").terminZeit, aC("a-klein").vorlauf],
+        ["Bitte als Vorlaufzeit ganze Minuten von 1 bis 240 eingeben, z. B. 30 – oder das Feld leer lassen.", "09:30", null]);
+    });
+    fC("t-vorlauf").value = " 30 ";
+    wC.auftragTerminSpeichern("a-klein");
+    gleich("Gespeichert: Uhrzeit 10:00, Vorlauf 30 (auch im Speicher)", [aC("a-klein").terminZeit, aC("a-klein").vorlauf,
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").vorlauf], ["10:00", 30, 30]);
+    // B6: nach dem Speichern eines geänderten Termins: Fenster „Termin gespeichert“
+    gleich("Geänderter Termin: Fenster „Termin gespeichert“ mit „Im Kalender öffnen“ und „Fertig“ (das Fenster bleibt offen)",
+      [wC.eval("fenster.open"), wC.document.querySelector("#fensterinhalt h2").textContent, !!wC.document.querySelector('#fensterinhalt [data-action="kalender-oeffnen"][data-key="a-klein"]'),
+        !!wC.document.querySelector('#fensterinhalt [data-action="fenster-zu"]')], [true, "Termin gespeichert", true, true]);
+    wahr("… mit Termin, Losfahren und Kalenderzeit: „Fr. 20.11.2026, 10:00 Uhr (1 Stunde), losfahren 09:30 – im Kalender 09:30–11:00“",
+      fensterC().includes("Fr. 20.11.2026, 10:00 Uhr (1 Stunde), losfahren 09:30 – im Kalender 09:30–11:00") && fensterC().includes("(Termin 10:00)"), fensterC());
+    wC.fensterSchliessen();
+    wC.eval("aktiverTab = 'wartung'; wartungAnsicht = 'aktuell'; zeichnen()");
+    wahr("Karte im Reiter Wartung: „Termin am 20.11.2026 um 10:00 Uhr bei Rad & Co, Süd; Filiale, losfahren 09:30 (in 15 Tagen)“",
+      textC().includes("Termin am 20.11.2026 um 10:00 Uhr bei Rad & Co, Süd; Filiale, losfahren 09:30 (in 15 Tagen)"), textC());
+    wC.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    wahr("Übersicht: nächste Wartung mit „losfahren 09:30“", textC().includes("Kleine Inspektion: Termin am 20.11.2026 um 10:00 Uhr bei Rad & Co, Süd; Filiale, losfahren 09:30"), textC());
+    wC.eval("aktiverTab = 'wartung'; zeichnen()");
+    const karteKnopf = id => wC.document.querySelector('#inhalt [data-action="kalender-oeffnen"][data-key="' + id + '"]');
+    gleich("Karte: „📅 In Kalender übernehmen“ bei Terminen mit und ohne Uhrzeit, nicht ohne Termin",
+      [karteKnopf("a-klein") && karteKnopf("a-klein").textContent, !!karteKnopf("a-rep"), !!wC.document.querySelector('#inhalt [data-action="kalender-oeffnen"][data-key="a-gross"]')],
+      ["📅 In Kalender übernehmen", true, false]);
+    // Kalenderdatei öffnen (Platzhalter für Blob und Link)
+    const blobsC = [];
+    const echtUrlC = wC.URL.createObjectURL, echtKlickC = wC.HTMLAnchorElement.prototype.click;
+    wC.URL.createObjectURL = b => { blobsC.push(b); return "blob:c-" + blobsC.length; };
+    wC.HTMLAnchorElement.prototype.click = function () { };
+    karteKnopf("a-klein").click();
+    gleich("Tipp in der Karte öffnet direkt die Kalenderdatei (ohne Fenster) und merkt sich den Termin",
+      [blobsC.length, blobsC[0] && blobsC[0].type, wC.eval("fenster.open"), aC("a-klein").imKalender, wC.document.getElementById("toast-text").textContent],
+      [1, "text/calendar;charset=utf-8", false, { termin: "2026-11-20", terminZeit: "10:00", vorlauf: 30 }, "An den Kalender übergeben – dort „Hinzufügen“ tippen"]);
+    wahr("… Inhalt der geöffneten Datei = Kalenderdatei des Auftrags (mit Vorlauf)", (await blobsC[0].text()).includes("DTSTART:20261120T083000Z"));
+    gleich("Danach in der Karte: „📅 In den Kalender übernommen“, kein Knopf und kein Hinweis",
+      [textC().includes("📅 In den Kalender übernommen"), !!karteKnopf("a-klein"), textC().includes("Im Kalender steht noch")], [true, false, false]);
+    // Nur Werkstatt geändert: Fenster schließt wie bisher
+    wC.auftragTerminFormular("a-klein");
+    fC("t-werkstatt").value = "Rad & Co, Nord";
+    wC.auftragTerminSpeichern("a-klein");
+    gleich("Nur die Werkstatt geändert (Termin steht so im Kalender): Fenster zu, Meldung „Termin gespeichert“",
+      [wC.eval("fenster.open"), wC.document.getElementById("toast-text").textContent, aC("a-klein").werkstatt], [false, "Termin gespeichert", "Rad & Co, Nord"]);
+    // B7: veralteter Eintrag
+    wC.auftragTerminFormular("a-klein");
+    fC("t-zeit").value = "09:00";
+    wC.auftragTerminSpeichern("a-klein");
+    gleich("Uhrzeit geändert: Fenster „Termin gespeichert“ mit Hinweis auf den alten Eintrag (Reihenfolge: erst löschen, dann übernehmen)",
+      [wC.document.querySelector("#fensterinhalt h2").textContent,
+        fensterC().includes("Im Kalender steht noch der alte Termin (Fr 20.11., 10:00, losfahren 09:30). Erst dort den alten Eintrag löschen, dann den neuen übernehmen.")],
+      ["Termin gespeichert", true]);
+    wC.document.querySelector('#fensterinhalt [data-action="kalender-oeffnen"]').click();
+    gleich("„Im Kalender öffnen“ im Fenster: Bestätigung „An den Kalender übergeben (Fr 20.11., 09:00, losfahren 08:30)“ und „Alten Eintrag (Fr 20.11., 10:00, losfahren 09:30) im Kalender löschen nicht vergessen.“",
+      [fensterC().includes("✓ An den Kalender übergeben (Fr 20.11., 09:00, losfahren 08:30).") && fensterC().includes("Alten Eintrag (Fr 20.11., 10:00, losfahren 09:30) im Kalender löschen nicht vergessen."),
+        aC("a-klein").imKalender, blobsC.length], [true, { termin: "2026-11-20", terminZeit: "09:00", vorlauf: 30 }, 2]);
+    wC.fensterSchliessen();
+    // Nur die Vorlaufzeit geändert → veraltet
+    setzeC("a-klein", { vorlauf: 45 });
+    wC.zeichnen();
+    wahr("Nur die Vorlaufzeit geändert: Karte zeigt „Im Kalender steht noch der alte Termin (Fr 20.11., 09:00, losfahren 08:30) …“ mit „In Kalender übernehmen“",
+      textC().includes("Im Kalender steht noch der alte Termin (Fr 20.11., 09:00, losfahren 08:30). Erst dort den alten Eintrag löschen, dann den neuen übernehmen.") &&
+      !!wC.document.querySelector('#inhalt .hinweis [data-action="kalender-oeffnen"][data-key="a-klein"]'), textC());
+    wC.auftragAnsicht("a-klein");
+    gleich("Auftragsfenster („Positionen“): derselbe Hinweis, „In Kalender übernehmen“ öffnet das Fenster mit Zusammenfassung",
+      [fensterC().includes("Im Kalender steht noch der alte Termin (Fr 20.11., 09:00, losfahren 08:30)"), !!wC.document.querySelector('#fensterinhalt .hinweis [data-action="kalender"][data-key="a-klein"]')], [true, true]);
+    wC.document.querySelector('#fensterinhalt .hinweis [data-action="kalender"]').click();
+    gleich("… Fenster „In Kalender übernehmen“ mit Hinweis und „Zurück“", [wC.document.querySelector("#fensterinhalt h2").textContent, fensterC().includes("Erst dort den alten Eintrag löschen"),
+      !!wC.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"]')], ["In Kalender übernehmen", true, true]);
+    wC.fensterSchliessen();
+    karteKnopf("a-klein").click();
+    gleich("Übernehmen aus der Karte bei veraltetem Eintrag: Fenster „In Kalender übernommen“ erinnert an den alten Eintrag",
+      [wC.eval("fenster.open"), fensterC().includes("Alten Eintrag (Fr 20.11., 09:00, losfahren 08:30) im Kalender löschen nicht vergessen."), aC("a-klein").imKalender.vorlauf],
+      [true, true, 45]);
+    wC.fensterSchliessen();
+    // Termin entfernen: Hinweis zum Löschen im Kalender, „Im Kalender gelöscht“
+    await wC.auftragTerminEntfernen("a-klein");
+    wahr("„Termin entfernen“: Rückfrage nennt den Eintrag im Kalender", fragenC.slice(-1)[0].includes("Im Kalender steht der Termin (Fr 20.11., 09:00, losfahren 08:15); lösche ihn dort."), fragenC.slice(-1)[0]);
+    gleich("Termin entfernt: Uhrzeit und Vorlauf leer, imKalender bleibt", [aC("a-klein").termin, aC("a-klein").terminZeit, aC("a-klein").vorlauf, !!aC("a-klein").imKalender], [null, null, null, true]);
+    wahr("Karte: „Im Kalender steht noch der Termin (Fr 20.11., 09:00, losfahren 08:15) – bitte dort löschen.“ mit „Im Kalender gelöscht“",
+      textC().includes("Im Kalender steht noch der Termin (Fr 20.11., 09:00, losfahren 08:15) – bitte dort löschen.") &&
+      !!wC.document.querySelector('#inhalt [data-action="kalender-geloescht"][data-key="a-klein"]'), textC());
+    wC.document.querySelector('#inhalt [data-action="kalender-geloescht"][data-key="a-klein"]').click();
+    gleich("„Im Kalender gelöscht“: Hinweis weg, imKalender leer", [aC("a-klein").imKalender, textC().includes("Im Kalender steht noch")], [null, false]);
+    // Neuer Auftrag mit Termin: Fenster „… angelegt“ mit „Positionen“
+    wC.auftragTerminFormular("anlegen:eigenleistung");
+    fC("t-datum").value = "2026-11-14";
+    wC.auftragTerminSpeichern("anlegen:eigenleistung");
+    gleich("Neuer Auftrag mit Termin: Fenster „Eigenleistung angelegt“ mit „Im Kalender öffnen“, „Positionen“ und „Fertig“",
+      [wC.document.querySelector("#fensterinhalt h2").textContent, !!wC.document.querySelector('#fensterinhalt [data-action="kalender-oeffnen"]'),
+        !!wC.document.querySelector('#fensterinhalt [data-action="auftrag-ansehen"]'), fensterC().includes("Sa. 14.11.2026, ganztägig")], ["Eigenleistung angelegt", true, true, true]);
+    wC.fensterSchliessen();
+    // Auftrag löschen und erledigt eintragen
+    setzeC("a-rep", { imKalender: { termin: "2026-12-05", terminZeit: null, vorlauf: null } });
+    wC.auftragErledigen("a-rep");
+    wC.abschlussSpeichern();
+    gleich("„Erledigt eintragen“: Termin, Uhrzeit, Vorlauf und imKalender leer", [aC("a-rep").status, aC("a-rep").termin, aC("a-rep").vorlauf, aC("a-rep").imKalender], ["erledigt", null, null, null]);
+    wC.fensterSchliessen();
+    const eigenC = wC.eval("daten.auftraege").find(a => a.wartungsartId === "eigenleistung" && a.status === "geplant");
+    setzeC(eigenC.id, { imKalender: { termin: "2026-11-14", terminZeit: null, vorlauf: null } });
+    await wC.auftragLoeschen(eigenC.id);
+    wahr("„Auftrag löschen“: Rückfrage nennt den Eintrag im Kalender (Sa 14.11., ganztägig)", fragenC.slice(-1)[0].includes("Im Kalender steht der Termin (Sa 14.11., ganztägig); lösche ihn dort."), fragenC.slice(-1)[0]);
+    gleichInhalt("Gespeicherte Daten weiter gültig (Export → Import)", kopie(wC.datenEinlesen(wC.exportInhalt())), kopie(wC.eval("daten")));
+    wC.URL.createObjectURL = echtUrlC;
+    wC.HTMLAnchorElement.prototype.click = echtKlickC;
+    wC.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

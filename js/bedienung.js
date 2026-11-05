@@ -19,7 +19,7 @@ const AKTIONEN = {
   "fenster-zu": () => fensterSchliessen(),
   "kalender": el => kalenderFenster(el.dataset.key),
   "kalender-oeffnen": el => kalenderOeffnen(el.dataset.key),
-  "kalender-teilen": el => kalenderTeilen(el.dataset.key),
+  "kalender-geloescht": el => kalenderGeloescht(el.dataset.key),
   "gruppe": el => gruppeUmschalten(el.dataset.key),
 
   "vorlage-erfassen": el => {
@@ -154,7 +154,7 @@ const AENDERUNGEN = {
   "art-typ": () => artTypGeaendert(),
   "fahrtag": () => fahrtageGeaendert(),
   "hinweis-heute-an": el => hinweisHeuteAnGeaendert(el.checked),
-  "termin-zeit-an": el => { document.getElementById("t-zeit").disabled = !el.checked; },
+  "termin-zeit-an": el => terminZeitSchalten(el.checked),
   "hinweis-heute-ab": el => hinweisHeuteAbGeaendert(el.value),
   "fahrt-abfahrt-an": el => { const f = document.getElementById("fz-abfahrt"); if (f) f.disabled = !el.checked; },
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),
@@ -163,6 +163,7 @@ const AENDERUNGEN = {
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
+  "termin-vorlauf": () => terminVorlaufEingabe(),
   "ort-karte": () => ortKarteAktualisieren(),
   "protokoll-km": () => protokollKmEingabe(),
   "prognose-datum": () => prognoseAnzeigen()
