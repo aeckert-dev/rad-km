@@ -1509,10 +1509,10 @@ async function start() {
     const kurs = w.kursZwischen(MUSTERDORF, BEISPIELSTADT), kursZurueck = w.kursZwischen(BEISPIELSTADT, MUSTERDORF);
     wahr("Richtung Musterdorf → Beispielstadt: Nordost (ca. 51°), zurück Südwest", kurs > 48 && kurs < 55 && Math.abs(kursZurueck - kurs - 180) < 1, kurs + " / " + kursZurueck);
     const proben = (v, r) => Array(4).fill({ v, r });
-    gleich("Gegenwind, Rückenwind, von rechts und von links, schräg von vorn rechts (volle Stärke), schwacher Wind mit Richtung", [
+    gleich("Gegenwind, Rückenwind, von rechts und von links, von schräg vorn rechts (volle Stärke), schwacher Wind mit Richtung", [
       w.windRelativ(proben(20, kurs), kurs).text, w.windRelativ(proben(20, kurs + 180), kurs).text, w.windRelativ(proben(20, kurs + 90), kurs).text,
       w.windRelativ(proben(20, kurs - 90), kurs).text, w.windRelativ(proben(20, kurs + 40), kurs).text, w.windRelativ(proben(8, kurs), kurs).text
-    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "von rechts 20 km/h", "von links 20 km/h", "schräg von vorn rechts 20 km/h", "Gegenwind 8 km/h (schwach)"]);
+    ], ["Gegenwind 20 km/h", "Rückenwind 20 km/h", "von rechts 20 km/h", "von links 20 km/h", "von schräg vorn rechts 20 km/h", "Gegenwind 8 km/h, schwach"]);
     om = aendern(aendern(ruhig(), "wind_speed_10m", D, "05:00", "18:00", 20), "wind_direction_10m", D, "05:00", "18:00", 50);
     ans = await laden(om);
     gleich("Wind aus Nordost: hin Gegenwind, zurück Rückenwind; die Ampel bleibt grün",
@@ -1833,7 +1833,7 @@ async function start() {
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
         "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
-        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt schräg von hinten rechts 5 km/h (schwach)",
+        "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
       [ablageR.querySelectorAll(".zeitleiste .slot").length, ablageR.querySelectorAll(".zeitleiste .slot.rot").length, ablageR.querySelectorAll(".zeitleiste .slot.beste").length,
@@ -2729,10 +2729,10 @@ async function start() {
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke: von links 20 km/h", "Ecke → Beispielstadt: Gegenwind 20 km/h"]],
       ["Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke: Rückenwind 20 km/h", "Ecke → Musterdorf: von rechts 20 km/h"]]]);
     ablageB.innerHTML = w.bildWetter(ABEND);
-    wahr("Reiter Wetter: Wind je Teilstrecke unter der Zeile 🧭 (Hin- und Rückfahrt; seit 5a Name und Wind zweizeilig)",
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Musterdorf → Ecke von links 20 km/h Ecke → Beispielstadt Gegenwind 20 km/h") &&
-      ohneTags(ablageB.innerHTML).includes("🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h Beispielstadt → Ecke Rückenwind 20 km/h Ecke → Musterdorf von rechts 20 km/h"),
-      ohneTags(ablageB.innerHTML));
+    gleich("Reiter Wetter: Wind je Teilstrecke unter der Zeile 🧭 (Hin- und Rückfahrt; seit 5c Name und Pfeil mit Beschriftung)",
+      [...ablageB.querySelectorAll(".wind-teile")].map(t => [ohneTags(t.previousElementSibling.innerHTML), [...t.children].map(z => z.getAttribute("aria-label") || ohneTags(z.innerHTML))]), [
+        ["🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Musterdorf → Ecke", "von links 20 km/h", "Ecke → Beispielstadt", "Gegenwind 20 km/h"]],
+        ["🧭 Wind 20 km/h aus Nord, Böen bis 15 km/h", ["Beispielstadt → Ecke", "Rückenwind 20 km/h", "Ecke → Musterdorf", "von rechts 20 km/h"]]]);
     om = drei(ruhig());
     aendern(om, "apparent_temperature", D, "06:00", "07:00", 2, 1);
     aendern(om, "precipitation_probability", D, "06:00", "07:00", 70, 1);
@@ -3105,27 +3105,27 @@ async function start() {
     const abschnittBei = (r, kurs = 0) => w.windRelativ(eine(20, r), kurs).abschnitt;
     const windGrenzen = [0, 22.4, 22.5, 22.6, 67.4, 67.5, 67.6, 112.4, 112.5, 112.6, 157.4, 157.5, 157.6, 180];
     gleich("Rechts (Fahrtrichtung Nord): je Grenze knapp davor, genau darauf und knapp dahinter; die Grenze zählt zum Abschnitt weiter vorn (ungünstiger)",
-      windGrenzen.map(r => r + "° " + abschnittBei(r)), ["0° Gegenwind", "22.4° Gegenwind", "22.5° Gegenwind", "22.6° schräg von vorn rechts",
-        "67.4° schräg von vorn rechts", "67.5° schräg von vorn rechts", "67.6° von rechts", "112.4° von rechts", "112.5° von rechts", "112.6° schräg von hinten rechts",
-        "157.4° schräg von hinten rechts", "157.5° schräg von hinten rechts", "157.6° Rückenwind", "180° Rückenwind"]);
+      windGrenzen.map(r => r + "° " + abschnittBei(r)), ["0° Gegenwind", "22.4° Gegenwind", "22.5° Gegenwind", "22.6° von schräg vorn rechts",
+        "67.4° von schräg vorn rechts", "67.5° von schräg vorn rechts", "67.6° von rechts", "112.4° von rechts", "112.5° von rechts", "112.6° von schräg hinten rechts",
+        "157.4° von schräg hinten rechts", "157.5° von schräg hinten rechts", "157.6° Rückenwind", "180° Rückenwind"]);
     gleich("Links ebenso (−22,5° = 337,5° usw.)",
-      windGrenzen.map(r => -r).map(r => r + "° " + abschnittBei((r + 360) % 360)), ["0° Gegenwind", "-22.4° Gegenwind", "-22.5° Gegenwind", "-22.6° schräg von vorn links",
-        "-67.4° schräg von vorn links", "-67.5° schräg von vorn links", "-67.6° von links", "-112.4° von links", "-112.5° von links", "-112.6° schräg von hinten links",
-        "-157.4° schräg von hinten links", "-157.5° schräg von hinten links", "-157.6° Rückenwind", "-180° Rückenwind"]);
+      windGrenzen.map(r => -r).map(r => r + "° " + abschnittBei((r + 360) % 360)), ["0° Gegenwind", "-22.4° Gegenwind", "-22.5° Gegenwind", "-22.6° von schräg vorn links",
+        "-67.4° von schräg vorn links", "-67.5° von schräg vorn links", "-67.6° von links", "-112.4° von links", "-112.5° von links", "-112.6° von schräg hinten links",
+        "-157.4° von schräg hinten links", "-157.5° von schräg hinten links", "-157.6° Rückenwind", "-180° Rückenwind"]);
     gleich("Über Nord hinweg (Fahrtrichtung 350° bzw. 10°) und bei einer echten Fahrtrichtung (Musterdorf → Beispielstadt, ca. 51,3°)",
       [abschnittBei(12.5, 350), abschnittBei(12.6, 350), abschnittBei(347.5, 10), abschnittBei(347.4, 10), abschnittBei(0, 90), abschnittBei(90, 270),
         abschnittBei(kurs + 22.5, kurs), abschnittBei(kurs + 22.6, kurs), abschnittBei(kurs + 360 - 157.5, kurs), abschnittBei(kurs + 360 - 157.6, kurs)],
-      ["Gegenwind", "schräg von vorn rechts", "Gegenwind", "schräg von vorn links", "von links", "Rückenwind",
-        "Gegenwind", "schräg von vorn rechts", "schräg von hinten links", "Rückenwind"]);
+      ["Gegenwind", "von schräg vorn rechts", "Gegenwind", "von schräg vorn links", "von links", "Rückenwind",
+        "Gegenwind", "von schräg vorn rechts", "von schräg hinten links", "Rückenwind"]);
     gleich("Mehrere Werte: Richtung aus dem Mittel der Windvektoren, Stärke als Mittel der Geschwindigkeiten (volle Stärke, nicht der Anteil)",
       [w.windRelativ([{ v: 10, r: 80 }, { v: 30, r: 100 }], 0).text, w.windRelativ([{ v: 20, r: 350 }, { v: 20, r: 30 }], 0).text, w.windRelativ([], 0)],
       ["von rechts 20 km/h", "Gegenwind 20 km/h", null]);
     gleich("Schwacher Wind mit Himmelsrichtung, relativer Richtung (Fahrt nach Südwest bzw. Nordost) und „(schwach)“; Böen immer dabei",
       [w.windAllgemein(eine(4, 225), 12).text, w.windRelativ(eine(4, 225), 225).text, w.windRelativ(eine(4, 225), 45).text, w.windAllgemein(eine(4, 225), 12).schwach],
-      ["Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h", "Gegenwind 4 km/h (schwach)", "Rückenwind 4 km/h (schwach)", true]);
+      ["Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h", "Gegenwind 4 km/h, schwach", "Rückenwind 4 km/h, schwach", true]);
     gleich("Der angezeigte (gerundete) Wert entscheidet: 9,4 → 9 km/h (schwach), 9,5 → 10 km/h ohne Zusatz",
       [w.windAllgemein(eine(9.4, 180), 20).text, w.windAllgemein(eine(9.5, 180), 20).text, w.windRelativ(eine(9.4, 180), 0).text, w.windRelativ(eine(9.6, 180), 0).text],
-      ["Wind 9 km/h aus Süd (schwach), Böen bis 20 km/h", "Wind 10 km/h aus Süd, Böen bis 20 km/h", "Rückenwind 9 km/h (schwach)", "Rückenwind 10 km/h"]);
+      ["Wind 9 km/h aus Süd (schwach), Böen bis 20 km/h", "Wind 10 km/h aus Süd, Böen bis 20 km/h", "Rückenwind 9 km/h, schwach", "Rückenwind 10 km/h"]);
     gleich("Windstill bei gerundet 0 km/h (ohne Richtung); 0,5 km/h ist schon 1 km/h",
       [w.windAllgemein(eine(0.4, 90), 5).text, w.windRelativ(eine(0.4, 90), 0).text, w.windRelativ(eine(0.4, 90), 0).abschnitt, w.windAllgemein(eine(0.5, 90), 5).text],
       ["Windstill, Böen bis 5 km/h", "windstill", null, "Wind 1 km/h aus Ost (schwach), Böen bis 5 km/h"]);
@@ -3137,7 +3137,9 @@ async function start() {
       const d = w.document.createElement("div");
       d.innerHTML = w.bildWetter(ABEND);
       return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ({ titel: ohneTags(k.querySelector("h3").innerHTML), text: ohneTags(k.innerHTML),
-        teile: [...k.querySelectorAll(".wind-teile > .wind-teil")].map(z => ohneTags(z.querySelector(".klein").innerHTML) + ": " + ohneTags(z.querySelector(".wind-text").innerHTML)), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
+        // je Teilstrecke: Name und Beschriftung des Pfeils (aria-label) bzw. „windstill“
+        teile: [...k.querySelectorAll(".wind-teile > .wind-name")].map(z => ohneTags(z.innerHTML) + ": " +
+          (z.nextElementSibling.getAttribute("aria-label") || ohneTags(z.nextElementSibling.innerHTML))), zeilen: [...k.children].filter(z => z.textContent.startsWith("🧭")).map(z => ohneTags(z.innerHTML)) }));
     };
     const windVorhersage = (jeOrt, richtung, boeen) => {
       const om = drei(ruhig());
@@ -3151,30 +3153,27 @@ async function start() {
     let windK = windKarten();
     gleich("Hinfahrt: zuerst Wind mit Himmelsrichtung und Böen, darunter je Teilstrecke (Ost, dann Nord) mit der Stärke an ihren Enden",
       [windK[0].titel, windK[0].zeilen, windK[0].teile],
-      ["Hinfahrt 06:00–07:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Musterdorf → Ecke: schräg von hinten rechts 16 km/h", "Ecke → Beispielstadt: schräg von hinten links 14 km/h"]]);
+      ["Hinfahrt 06:00–07:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Musterdorf → Ecke: von schräg hinten rechts 16 km/h", "Ecke → Beispielstadt: von schräg hinten links 14 km/h"]]);
     gleich("Rückfahrt: umgekehrte Reihenfolge und Richtung",
       [windK[1].titel, windK[1].zeilen, windK[1].teile],
-      ["Rückfahrt 16:00–17:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Beispielstadt → Ecke: schräg von vorn rechts 14 km/h", "Ecke → Musterdorf: schräg von vorn links 16 km/h"]]);
+      ["Rückfahrt 16:00–17:00", ["🧭 Wind 15 km/h aus Südwest, Böen bis 36 km/h"], ["Beispielstadt → Ecke: von schräg vorn rechts 14 km/h", "Ecke → Musterdorf: von schräg vorn links 16 km/h"]]);
     wahr("Die frühere Zusammenfassung (Gegen-/Seitenwind gewichtet) und „zählt nicht“ stehen nicht mehr in den Karten; Böen nicht bei den Werten",
       windK.every(k => !/Seitenwind|wechselnd|zählt nicht|mm · Böen/.test(k.text) && (k.text.match(/Böen/g) || []).length === 1), windK.map(k => k.text).join("\n"));
     const ablage51 = w.document.createElement("div");
     ablage51.innerHTML = w.bildWetter(ABEND);
     const teileStil = ablage51.querySelector(".wind-teile");
     w.document.body.appendChild(ablage51);
-    const stil = w.getComputedStyle(ablage51.querySelector(".wind-teile"));
-    gleich("Teilstrecken eingerückt, je Teilstrecke ein eigener Block",
-      [teileStil.classList.contains("klein"), parseFloat(stil.paddingLeft) > 0, teileStil.children.length, [...teileStil.children].every(z => z.classList.contains("wind-teil"))],
-      [false, true, 2, true]);
-    // W15 (Release 5a): je Teilstrecke zweizeilig, Name klein, darunter eingerückt der Wind in normaler Schrift
-    const teil1 = teileStil.children[0], name1 = teil1.children[0], wind1 = teil1.children[1];
-    const schrift = el => w.getComputedStyle(el).fontSize, links = el => el.getBoundingClientRect().left;
-    gleich("W15: zwei Zeilen je Teilstrecke: Name der Teilstrecke klein, darunter die Windangabe",
-      [teil1.children.length, name1.className, name1.textContent, wind1.textContent], [2, "klein", "Musterdorf → Ecke", "schräg von hinten rechts 16 km/h"]);
-    gleich("W15: Windangabe in normaler Schrift (wie die Karte), größer als der Name, unter dem Namen und weiter eingerückt",
-      [schrift(wind1) === schrift(ablage51.querySelector(".karte")), parseFloat(schrift(wind1)) > parseFloat(schrift(name1)),
-        wind1.getBoundingClientRect().top >= name1.getBoundingClientRect().bottom - 1, links(wind1) + parseFloat(w.getComputedStyle(wind1).paddingLeft) > links(name1),
-        links(name1) > links(teileStil.previousElementSibling)],
-      [true, true, true, true, true]);
+    const stil = w.getComputedStyle(teileStil);
+    // B8/B1 (Release 5c): je Teilstrecke eine Zeile mit Name und Pfeil, nicht eingerückt
+    const namen = [...teileStil.querySelectorAll(".wind-name")], pfeile = [...teileStil.querySelectorAll("svg.wind-pfeil")];
+    const links = el => el.getBoundingClientRect().left;
+    gleich("B1: Teilstrecken nicht eingerückt (Name beginnt bündig mit der Zeile 🧭), Raster mit zwei Spalten",
+      [parseFloat(stil.paddingLeft), Math.abs(links(namen[0]) - links(teileStil.previousElementSibling)) < 1, stil.display, namen.length, pfeile.length],
+      [0, true, "grid", 2, 2]);
+    const r0 = namen[0].getBoundingClientRect(), p0 = pfeile[0].getBoundingClientRect(), p1 = pfeile[1].getBoundingClientRect();
+    gleich("B8: je Zeile hinter dem Namen nur ein Pfeil (ohne Text), die Pfeile stehen untereinander, 24 × 24 px",
+      [p0.left >= r0.right, Math.abs(p0.top + p0.height / 2 - (r0.top + r0.height / 2)) < 4, Math.abs(p0.left - p1.left) < 1, p0.width, p0.height, ohneTags(pfeile[0].outerHTML).trim()],
+      [true, true, true, 24, 24, ""]);
     ablage51.remove();
 
     // Schwacher Wind, die erste Teilstrecke zählt nicht
@@ -3183,8 +3182,8 @@ async function start() {
     windK = windKarten();
     gleich("Schwacher Wind: Himmelsrichtung und relative Richtung mit „(schwach)“; die ausgeschlossene Teilstrecke wird nicht erwähnt",
       windK.map(k => [k.zeilen, k.teile, k.text.includes("Musterdorf →") || k.text.includes("→ Musterdorf")]), [
-        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Ecke → Beispielstadt: schräg von hinten links 4 km/h (schwach)"], false],
-        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Beispielstadt → Ecke: schräg von vorn rechts 4 km/h (schwach)"], false]]);
+        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Ecke → Beispielstadt: von schräg hinten links 4 km/h, schwach"], false],
+        [["🧭 Wind 4 km/h aus Südwest (schwach), Böen bis 12 km/h"], ["Beispielstadt → Ecke: von schräg vorn rechts 4 km/h, schwach"], false]]);
     wetterDaten({ wegpunkte: [ECKE], windTeilstrecken: [false, false] });
     await laden(windVorhersage([4, 4, 4], 225, 12));
     gleich("Keine Teilstrecke zählt: nur die erste Zeile", windKarten().map(k => [k.zeilen, k.teile]),
@@ -4606,6 +4605,57 @@ async function start() {
       wind: 10, boeen: 25, gewitter: false }), "−3 °C bis 2 °C (gefühlt −7 °C bis −1 °C) · Regen 20 %, 0 mm · Wind bis 10 km/h, Böen bis 25 km/h");
     gleich("Unterseiten verändern keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
     wU.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 65. Windpfeile je Teilstrecke (B8, B1)
+    // -------------------------------------------------------------
+    abschnitt("65. Windpfeile je Teilstrecke (B8): Winkel, Farbe, schwach, windstill, Beschriftung für VoiceOver, Kontrast");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wP = await appLaden();
+    const eineP = (v, r) => [{ v, r }];
+    const relP = (r, kurs = 0, v = 20) => wP.windRelativ(eineP(v, r), kurs);
+    gleich("Drehung des Pfeils (Fahrer fährt nach oben): Gegenwind nach unten (180°), Rückenwind nach oben (0°), von rechts nach links (270°), von links nach rechts (90°)",
+      [relP(0).drehung, relP(180).drehung, relP(90).drehung, relP(270).drehung], [180, 0, 270, 90]);
+    gleich("Genauer Winkel (nicht auf 8 Richtungen gerundet): 30° → 210°, 37,3° → 217,3°, 320° → 140°; Fahrtrichtung 51,3°, Wind aus 225° → 353,7°",
+      [relP(30).drehung, relP(37.3).drehung, relP(320).drehung, relP(225, 51.3).drehung], [210, 217.3, 140, 353.7]);
+    gleich("Farbe nach Abschnitt (Grenzen wie bisher, die Grenze zählt nach vorn): rot Gegenwind, orange schräg vorn und seitlich, grün schräg hinten und Rückenwind",
+      [0, 22.5, 22.6, 67.5, 90, 112.5, 112.6, 157.5, 157.6, 180, 337.4, 247.5, 202.5].map(r => relP(r).farbe),
+      ["gegen", "gegen", "seite", "seite", "seite", "seite", "ruecken", "ruecken", "ruecken", "ruecken", "seite", "seite", "ruecken"]);
+    gleich("Beschriftung: „von“ immer vorne, Gegen- und Rückenwind ohne „von“; schwach mit „, schwach“",
+      [relP(0, 0, 14).text, relP(135, 0, 4).text, relP(45, 0, 12).text, relP(270, 0, 8).text, relP(180, 0, 25).text, relP(210, 0, 9.4).text],
+      ["Gegenwind 14 km/h", "von schräg hinten rechts 4 km/h, schwach", "von schräg vorn rechts 12 km/h", "von links 8 km/h, schwach", "Rückenwind 25 km/h", "von schräg hinten links 9 km/h, schwach"]);
+    gleich("Windstill: keine Richtung, kein Pfeil", [relP(90, 0, 0.4).text, relP(90, 0, 0.4).drehung, relP(90, 0, 0.4).farbe], ["windstill", null, null]);
+    const pfeilEl = t => { const d = wP.document.createElement("div"); d.innerHTML = wP.windPfeilHtml(t); return d.firstElementChild; };
+    const pg = pfeilEl(relP(0, 0, 14)), ps = pfeilEl(relP(135, 0, 4)), pw = pfeilEl(relP(90, 0, 0.4));
+    gleich("SVG: role=img, aria-label, Farbe als Klasse, gedreht um die Mitte; schwach mit Klasse „schwach“",
+      [pg.tagName.toLowerCase(), pg.getAttribute("role"), pg.getAttribute("aria-label"), pg.getAttribute("class"), pg.querySelector("g").getAttribute("transform"),
+        ps.getAttribute("class"), ps.getAttribute("aria-label")],
+      ["svg", "img", "Gegenwind 14 km/h", "wind-pfeil gegen", "rotate(180 12 12)", "wind-pfeil ruecken schwach", "von schräg hinten rechts 4 km/h, schwach"]);
+    gleich("Windstill: statt des Pfeils „windstill“ klein in Grau", [pw.tagName.toLowerCase(), pw.className, pw.textContent], ["span", "klein windstill", "windstill"]);
+    const ablageP = wP.document.createElement("div");
+    ablageP.className = "karte";
+    ablageP.innerHTML = wP.windHtml({ text: "Wind 15 km/h aus Südwest, Böen bis 36 km/h", teile: [Object.assign({ titel: "Musterdorf → Ecke" }, relP(0, 0, 14)),
+      Object.assign({ titel: "Ecke → Beispielstadt" }, relP(135, 0, 4)), Object.assign({ titel: "Beispielstadt → Feld" }, relP(90, 0, 0.4))] });
+    wP.document.getElementById("inhalt").appendChild(ablageP);
+    const farbeVon = el => wP.getComputedStyle(el).color, wurzelP = wP.getComputedStyle(wP.document.documentElement);
+    const rgb = hex => { const n = parseInt(hex.trim().slice(1), 16); return "rgb(" + (n >> 16) + ", " + (n >> 8 & 255) + ", " + (n & 255) + ")"; };
+    const [pa, pb] = ablageP.querySelectorAll("svg");
+    gleich("Erste Zeile nur Text (kein Pfeil, kein Kompass); Farben aus den Variablen; schwach mit 50 % Deckkraft; windstill grau",
+      [ablageP.firstElementChild.querySelector("svg"), farbeVon(pa), farbeVon(pb), wP.getComputedStyle(pb).opacity, wP.getComputedStyle(pa).opacity,
+        farbeVon(ablageP.querySelector(".windstill"))],
+      [null, rgb(wurzelP.getPropertyValue("--wind-gegen")), rgb(wurzelP.getPropertyValue("--wind-ruecken")), "0.5", "1", rgb(wurzelP.getPropertyValue("--text2"))]);
+    ablageP.remove();
+    // Kontrast der Pfeilfarben zur Karte (mind. 3:1 für Grafiken) in Hell- und Dunkelmodus, aus css/app.css gelesen
+    const cssTextP = await (await fetch("../css/app.css", { cache: "no-store" })).text();
+    const blockP = t => { const v = {}; t.replace(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/g, (_, n, f) => { v[n] = f; }); return v; };
+    const hellP = blockP(cssTextP.slice(cssTextP.indexOf(":root {"), cssTextP.indexOf("@media (prefers-color-scheme: dark)")));
+    const dunkelP = blockP(cssTextP.slice(cssTextP.indexOf("@media (prefers-color-scheme: dark)"), cssTextP.indexOf("* { box-sizing")));
+    const leuchtP = hex => { const n = parseInt(hex.slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255].map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; })
+      .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0); };
+    const kontrastP = (a, b) => { const [x, y] = [leuchtP(a), leuchtP(b)].sort((p, q) => q - p); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };
+    const pruefKontrastP = v => ["wind-gegen", "wind-seite", "wind-ruecken"].map(n => v[n] ? kontrastP(v[n], v.karte) >= 3 : "fehlt");
+    gleich("Kontrast der Pfeilfarben zur Karte mind. 3:1 (hellP und dunkelP)", [pruefKontrastP(hellP), pruefKontrastP(dunkelP)], [[true, true, true], [true, true, true]]);
+    wP.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

@@ -120,13 +120,21 @@ function fahrtKarte(f, alt) {
   return html + '</div>';
 }
 
-// Wind: erste Zeile mit Himmelsrichtung und Böen, darunter eingerückt je Teilstrecke,
-// die zählt, zweizeilig: der Name klein, darunter eingerückt die Richtung relativ
-// zur Fahrtrichtung in normaler Schrift (W15)
+// Wind: erste Zeile mit Himmelsrichtung und Böen (nur Text), darunter je
+// Teilstrecke, die zählt, eine Zeile mit ihrem Namen und einem farbigen Pfeil
+// (B8): der Fahrer fährt nach oben, der Pfeil zeigt, wohin der Wind weht.
+// Die Pfeile stehen untereinander hinter dem längsten Namen.
 function windHtml(wind) {
   return '<div>🧭 ' + esc(wind.text) + '</div>' +
     (wind.teile.length ? '<div class="wind-teile">' + wind.teile.map(t =>
-      '<div class="wind-teil"><div class="klein">' + esc(t.titel) + '</div><div class="wind-text">' + esc(t.text) + '</div></div>').join("") + '</div>' : "");
+      '<span class="wind-name">' + esc(t.titel) + '</span>' + windPfeilHtml(t)).join("") + '</div>' : "");
+}
+// Pfeil im genauen Winkel als kleines SVG, mit Beschriftung für VoiceOver;
+// windstill ohne Pfeil
+function windPfeilHtml(t) {
+  if (t.windstill) return '<span class="klein windstill">windstill</span>';
+  return '<svg class="wind-pfeil ' + t.farbe + (t.schwach ? " schwach" : "") + '" viewBox="0 0 24 24" role="img" aria-label="' + esc(t.text) + '">' +
+    '<g transform="rotate(' + t.drehung + ' 12 12)"><path d="M12 20.5V4M5.5 10.5L12 4l6.5 6.5"/></g></svg>';
 }
 // Kleidung je Körperbereich; leere Bereiche entfallen, wegen Regen angepasste sind markiert
 function kleidungBereicheHtml(kl) {

@@ -630,14 +630,16 @@ function entfernungKm(a, b) {
 }
 const HIMMELSRICHTUNGEN = ["Nord", "Nordost", "Ost", "Südost", "Süd", "Südwest", "West", "Nordwest"];
 // Relative Richtung des Winds zur Fahrtrichtung in acht Abschnitten zu je 45°:
-// [Grenze (Grad), Name von links, Name von rechts]. Ein Winkel genau auf einer
-// Grenze zählt zum Abschnitt weiter vorn (dem ungünstigeren).
+// [Grenze (Grad), Name von links, Name von rechts, Farbe des Pfeils]. Ein Winkel
+// genau auf einer Grenze zählt zum Abschnitt weiter vorn (dem ungünstigeren).
+// Farben: "gegen" (rot), "seite" (orange, schräg von vorn und von der Seite),
+// "ruecken" (grün, schräg von hinten und Rückenwind).
 const WIND_ABSCHNITTE = [
-  [22.5, "Gegenwind", "Gegenwind"],
-  [67.5, "schräg von vorn links", "schräg von vorn rechts"],
-  [112.5, "von links", "von rechts"],
-  [157.5, "schräg von hinten links", "schräg von hinten rechts"],
-  [180, "Rückenwind", "Rückenwind"]
+  [22.5, "Gegenwind", "Gegenwind", "gegen"],
+  [67.5, "von schräg vorn links", "von schräg vorn rechts", "seite"],
+  [112.5, "von links", "von rechts", "seite"],
+  [157.5, "von schräg hinten links", "von schräg hinten rechts", "ruecken"],
+  [180, "Rückenwind", "Rückenwind", "ruecken"]
 ];
 // Winkel auf 1/1000 Grad gerundet (damit die Grenzen trotz Rechenungenauigkeit
 // eindeutig sind), 0 ≤ x < 360
@@ -655,21 +657,32 @@ function windStaerke(kmh) {
   const gerundet = Math.round(kmh);
   return { kmh: gerundet, windstill: gerundet === 0, schwach: gerundet > 0 && gerundet < WIND_SCHWACH };
 }
-// Abschnitt zum Winkel zwischen Windrichtung (aus der er weht) und Fahrtrichtung;
+// Winkel zwischen Windrichtung (aus der er weht) und Fahrtrichtung, −180 < d ≤ 180;
 // positiv = von rechts
-function windAbschnitt(winkel) {
-  let d = winkelRunden(winkel);
-  if (d > 180) d -= 360;
-  const [, links, rechts] = WIND_ABSCHNITTE.find(([grenze]) => Math.abs(d) <= grenze);
-  return d > 0 ? rechts : links;
+function windWinkel(winkel) {
+  const d = winkelRunden(winkel);
+  return d > 180 ? d - 360 : d;
 }
+// Abschnitt zum Winkel: Name und Farbe des Pfeils
+function windAbschnittVon(winkel) {
+  const d = windWinkel(winkel);
+  const [, links, rechts, farbe] = WIND_ABSCHNITTE.find(([grenze]) => Math.abs(d) <= grenze);
+  return { name: d > 0 ? rechts : links, farbe };
+}
+function windAbschnitt(winkel) { return windAbschnittVon(winkel).name; }
 // Wind relativ zu einer Fahrtrichtung "kurs": "Gegenwind 14 km/h", "von links
-// 4 km/h (schwach)", "windstill"; null ohne Werte
+// 4 km/h, schwach", "windstill" (auch die Beschriftung des Pfeils für VoiceOver).
+// "drehung": Richtung des Pfeils in Grad im Uhrzeigersinn, 0 = nach oben (der
+// Fahrer fährt nach oben; der Pfeil zeigt, wohin der Wind weht: Gegenwind nach
+// unten, Wind von rechts nach links, Rückenwind nach oben). null ohne Werte.
 function windRelativ(proben, kurs) {
   const m = windMittel(proben);
   if (!m) return null;
-  const s = windStaerke(m.kmh), abschnitt = s.windstill ? null : windAbschnitt(m.grad - kurs);
-  return Object.assign(s, { abschnitt, text: s.windstill ? "windstill" : abschnitt + " " + kmhText(m.kmh) + (s.schwach ? " (schwach)" : "") });
+  const s = windStaerke(m.kmh);
+  if (s.windstill) return Object.assign(s, { abschnitt: null, farbe: null, drehung: null, text: "windstill" });
+  const a = windAbschnittVon(m.grad - kurs);
+  const drehung = Math.round(((windWinkel(m.grad - kurs) + 180) % 360) * 10) / 10;
+  return Object.assign(s, { abschnitt: a.name, farbe: a.farbe, drehung, text: a.name + " " + kmhText(m.kmh) + (s.schwach ? ", schwach" : "") });
 }
 // Wind je Teilstrecke, die für den Wind zählt: mit ihrer eigenen Fahrtrichtung
 // und dem Wind an ihren beiden Enden. Die Rückfahrt in umgekehrter Richtung und

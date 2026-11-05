@@ -32,6 +32,10 @@
   --warnstufe-2: #f08c00;
   --warnstufe-3: #d32f2f;
   --warnstufe-4: #8e24aa;
+  /* Windpfeile je Teilstrecke: Gegenwind, von vorn/der Seite, von hinten (Kontrast mind. 3:1 zur Karte) */
+  --wind-gegen: #c62828;
+  --wind-seite: #b25e00;
+  --wind-ruecken: #16805c;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -59,6 +63,9 @@
     --warnstufe-2: #ff9f0a;
     --warnstufe-3: #ff5c5c;
     --warnstufe-4: #c77dff;
+    --wind-gegen: #ff6b6b;
+    --wind-seite: #ffb547;
+    --wind-ruecken: #34c38f;
   }
 }
 
@@ -220,10 +227,15 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .ampel.gelb, .slot.gelb { background: var(--ampel-gelb); }
 .ampel.rot, .slot.rot { background: var(--ampel-rot); }
 .ampelzeile { margin: 4px 0 2px; }
-/* Wind je Teilstrecke unter der Zeile 🧭, eingerückt: Name klein, darunter weiter eingerückt der Wind */
-.wind-teile { padding-left: 1.6em; }
-.wind-teil { margin-top: 2px; }
-.wind-teil .wind-text { padding-left: 1em; }
+/* Wind je Teilstrecke unter der Zeile 🧭 (nicht eingerückt): Name und dahinter
+   ein farbiger Pfeil; die Pfeile stehen untereinander hinter dem längsten Namen */
+.wind-teile { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: center; column-gap: 10px; row-gap: 2px; margin-top: 2px; }
+.wind-name { min-width: 0; overflow-wrap: anywhere; }
+.wind-pfeil { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.wind-pfeil.gegen { color: var(--wind-gegen); }
+.wind-pfeil.seite { color: var(--wind-seite); }
+.wind-pfeil.ruecken { color: var(--wind-ruecken); }
+.wind-pfeil.schwach { opacity: .5; }
 /* Nicht aktuelle oder vergangene Daten zurückgenommen */
 .veraltet .ampel, .veraltet .slot { opacity: .45; }
 .veraltet > :not(h3) { color: var(--text2); }
