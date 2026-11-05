@@ -238,7 +238,7 @@ function losfahrenZeit(zeit, vorlauf) {
   return (m < 0 ? "am Vortag " : "") + uhrzeitAus(m);
 }
 // Text zum Termin eines geplanten Auftrags (mit Uhrzeit und Vorlaufzeit, falls eingetragen):
-// "Termin am 06.11.2026 um 10:00 Uhr bei Biketreff, losfahren 09:30 (in 1 Tag)"
+// "Termin am 06.11.2026 um 10:00 Uhr bei Werkstatt Muster, losfahren 09:30 (in 1 Tag)"
 function terminText(termin, werkstatt, h, zeit = null, vorlauf = null) {
   const t = tageZwischen(h, termin);
   return "Termin am " + datumText(termin) + (zeit ? " um " + zeit + " Uhr" : "") + (werkstatt ? " bei " + werkstatt : "") +

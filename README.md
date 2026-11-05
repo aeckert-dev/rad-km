@@ -747,9 +747,9 @@ an die Instandhaltung: Auftrag – Vorgang – Meldung).
   - **Vorlaufzeit** (seit 5c, optional): Minuten für die Anfahrt (1–240, z. B.
     30), nur bei einem Termin mit Uhrzeit; leer = keine. Darunter steht gleich,
     wann du losfahren musst. Angezeigt wird sie in Karte, Übersicht und
-    Kalenderfenster, z. B. „Termin am 06.11.2026 um 10:00 Uhr bei Biketreff,
-    losfahren 09:30 (in 1 Tag)“. Beim Ausschalten von „Mit Uhrzeit“ entfällt
-    sie.
+    Kalenderfenster, z. B. „Termin am 06.11.2026 um 10:00 Uhr bei Werkstatt
+    Muster, losfahren 09:30 (in 1 Tag)“. Beim Ausschalten von „Mit Uhrzeit“
+    entfällt sie.
   - **In Kalender übernehmen:**
     - In der **Karte** im Reiter Wartung steht bei jedem Termin (mit oder ohne
       Uhrzeit) **„📅 In Kalender übernehmen“**; ein Tipper öffnet direkt die
