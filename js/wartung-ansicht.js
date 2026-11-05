@@ -17,7 +17,7 @@ function auftragFestlegen(key) {
   // Eine Auftragsart mit Fälligkeit hat höchstens einen geplanten Auftrag
   const geplant = hatFaelligkeit(art) && daten.auftraege.find(a => a.status === "geplant" && a.wartungsartId === artId);
   if (geplant) return geplant;
-  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, terminZeit: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
+  const a = { id: neueId(), wartungsartId: artId, status: "geplant", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false,
     notiz: "", positionen: [], ausgeschlossen: [] };
   daten.auftraege.push(a);
   return a;
@@ -650,7 +650,7 @@ function abschlussSpeichern() {
     if (p.art === "aufgabe") pos.wartungsartId = p.wartungsartId; else pos.mangelId = p.mangelId;
     return pos;
   }).concat(weitere.map(id => ({ id: neueId(), art: "mangel", mangelId: id, status: "erledigt", notiz: "" })));
-  const satz = { status: "erledigt", termin: null, terminZeit: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
+  const satz = { status: "erledigt", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: wert("p-werkstatt").trim(), datum, kmStand, kmManuell: manuell,
     notiz: wert("p-notiz").trim(), positionen, ausgeschlossen: [] };
   const key = formAuftrag.key, artId = formAuftrag.artId;
 

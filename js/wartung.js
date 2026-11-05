@@ -268,7 +268,7 @@ function werkstattLage(h = heute()) {
     if (!hatFaelligkeit(art) || offene.some(o => o.art.id === art.id)) return;
     const regel = auftragsartStatus(art, h);
     if (regel.erledigt) return;
-    offene.push(offenerAuftrag({ id: null, wartungsartId: art.id, status: "geplant", termin: null, terminZeit: null, werkstatt: "", datum: null,
+    offene.push(offenerAuftrag({ id: null, wartungsartId: art.id, status: "geplant", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: "", datum: null,
       kmStand: null, kmManuell: false, notiz: "", positionen: [], ausgeschlossen: [] }, art, true, h, regel));
   });
   // Reihenfolge: überfällig, mit Datum, ohne Datum (km ohne Schätzung), ohne Fälligkeit

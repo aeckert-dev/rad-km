@@ -18,7 +18,7 @@ const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 const APP_VERSION = "5b";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 9;
+const DATEN_VERSION = 10;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;
@@ -42,6 +42,8 @@ const BEREICH_SCHLUESSEL = BEREICHE.map(b => b[0]);
 const BEREICH_NAME = Object.fromEntries(BEREICHE);
 // Bei Regen gilt in diesen Bereichen das Zwiebelprinzip (eine Schicht weniger unter dem Regenzeug)
 const ZWIEBEL_BEREICHE = ["oberkoerper", "beine", "fuesse"];
+// Vorlaufzeit am Termin (Minuten für die Anfahrt): erlaubter Bereich
+const VORLAUF_MIN = 1, VORLAUF_MAX = 240;
 // Höchstens so viele Wegpunkte zwischen Wohn- und Arbeitsort
 const MAX_WEGPUNKTE = 3;
 
@@ -148,6 +150,8 @@ function koordinateSpeichern(x) { return Math.round(x * 10000) / 10000; }
 function koordinateSenden(x) { return Math.round(x * 1000) / 1000; }
 // Uhrzeit im Format "HH:MM"
 function istUhrzeit(t) { return typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t); }
+// Vorlaufzeit: ganze Minuten von VORLAUF_MIN bis VORLAUF_MAX
+function istVorlauf(n) { return Number.isInteger(n) && n >= VORLAUF_MIN && n <= VORLAUF_MAX; }
 function minutenAus(t) { return Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)); }
 function uhrzeitAus(minuten) {
   const m = ((minuten % 1440) + 1440) % 1440;

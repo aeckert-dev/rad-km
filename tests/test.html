@@ -76,8 +76,8 @@ const artV8 = (a, typ) => Object.assign({ fensterVon: null, fensterBis: null, gu
 // Die Umwandlung 7 → 8 ergänzt „Eigenleistung“ (Auftrag ohne Intervall)
 const EIGENLEISTUNG = { id: "eigenleistung", name: "Eigenleistung", typ: "auftrag", intervallMonate: null, intervallKm: null, fensterVon: null,
   fensterBis: null, gueltigAbJahr: null, einmalig: false, bauteil: null, zuordnung: null };
-// Auftrag ab Version 8 (ab Version 9 mit terminZeit); aus einem Protokolleintrag bzw. Termin bis Version 7 (Kennungen daraus abgeleitet)
-const auftragV8 = felder => Object.assign({ status: "erledigt", termin: null, terminZeit: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false, notiz: "",
+// Auftrag ab Version 8 (ab Version 9 mit terminZeit, ab Version 10 mit vorlauf und imKalender); aus einem Protokolleintrag bzw. Termin bis Version 7 (Kennungen daraus abgeleitet)
+const auftragV8 = felder => Object.assign({ status: "erledigt", termin: null, terminZeit: null, vorlauf: null, imKalender: null, werkstatt: "", datum: null, kmStand: null, kmManuell: false, notiz: "",
   positionen: [], ausgeschlossen: [] }, felder);
 const ausProtokoll = (p, positionen = []) => auftragV8({ id: p.id, wartungsartId: p.wartungsartId, datum: p.datum, werkstatt: p.werkstatt || "",
   kmStand: p.kmStand ?? null, kmManuell: p.kmManuell ?? (p.kmStand !== undefined && p.kmStand !== null), notiz: p.notiz || "", positionen });
@@ -199,7 +199,7 @@ async function start() {
     const mit = aend => JSON.stringify(Object.assign(kopie(v3), aend));
     const art = aend => [Object.assign({}, v3.wartungsarten[0], { einmalig: false }, aend)];
     const nurArt = aend => mit({ wartungsarten: art(aend), auftraege: [], maengel: [] });
-    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 10 })), "neueren App-Version");
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 11 })), "neueren App-Version");
     wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 11, fensterBis: 2 })), "Jahreswechsel");
     wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 3, fensterBis: null })), "beide");
     wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 })), "gueltigAbJahr");
@@ -736,7 +736,7 @@ async function start() {
     gleich("Andere JSON-Datei: keine Rad-km-Sicherung", [erg.status, erg.details], ["defekt", ["Die Versionsnummer („version“) fehlt oder ist ungültig."]]);
     erg = auswerten("\u0089PNG\r\n\u001a\n");
     gleich("Bild statt Sicherung: beschädigt bzw. keine Rad-km-Sicherung", erg.status, "defekt");
-    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 10 })));
+    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 11 })));
     gleich("Sicherung einer neueren App-Version wird erkannt", [erg.status, erg.details[0].includes("neueren App-Version")], ["defekt", true]);
     gleich("Datumsbereiche: zusammenhängende Tage, Monats- und Jahreswechsel, andere Jahre, Kürzung",
       [w.datumsBereiche(["2026-10-27", "2026-10-25", "2026-10-26"], HP), w.datumsBereiche(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], HP),
@@ -760,7 +760,7 @@ async function start() {
     abschnitt("14. Oberfläche");
     w.eval("wartungAnsicht = 'aktuell'; aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     const einst = w.document.getElementById("inhalt");
-    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion9"), einst.textContent);
+    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion10"), einst.textContent);
     wahr("Einstellungen: „Jetzt sichern“ auf der Hauptseite, Zeile zur Unterseite Datensicherung",
       einst.querySelector('[data-action="sichern"]') && einst.querySelector('[data-action="einstellungen-seite"][data-seite="sicherung"]'));
     w.eval("einstellungenSeite = 'sicherung'; zeichnen()");
@@ -1153,7 +1153,7 @@ async function start() {
     const v3Text = await (await fetch("daten-v3.json", { cache: "no-store" })).text();
     const v3d = JSON.parse(v3Text);
     const pruefeV3 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten (alle Aufträge, Eigenleistung ergänzt), Protokoll und Termine (als Aufträge) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v3d.fahrrad, v3d.vorlagen, [...v3d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG],
@@ -1876,7 +1876,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5b, Datenversion 9 (Release 5b)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5b", 9]);
+    gleich("App-Version 5b, Datenversion 10", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5b", 10]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -1889,7 +1889,7 @@ async function start() {
     // Erwartete Empfehlung einer Fahrt: Text, wie 4b ihn angezeigt hat (im Feld Oberkörper), und ob Regenkleidung galt
     const mitEmpfehlung = (f, text, regen) => f && Object.assign({}, f, { empfehlung: text === null ? null : OK(text), regenkleidung: regen });
     const pruefeV4 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v4d.fahrrad, v4d.vorlagen, [...v4d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v4d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -1947,7 +1947,7 @@ async function start() {
     const v5Text = await (await fetch("daten-v5.json", { cache: "no-store" })).text();
     const v5d = JSON.parse(v5Text);
     const pruefeV5 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v5d.fahrrad, v5d.vorlagen, [...v5d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v5d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -2007,7 +2007,7 @@ async function start() {
     const v6Text = await (await fetch("daten-v6.json", { cache: "no-store" })).text();
     const v6d = JSON.parse(v6Text);
     const pruefeV6 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
+      gleich(wo + ": version = 10", d.version, 10);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge (mit Wetter, Empfehlung und Rückmeldung), Wartung, Termine und Mängel erhalten; der Termin der Aufgabe Kette (20.11.) " +
         "kommt in einen geplanten Auftrag der Großen Inspektion (Zeitfenster Oktober–November)",
         [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.auftraege, d.maengel],
@@ -2031,7 +2031,7 @@ async function start() {
     pruefeV6(kopie(w6d.eval("daten")), "Beim Laden");
     gleich("Beim Laden: Version-6-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v6Text);
     const exp6 = w6d.exportInhalt("2026-10-31T19:00:00.000Z");
-    gleich("Umgewandelte Daten: Export als Version 9, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [9, kopie(w6d.eval("daten"))]);
+    gleich("Umgewandelte Daten: Export als Version 10, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [10, kopie(w6d.eval("daten"))]);
     const fr6 = "2026-10-23"; // Freitag, Fahrtag ohne Eintrag
     const fehltAm = minuten => w6d.fehlendeFahrtage(fr6, minuten).includes(fr6);
     const ausFr6 = [fehltAm(23 * 60 + 59), w6d.fehlendeFahrtage("2026-10-24", 0).includes(fr6)];
@@ -3279,7 +3279,7 @@ async function start() {
         positionen: [pos("pos-termin-reifen-hinten", "aufgabe", "reifen-hinten", "offen")] })
     ];
     const pruefeV7 = (d, wo) => {
-      gleich(wo + ": version = 9, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [9, false, false]);
+      gleich(wo + ": version = 10, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [10, false, false]);
       gleichInhalt(wo + ": Fahrrad, Einstellungen (Wetter mit Standardwerten), Vorlagen und Einträge unverändert", [d.fahrrad, d.vorlagen, d.eintraege, d.einstellungen.jahresziele],
         [v7d.fahrrad, v7d.vorlagen, v7d.eintraege, v7d.einstellungen.jahresziele]);
       gleich(wo + ": Einordnung: Zeitfenster, einmalig, „Inspektion“ oder „Reparatur“ im Namen → Auftrag, sonst Aufgabe (ohne Bauteil, Standard „nächste Inspektion“); Eigenleistung ergänzt",
@@ -3332,10 +3332,10 @@ async function start() {
     wV7.document.getElementById("a-bauteil").value = "Bremse vorn";
     wV7.document.getElementById("a-zuordnung").value = "grosse-inspektion";
     wV7.artSpeichern("bremse");
-    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 9 gespeichert",
+    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 10 gespeichert",
       [wV7.document.querySelector("#fensterinhalt h2").textContent, wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").bauteil,
         wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").zuordnung, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version],
-      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 9]);
+      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 10]);
     wV7.document.querySelector('#fensterinhalt [data-action="fenster-zu"]').click();
     gleich("„Später“: Fenster zu, Hinweis bleibt", [wV7.eval("fenster.open"), inhalt7().textContent.includes("Bitte Wartungsarten prüfen")], [false, true]);
     inhalt7().querySelector('[data-action="pruefung-oeffnen"]').click();
@@ -3345,12 +3345,12 @@ async function start() {
     wV7.frameElement.remove();
     const wV7b = await appLaden();
     wV7b.eval("aktiverTab = 'wartung'; zeichnen()");
-    gleich("Nach erneutem Laden (Daten schon Version 9): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
+    gleich("Nach erneutem Laden (Daten schon Version 10): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
     wV7b.sicherungAuswerten(v7Text, wV7b.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit einer Version-7-Datei merkt nichts vor und ändert nichts", localStorage.getItem(PRUEF), null);
     wV7b.frage = async () => true;
     await wV7b.importDateiGewaehlt(new wV7b.File([v7Text], "alt.json", { type: "application/json" }));
-    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [9, "ja"]);
+    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [10, "ja"]);
     wV7b.frameElement.remove();
     localStorage.removeItem(PRUEF);
 
@@ -3897,8 +3897,8 @@ async function start() {
     w.abschlussSpeichern();
     const nach56 = w.exportInhalt();
     const wieder56 = w.eval("datenEinlesen(" + JSON.stringify(nach56) + ")");
-    gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 9)",
-      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 9]);
+    gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 10)",
+      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 10]);
     gleich("„Sicherung prüfen“: frische Sicherung identisch", w.sicherungAuswerten(nach56, w.eval("daten"), H5).status, "identisch");
     const alt56 = w.sicherungAuswerten(sich56, w.eval("daten"), H5);
     gleich("„Sicherung prüfen“: Sicherung von vorher weicht ab (Auftrag geändert, Mangel geändert)", [alt56.status, alt56.titel, alt56.details],
@@ -4005,9 +4005,9 @@ async function start() {
     const v8Text = await (await fetch("daten-v8.json", { cache: "no-store" })).text();
     const v8d = JSON.parse(v8Text);
     const pruefeV8 = (d, wo) => {
-      gleich(wo + ": version = 9", d.version, 9);
-      gleichInhalt(wo + ": Aufträge vollständig erhalten, jeweils mit terminZeit = null (ganztägig)", d.auftraege,
-        v8d.auftraege.map(a => Object.assign({}, a, { terminZeit: null })));
+      gleich(wo + ": version = 10", d.version, 10);
+      gleichInhalt(wo + ": Aufträge vollständig erhalten, jeweils mit terminZeit = null (ganztägig), ohne Vorlauf und Kalenderstand", d.auftraege,
+        v8d.auftraege.map(a => Object.assign({}, a, { terminZeit: null, vorlauf: null, imKalender: null })));
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
         [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele],
         [v8d.fahrrad, v8d.vorlagen, v8d.eintraege, v8d.wartungsarten, v8d.maengel, v8d.einstellungen.fahrtage, v8d.einstellungen.jahresziele]);
@@ -4027,7 +4027,7 @@ async function start() {
     let erg8 = wV8.sicherungAuswerten(v8Text, wV8.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit der Version-8-Datei: identisch, Kurzinfo passt", [erg8.status, erg8.kurzinfoPasst], ["identisch", true]);
     const exp8 = wV8.exportInhalt();
-    gleich("Export als Version 9, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [9, kopie(wV8.eval("daten"))]);
+    gleich("Export als Version 10, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [10, kopie(wV8.eval("daten"))]);
     // Prüfung von terminZeit
     const basis9 = JSON.parse(exp8);
     const mitZeit = (id, aend) => JSON.stringify(Object.assign({}, basis9, { auftraege: basis9.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
@@ -4051,8 +4051,8 @@ async function start() {
     gleich("Gespeichert: Termin unverändert, terminZeit 09:30, Werkstatt und Notiz unverändert",
       [auftrag8("a-klein").termin, auftrag8("a-klein").terminZeit, auftrag8("a-klein").werkstatt, auftrag8("a-klein").notiz],
       ["2026-11-20", "09:30", "Rad & Co, Süd; Filiale", "Schlüssel abgeben\nRückruf erbeten"]);
-    gleich("… und im Speicher als Version 9", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
-      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [9, "09:30"]);
+    gleich("… und im Speicher als Version 10", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [10, "09:30"]);
     wV8.eval("aktiverTab = 'wartung'; zeichnen()");
     wahr("Reiter Wartung: „Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)“",
       wV8.document.getElementById("inhalt").textContent.includes("Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)"));
@@ -4324,6 +4324,55 @@ async function start() {
     gleich("Alle bisherigen Bedienelemente der Reiter weiter erreichbar (Reiter, Ansichten, Unterseiten)", bisher.filter(a => !gefunden.has(a)), []);
     gleich("Aufteilung und Wege verändern keine Daten", localStorage.getItem(TEST_SCHLUESSEL), textI);
     wI.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 62. Datenversion 10 (Release 5c): Vorlaufzeit und Kalenderstand am Auftrag
+    // -------------------------------------------------------------
+    abschnitt("62. Datenversion 10: Umwandlung 9 → 10 (tests/daten-v9.json), Vorlaufzeit und Kalenderstand prüfen");
+    const v9Text = await (await fetch("daten-v9.json", { cache: "no-store" })).text();
+    const v9d = JSON.parse(v9Text);
+    const pruefeV9 = (d, wo) => {
+      gleich(wo + ": version = 10", d.version, 10);
+      gleichInhalt(wo + ": Aufträge vollständig erhalten (auch die Uhrzeit 09:30), jeweils mit vorlauf = null und imKalender = null", d.auftraege,
+        v9d.auftraege.map(a => Object.assign({}, a, { vorlauf: null, imKalender: null })));
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
+        [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele],
+        [v9d.fahrrad, v9d.vorlagen, v9d.eintraege, v9d.wartungsarten, v9d.maengel, v9d.einstellungen.fahrtage, v9d.einstellungen.jahresziele]);
+    };
+    pruefeV9(kopie(w.datenEinlesen(v9Text)), "Beim Import");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wV9 = await appLaden();
+    wV9.heute = () => "2026-11-05";
+    gleich("Beim Laden: kein Ladefehler", wV9.eval("ladeFehler"), null);
+    pruefeV9(kopie(wV9.eval("daten")), "Beim Laden");
+    gleich("Beim Laden: Version-9-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    const erg9 = wV9.sicherungAuswerten(v9Text, wV9.eval("daten"), "2026-11-05");
+    gleich("„Sicherung prüfen“ mit der Version-9-Datei: identisch, Kurzinfo passt", [erg9.status, erg9.kurzinfoPasst], ["identisch", true]);
+    const exp9 = wV9.exportInhalt();
+    gleich("Export als Version 10, Export → Import verlustfrei", [JSON.parse(exp9).version, kopie(wV9.datenEinlesen(exp9))], [10, kopie(wV9.eval("daten"))]);
+    const basis10 = JSON.parse(exp9);
+    const mit10 = (id, aend) => JSON.stringify(Object.assign({}, basis10, { auftraege: basis10.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
+    const auftrag10 = (text, id) => wV9.datenEinlesen(text).auftraege.find(a => a.id === id);
+    gleich("vorlauf 30 an einem Termin mit Uhrzeit wird angenommen; 1 und 240 sind die Grenzen",
+      [auftrag10(mit10("a-klein", { vorlauf: 30 }), "a-klein").vorlauf, auftrag10(mit10("a-klein", { vorlauf: 1 }), "a-klein").vorlauf,
+        auftrag10(mit10("a-klein", { vorlauf: 240 }), "a-klein").vorlauf], [30, 1, 240]);
+    gleich("vorlauf fehlt: gilt als null", auftrag10(mit10("a-klein", { vorlauf: undefined }), "a-klein").vorlauf, null);
+    [[0, "0"], [241, "241"], [12.5, "12,5"], ["30", "als Text"], [-5, "negativ"]].forEach(([v, t]) =>
+      wirft("vorlauf " + t + " wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { vorlauf: v })), "vorlauf muss eine ganze Zahl von 1 bis 240"));
+    wirft("vorlauf an einem Termin ohne Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-rep", { vorlauf: 30 })), "nur zusammen mit einer Uhrzeit");
+    wirft("vorlauf an einem erledigten Auftrag wird abgelehnt", () => wV9.datenEinlesen(mit10("a-erst", { vorlauf: 30 })), "nur zusammen mit einer Uhrzeit");
+    const ik = { termin: "2026-11-13", terminZeit: "09:00", vorlauf: 20 };
+    gleich("imKalender mit Datum, Uhrzeit und Vorlauf wird angenommen", auftrag10(mit10("a-klein", { imKalender: ik }), "a-klein").imKalender, ik);
+    gleich("imKalender ganztägig (fehlende Uhrzeit und fehlender Vorlauf gelten als null)",
+      auftrag10(mit10("a-rep", { imKalender: { termin: "2026-12-01" } }), "a-rep").imKalender, { termin: "2026-12-01", terminZeit: null, vorlauf: null });
+    gleich("imKalender an einem geplanten Auftrag ohne Termin (Termin entfernt, Eintrag im Kalender noch zu löschen) wird angenommen",
+      auftrag10(mit10("a-gross", { imKalender: { termin: "2026-11-27", terminZeit: null, vorlauf: null } }), "a-gross").imKalender.termin, "2026-11-27");
+    wirft("imKalender an einem erledigten Auftrag wird abgelehnt", () => wV9.datenEinlesen(mit10("a-erst", { imKalender: ik })), "bei erledigten null");
+    wirft("imKalender als Text wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: "2026-11-13" })), "imKalender muss");
+    wirft("imKalender mit ungültigem Datum wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-02-30" } })), "imKalender.termin");
+    wirft("imKalender mit ungültiger Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-11-13", terminZeit: "9:00" } })), "imKalender.terminZeit");
+    wirft("imKalender mit Vorlauf ohne Uhrzeit wird abgelehnt", () => wV9.datenEinlesen(mit10("a-klein", { imKalender: { termin: "2026-11-13", vorlauf: 30 } })), "imKalender.vorlauf");
+    wV9.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
@@ -4343,7 +4392,7 @@ async function start() {
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV1(d, v1) {
-  gleich("version = 9", d.version, 9);
+  gleich("version = 10", d.version, 10);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
   gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele; Wetter ohne Orte)", d.einstellungen, stdEinstellungen());
@@ -4371,7 +4420,7 @@ function pruefeUmwandlungV1(d, v1) {
 
 // Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV2(d, v2, wo) {
-  gleich(wo + ": version = 9", d.version, 9);
+  gleich(wo + ": version = 10", d.version, 10);
   gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
   gleich(wo + ": Einstellungen mit Standardwerten ergänzt (auch Wetter)", d.einstellungen, stdEinstellungen());
   gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
