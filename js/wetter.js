@@ -23,6 +23,8 @@ const RUECKBLICK_AB = "2022-01-01";
 const RUECKBLICK_TAGE = 31;
 const WERTE_15_MIN = ["temperature_2m", "apparent_temperature", "precipitation", "weather_code", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"];
 const WERTE_STUENDLICH = ["precipitation_probability", "soil_temperature_0cm"];
+// Je Tag (nur Vorhersage): Sonnenauf- und -untergang
+const WERTE_TAEGLICH = ["sunrise", "sunset"];
 const DWD_FELDER = ["IDENTIFIER", "STATUS", "MSGTYPE", "CATEGORY", "EVENT", "EC_GROUP", "SEVERITY", "ONSET", "EXPIRES", "HEADLINE", "DESCRIPTION", "NAME"];
 const MINUTE_MS = 60 * 1000, VIERTELSTUNDE_MS = 15 * MINUTE_MS, STUNDE_MS = 60 * MINUTE_MS;
 // Neu laden, wenn Vorhersage bzw. Warnungen älter sind; noch ältere gelten als nicht aktuell
@@ -93,7 +95,7 @@ function wetterParameter(orte) {
   return "?latitude=" + orte.map(o => koordinate(o.lat)).join(",") + "&longitude=" + orte.map(o => koordinate(o.lon)).join(",") +
     "&models=icon_seamless&minutely_15=" + WERTE_15_MIN.join(",") + "&hourly=" + WERTE_STUENDLICH.join(",") + "&timeformat=unixtime&timezone=auto";
 }
-function vorhersageUrl(orte) { return OPEN_METEO_URL + wetterParameter(orte) + "&past_days=1&forecast_days=8"; }
+function vorhersageUrl(orte) { return OPEN_METEO_URL + wetterParameter(orte) + "&daily=" + WERTE_TAEGLICH.join(",") + "&past_days=1&forecast_days=8"; }
 // Rückblick: archivierte Vorhersagen (die ersten Stunden jedes Laufs), gleiches Format, Tage "von" bis "bis"
 function rueckblickUrl(orte, von, bis) { return RUECKBLICK_URL + wetterParameter(orte) + "&start_date=" + von + "&end_date=" + bis; }
 // GeoServer des DWD (WFS): Objekte der Ebene, deren Fläche den Punkt enthält (Reihenfolge lat lon)
@@ -136,7 +138,9 @@ async function jsonAbrufen(url) {
 
 // ---------- Antworten der Dienste lesen ----------
 
-// Open-Meteo → je Ort { m15: {zeit, temperatur, …}, stunde: {zeit, wahrscheinlichkeit, boden} }
+// Open-Meteo → je Ort { m15: {zeit, temperatur, …}, stunde: {zeit, wahrscheinlichkeit, boden},
+// sonne: {tag, aufgang, untergang} } ("sonne" null, wenn die Antwort keine Tageswerte hat,
+// z. B. im Rückblick)
 function vorhersageLesen(antwort, anzahl) {
   const liste = Array.isArray(antwort) ? antwort : [antwort];
   if (liste.length !== anzahl) throw new Error("unerwartete Antwort");
@@ -150,9 +154,18 @@ function vorhersageLesen(antwort, anzahl) {
         niederschlag: spalte(m, "precipitation"), code: spalte(m, "weather_code"), wind: spalte(m, "wind_speed_10m"),
         richtung: spalte(m, "wind_direction_10m"), boeen: spalte(m, "wind_gusts_10m")
       },
-      stunde: { zeit: s.time.map(t => t * 1000), wahrscheinlichkeit: spalte(s, "precipitation_probability"), boden: spalte(s, "soil_temperature_0cm") }
+      stunde: { zeit: s.time.map(t => t * 1000), wahrscheinlichkeit: spalte(s, "precipitation_probability"), boden: spalte(s, "soil_temperature_0cm") },
+      sonne: sonneLesen(o.daily)
     };
   });
+}
+
+// Tageswerte: Datum (Ortszeit; "time" ist Mitternacht, 3 Stunden später gerechnet,
+// damit eine Zeitumstellung das Datum nicht verschiebt), Auf- und Untergang (ms)
+function sonneLesen(t) {
+  if (!t || !Array.isArray(t.time) || !Array.isArray(t.sunrise) || !Array.isArray(t.sunset)) return null;
+  const ms = x => typeof x === "number" && Number.isFinite(x) ? x * 1000 : null;
+  return { tag: t.time.map(x => isoAusDate(new Date(x * 1000 + 3 * STUNDE_MS))), aufgang: t.sunrise.map(ms), untergang: t.sunset.map(ms) };
 }
 
 // Art einer Warnung nach Ereignis ("STARKES GEWITTER") und Gruppe ("THUNDERSTORM;WIND")
@@ -707,6 +720,35 @@ function windAllgemein(proben, boeen) {
     text: (s.windstill ? "Windstill" : "Wind " + kmhText(m.kmh) + " aus " + richtung + (s.schwach ? " (schwach)" : "")) + ", Böen bis " + kmhText(boeen) });
 }
 
+// ---------- Sonnenauf- und -untergang ----------
+
+// Sonne an einem Ort am Tag "datum": { aufgang, untergang } (ms) oder null
+// (alter Zwischenspeicher ohne Tageswerte, Tag nicht in der Vorhersage)
+function sonneAm(ortDaten, datum) {
+  const s = ortDaten && ortDaten.sonne;
+  const i = s ? s.tag.indexOf(datum) : -1;
+  if (i < 0 || s.aufgang[i] === null || s.untergang[i] === null) return null;
+  return { aufgang: s.aufgang[i], untergang: s.untergang[i] };
+}
+// Liegt die Fahrt von "von" bis "bis" (ms) im Dunkeln? " · Fahrt im Dunkeln",
+// " · bis 07:21 dunkel", " · ab 16:52 dunkel" bzw. "" (ganz im Hellen)
+function dunkelText(s, von, bis) {
+  if (bis <= s.aufgang || von >= s.untergang) return " · Fahrt im Dunkeln";
+  const teile = [];
+  if (von < s.aufgang) teile.push("bis " + uhrzeit(s.aufgang) + " dunkel");
+  if (bis > s.untergang) teile.push("ab " + uhrzeit(s.untergang) + " dunkel");
+  return teile.length ? " · " + teile.join(", ") : "";
+}
+// Zeile zur Sonne einer Fahrt: Hinfahrt mit Sonnenaufgang, Rückfahrt mit
+// Sonnenuntergang, "Jetzt" mit dem nächsten Ereignis des Tages, jeweils mit
+// Hinweis, wenn die Fahrt ganz oder teilweise im Dunkeln liegt. null ohne Daten.
+function sonnenZeile(art, s, von, bis, jetzt = null) {
+  if (!s) return null;
+  if (art === "jetzt" && jetzt !== null && jetzt >= s.untergang) return "🌙 Dunkel seit " + uhrzeit(s.untergang) + " (Sonnenuntergang)";
+  const aufgang = art === "hinfahrt" || (art === "jetzt" && jetzt !== null && jetzt < s.aufgang);
+  return (aufgang ? "🌅 Sonnenaufgang " + uhrzeit(s.aufgang) : "🌇 Sonnenuntergang " + uhrzeit(s.untergang)) + dunkelText(s, von, bis);
+}
+
 // ---------- Bestes Abfahrtsfenster ----------
 
 function abfahrtKosten(b) {
@@ -803,11 +845,13 @@ function tagesAnsicht(orteDaten, warnungen, datum, h) {
   const von = zeitpunktAm(datum, 0), bis = zeitpunktAm(plusTage(datum, 1), 0);
   return { datum, titel: tagTitel(datum, h), werte: orteDaten ? tagesWerte(orteDaten, von, bis) : null, warnungen: warnungen.filter(wn => warnungImZeitraum(wn, von, bis)) };
 }
-function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w) {
+// "sonnenOrt": Nummer des Orts für Sonnenauf- bzw. -untergang (Hinfahrt Wohnort, Rückfahrt Arbeitsort)
+function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w, sonnenOrt = 0) {
   const f = w[art];
   const von = zeitpunktAm(tag.datum, minutenAus(f.von)), bis = zeitpunktAm(tag.datum, minutenAus(f.bis));
-  const a = { art, name, fahrt: f, von, bis, vorbei: tag.heute && jetzt >= bis, bewertung: null, kleidung: null, wind: null, abfahrt: null };
+  const a = { art, name, fahrt: f, von, bis, vorbei: tag.heute && jetzt >= bis, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null };
   if (!orteDaten) return a;
+  a.sonne = sonnenZeile(art, sonneAm(orteDaten[sonnenOrt], tag.datum), von, bis);
   a.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
   if (!a.bewertung) return a;
   a.kleidung = kleidungFuer(a.bewertung.werte.gefuehlt, a.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
@@ -855,9 +899,12 @@ function wetterAnsicht(jetzt = Date.now()) {
   // Wind je Teilstrecke; ohne Strecke (z. B. nur Wohnort) nur mit Himmelsrichtung
   const strecken = teilstrecken(w);
   const mitStrecke = strecken.some(t => t.laenge > 0) ? strecken : null;
+  // Sonne: Hinfahrt am Wohnort, Rückfahrt am Arbeitsort (ohne den jeweiligen Ort der erste bzw. letzte)
+  const ortNr = rolle => Math.max(0, orte.findIndex(x => x.rolle === rolle));
+  const arbeit = orte.findIndex(x => x.rolle === "arbeitsort");
   a.fahrten = [
-    fahrtAnsicht("hinfahrt", "Hinfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w),
-    fahrtAnsicht("rueckfahrt", "Rückfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w)
+    fahrtAnsicht("hinfahrt", "Hinfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w, ortNr("wohnort")),
+    fahrtAnsicht("rueckfahrt", "Rückfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w, arbeit < 0 ? orte.length - 1 : arbeit)
   ];
   const [hin, rueck] = a.fahrten;
   a.kleidungsHinweis = !hin.vorbei ? kleidungsHinweis(hin.kleidung, rueck.kleidung) : null;
@@ -913,8 +960,9 @@ function jetztAnsicht(a, w, v, wa, jetzt, h) {
   const d = new Date(jetzt), dauer = w.hinfahrt.dauer;
   const vonMin = d.getHours() * 60 + d.getMinutes() - d.getMinutes() % 15;
   const von = zeitpunktAm(h, vonMin), bis = zeitpunktAm(h, vonMin + dauer);
-  const f = { art: "jetzt", name: "Jetzt", fahrt: { von: uhrzeit(von), bis: uhrzeit(bis), dauer }, von, bis, vorbei: false, bewertung: null, kleidung: null, wind: null, abfahrt: null };
+  const f = { art: "jetzt", name: "Jetzt", fahrt: { von: uhrzeit(von), bis: uhrzeit(bis), dauer }, von, bis, vorbei: false, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null };
   if (orteDaten) {
+    f.sonne = sonnenZeile("jetzt", sonneAm(orteDaten[0], h), von, bis, jetzt);
     f.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
     if (f.bewertung) {
       f.kleidung = kleidungFuer(f.bewertung.werte.gefuehlt, f.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);

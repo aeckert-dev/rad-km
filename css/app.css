@@ -227,6 +227,8 @@ label.fahrtag { margin: 0; display: flex; flex-direction: column; align-items: c
 .ampel.gelb, .slot.gelb { background: var(--ampel-gelb); }
 .ampel.rot, .slot.rot { background: var(--ampel-rot); }
 .ampelzeile { margin: 4px 0 2px; }
+/* Sonnenauf- bzw. -untergang einer Fahrt mit Hinweis auf Dunkelheit */
+.sonne { margin-top: 6px; }
 /* Wind je Teilstrecke unter der Zeile 🧭 (nicht eingerückt): Name und dahinter
    ein farbiger Pfeil; die Pfeile stehen untereinander hinter dem längsten Namen */
 .wind-teile { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: center; column-gap: 10px; row-gap: 2px; margin-top: 2px; }

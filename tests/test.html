@@ -1100,8 +1100,20 @@ async function start() {
           wind_speed_10m: alle(m, 5), wind_direction_10m: alle(m, 180), wind_gusts_10m: alle(m, 15) });
         Object.assign(s, { precipitation_probability: alle(s, 0), soil_temperature_0cm: alle(s, 8) });
       });
+      return sonneLokal(om);
+    };
+    // Sonnenauf- und -untergang (Release 5c) in der Ortszeit des Testgeräts, damit die Tests in jeder Zeitzone
+    // laufen: ab Sa 24.10. täglich 2 min später auf (07:18) bzw. früher unter (16:56), am Arbeitsort 1 min früher
+    const sonneLokal = om => {
+      om.forEach((o, nr) => {
+        const tage = o.daily.time.map((t, i) => plusTageT("2026-10-24", i));
+        o.daily = { time: tage.map(d => zeit(d, "00:00") / 1000),
+          sunrise: tage.map((d, i) => zeit(d, "07:18") / 1000 + (2 * i - nr) * 60), sunset: tage.map((d, i) => zeit(d, "16:56") / 1000 - (2 * i + nr) * 60) };
+      });
       return om;
     };
+    const plusTageT = (iso, n) => { const [j, m, t] = iso.split("-").map(Number); const d = new Date(j, m - 1, t + n, 12);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
     // Setzt einen Wert für den Zeitraum [von, bis) Ortszeit: Momentwerte zu den Zeitpunkten darin, Mengen
     // (Niederschlag, Böen, Regenwahrscheinlichkeit gelten für den Abschnitt davor) für die Abschnitte darin.
     // ort: 0 = Wohnort, 1 = Arbeitsort, null = beide
@@ -1832,7 +1844,7 @@ async function start() {
     seite = ohneTags(ablageR.innerHTML);
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
-        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
+        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
         "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
@@ -2618,7 +2630,7 @@ async function start() {
     ablageB.innerHTML = w.bildWetter(ABEND);
     rk = rueckKarte();
     wahr("Gelb wegen Böen: Böen als Grund in der Ampelzeile und in der Zeile zum Wind, nicht bei den Werten",
-      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
+      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
 
@@ -2921,7 +2933,7 @@ async function start() {
         "Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00"]);
     seite = seiteBei(zeit(SA, "10:07"));
     wahr("Reiter: Karte „Jetzt“ mit Ampel, Werten (Temperatur, gefühlt, Regen), Kleidung, Wind mit Böen und Abfahrtsfenster",
-      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
+      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 🌇 Sonnenuntergang 16:42 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
         "Hände Übergangshandschuhe ☔ Oberkörper T-Shirt, warmer Pullover, Regenjacke ☔ Beine Hose, Regenhose ☔ Füße Socken, Gamaschen ☔") &&
         seite.includes("🧭 Wind 20 km/h aus West, Böen bis 15 km/h 10:00 11:00 12:00 🕒 Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00") &&
         seite.includes("Amtliche Warnungen") && seite.includes("Stand: Vorhersage") && seite.includes("Aktualisieren") && seite.includes("Vorhersage: Open-Meteo.com"), seite);
@@ -4656,6 +4668,73 @@ async function start() {
     const pruefKontrastP = v => ["wind-gegen", "wind-seite", "wind-ruecken"].map(n => v[n] ? kontrastP(v[n], v.karte) >= 3 : "fehlt");
     gleich("Kontrast der Pfeilfarben zur Karte mind. 3:1 (hellP und dunkelP)", [pruefKontrastP(hellP), pruefKontrastP(dunkelP)], [[true, true, true], [true, true, true]]);
     wP.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 66. Sonnenauf- und -untergang (N1)
+    // -------------------------------------------------------------
+    abschnitt("66. Sonnenauf- und -untergang (N1): Hinfahrt am Wohnort, Rückfahrt am Arbeitsort, „Jetzt“, Dunkelheit, Zwischenspeicher");
+    const orteN = [MUSTERDORF, BEISPIELSTADT];
+    gleich("Abruf der Vorhersage mit daily=sunrise,sunset, der Rückblick ohne", [w.vorhersageUrl(orteN).includes("&daily=sunrise,sunset&"),
+      w.rueckblickUrl(orteN, "2026-10-01", "2026-10-02").includes("daily")], [true, false]);
+    const gelesenN = w.vorhersageLesen(kopie(fx["wetter-open-meteo"]), 2);
+    const rohN = fx["wetter-open-meteo"];
+    gleich("Tageswerte gelesen: Auf- und Untergang als Zeitpunkte (ms) je Ort", [gelesenN[0].sonne.aufgang[3], gelesenN[0].sonne.untergang[3], gelesenN[1].sonne.untergang[3]],
+      [rohN[0].daily.sunrise[3] * 1000, rohN[0].daily.sunset[3] * 1000, rohN[1].daily.sunset[3] * 1000]);
+    if (Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Berlin") {
+      gleich("Tageswerte (Europe/Berlin): Datum in Ortszeit, auch über die Zeitumstellung am 25.10.; 27.10. 07:24 und 16:50 bzw. 16:49",
+        [gelesenN[0].sonne.tag.slice(0, 4), w.uhrzeit(gelesenN[0].sonne.aufgang[3]), w.uhrzeit(gelesenN[0].sonne.untergang[3]), w.uhrzeit(gelesenN[1].sonne.untergang[3])],
+        [["2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27"], "07:24", "16:50", "16:49"]);
+    }
+    const ohneDaily = kopie(fx["wetter-open-meteo"]).map(o => { delete o.daily; return o; });
+    gleich("Antwort ohne Tageswerte: sonne = null", w.vorhersageLesen(ohneDaily, 2).map(o => o.sonne), [null, null]);
+    const fahrtN = (von, bis) => Object.assign(kopie(STD_WETTER.hinfahrt), { von, bis, abfahrt: von, dauer: 60 });
+    const sonneBei = async (hin, rueck) => {
+      wetterDaten({ hinfahrt: fahrtN(...hin), rueckfahrt: fahrtN(...rueck) });
+      return (await laden(ruhig())).fahrten.map(f => f.sonne);
+    };
+    gleich("Standard (Di 27.10., 06:00–07:00 und 16:00–17:00): Sonnenaufgang am Wohnort 07:24, Fahrt im Dunkeln; Sonnenuntergang am Arbeitsort 16:49, ab 16:49 dunkel",
+      await sonneBei(["06:00", "07:00"], ["16:00", "17:00"]), ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel"]);
+    gleich("Teilweise bzw. ganz im Hellen: Hinfahrt 07:00–08:00 „bis 07:24 dunkel“, Rückfahrt 15:00–16:00 ohne Hinweis",
+      await sonneBei(["07:00", "08:00"], ["15:00", "16:00"]), ["🌅 Sonnenaufgang 07:24 · bis 07:24 dunkel", "🌇 Sonnenuntergang 16:49"]);
+    gleich("Hinfahrt 08:00–09:00 ohne Hinweis; Rückfahrt 17:00–18:00 ganz im Dunkeln",
+      await sonneBei(["08:00", "09:00"], ["17:00", "18:00"]), ["🌅 Sonnenaufgang 07:24", "🌇 Sonnenuntergang 16:49 · Fahrt im Dunkeln"]);
+    gleich("Ungewöhnliche Zeiten: Hinfahrt 18:00–19:00 im Dunkeln, Rückfahrt 06:30–07:30 bis 07:23 dunkel (Arbeitsort)",
+      await sonneBei(["18:00", "19:00"], ["06:30", "07:30"]), ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · bis 07:23 dunkel"]);
+    gleich("Grenzen: Ende genau beim Sonnenaufgang = im Dunkeln, Beginn genau beim Sonnenuntergang = im Dunkeln",
+      await sonneBei(["06:24", "07:24"], ["16:49", "17:49"]), ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · Fahrt im Dunkeln"]);
+    wetterDaten({ wegpunkte: [{ name: "Ecke", lat: 51, lon: 10.2 }], windTeilstrecken: [true, true] });
+    let ansN = await laden(drei(ruhig()));
+    gleich("Mit Wegpunkt: weiter Wohnort (07:24) und Arbeitsort (16:49)", ansN.fahrten.map(f => f.sonne),
+      ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel"]);
+    wetterDaten();
+    ansN = await laden(ruhig());
+    const karteN = w.document.createElement("div");
+    karteN.innerHTML = w.bildWetter(ABEND);
+    gleich("Fahrt-Karten: eigene Zeile unter den Werten", [...karteN.querySelectorAll(".karte .sonne")].map(z => [z.textContent, z.previousElementSibling.className]),
+      [["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "klein"], ["🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel", "klein"]]);
+    // Offline aus dem Zwischenspeicher; alter Zwischenspeicher ohne Sonne
+    wetterLeeren();
+    w.wetterSpeicherLaden();
+    netz();
+    gleich("Ohne Netz aus dem Zwischenspeicher: Sonnenzeiten weiter da", w.wetterAnsicht(ABEND).fahrten.map(f => f.sonne),
+      ["🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln", "🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel"]);
+    const zwischenN = JSON.parse(localStorage.getItem(TEST_WETTER_SCHLUESSEL));
+    zwischenN.vorhersage.orte.forEach(o => { delete o.sonne; });
+    localStorage.setItem(TEST_WETTER_SCHLUESSEL, JSON.stringify(zwischenN));
+    wetterLeeren();
+    w.wetterSpeicherLaden();
+    const altN = w.document.createElement("div");
+    altN.innerHTML = w.bildWetter(ABEND);
+    gleich("Zwischenspeicher aus 5b (ohne Sonne): keine Sonnenzeile, kein Fehler, sonst unverändert",
+      [w.wetterAnsicht(ABEND).fahrten.map(f => f.sonne), altN.querySelectorAll(".sonne").length, altN.querySelectorAll(".karte h3").length, altN.textContent.includes("nicht angezeigt")],
+      [[null, null], 0, 2, false]);
+    // „Jetzt“ (Sa 31.10., kein Fahrtag): das nächste Ereignis des Tages am Wohnort
+    wetterDaten();
+    const jetztSonne = async uhr => { const j = zeit(SA, uhr); await laden(ruhig(), undefined, j); return w.wetterAnsicht(j).jetzt.fahrt.sonne; };
+    gleich("„Jetzt“: vor Sonnenaufgang der Aufgang (06:00 im Dunkeln, 07:15 bis 07:32 dunkel), tagsüber der Untergang (10:00, 16:00 ab 16:42 dunkel), danach „Dunkel seit …“",
+      [await jetztSonne("06:00"), await jetztSonne("07:15"), await jetztSonne("10:07"), await jetztSonne("16:00"), await jetztSonne("18:00")],
+      ["🌅 Sonnenaufgang 07:32 · Fahrt im Dunkeln", "🌅 Sonnenaufgang 07:32 · bis 07:32 dunkel", "🌇 Sonnenuntergang 16:42", "🌇 Sonnenuntergang 16:42 · ab 16:42 dunkel",
+        "🌙 Dunkel seit 16:42 (Sonnenuntergang)"]);
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

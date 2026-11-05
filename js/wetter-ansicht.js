@@ -114,6 +114,7 @@ function fahrtKarte(f, alt) {
   html += '<div class="ampelzeile">' + ampelText(b) + '</div>';
   if (f.vorbei) return html + '</div>';
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
+    (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
     '<div style="margin-top:6px">👕 Kleidung <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' + kleidungBereicheHtml(f.kleidung) +
     (f.wind ? windHtml(f.wind) : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
