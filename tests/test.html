@@ -4802,6 +4802,46 @@ async function start() {
     wB.scrollTo = echtScrollB;
     gleich("Reiterleiste verändert keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
     wB.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 68. Mehr Platz durch Reiterleiste und Seitentitel (B11, Release 5d)
+    // -------------------------------------------------------------
+    abschnitt("68. Reiterleiste und Seitentitel (B11): Reiter 50 pt, Home-Zone teilweise frei, Titel 22 px, Toast über der Leiste");
+    localStorage.setItem(TEST_SCHLUESSEL, v9Text);
+    const wB11 = await appLaden();
+    Object.assign(wB11.frameElement.style, { width: "375px", height: "812px" });
+    const stB11 = el => wB11.getComputedStyle(el), navB11 = wB11.document.querySelector("nav"), knopfB11 = navB11.querySelector("button");
+    wB11.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    gleich("Reiter: 50 px hoch, Symbol 21 px, Beschriftung 11 px, Innenabstand oben und unten 4 px",
+      [Math.round(knopfB11.getBoundingClientRect().height), stB11(knopfB11.querySelector(".ico")).fontSize, stB11(knopfB11).fontSize, stB11(knopfB11).paddingTop, stB11(knopfB11).paddingBottom],
+      [50, "21px", "11px", "4px", "4px"]);
+    const wurzelB11 = [...wB11.document.styleSheets[0].cssRules].find(rg => rg.selectorText === ":root").style;
+    gleich("Variablen: --reiter-hoehe 50px, --home-abzug 14px, --home-frei aus safe-area-inset-bottom",
+      [wurzelB11.getPropertyValue("--reiter-hoehe").trim(), wurzelB11.getPropertyValue("--home-abzug").trim(), /env\(safe-area-inset-bottom\)/.test(wurzelB11.getPropertyValue("--home-frei"))],
+      ["50px", "14px", true]);
+    gleich("Ohne Home-Zone (safe-area 0, z. B. am Rechner): unten mindestens 8 px frei", stB11(navB11).paddingBottom, "8px");
+    // Die Formel mit 34 pt Home-Zone (iPhone 13 mini) nachrechnen: ein Probe-Element mit festem Wert statt env()
+    const probeB11 = wB11.document.createElement("div");
+    wB11.document.body.appendChild(probeB11);
+    const frei = abzug => { probeB11.style.cssText = (abzug ? "--home-abzug:" + abzug + ";" : "") + "padding-bottom: max(calc(34px - var(--home-abzug)), 8px)"; return stB11(probeB11).paddingBottom; };
+    gleich("34 pt Home-Zone: 20 pt frei; mit --home-abzug 8px: 26 pt", [frei(null), frei("8px")], ["20px", "26px"]);
+    probeB11.remove();
+    const titelB11 = wB11.document.getElementById("seitentitel");
+    gleich("Seitentitel 22 px, Zeilenhöhe 1,2, Abstand darunter 4 px", [stB11(titelB11).fontSize, stB11(titelB11).lineHeight, stB11(wB11.document.querySelector("header")).paddingBottom],
+      ["22px", "26.4px", "4px"]);
+    wB11.unterseiteZeigen("kleidung");
+    gleich("Auf Unterseiten derselbe Titel (22 px)", [titelB11.textContent, stB11(titelB11).fontSize], ["Kleidung", "22px"]);
+    // Platz für den Inhalt am iPhone 13 mini (812 pt; oben 50, unten 34 pt Sicherheitsabstand)
+    const kopfB11 = wB11.document.querySelector("header").getBoundingClientRect().height, leisteB11 = navB11.getBoundingClientRect().height;
+    const inhaltMini = 812 - (kopfB11 + 50) - (leisteB11 - 8 + 20);
+    wahr("iPhone 13 mini: Inhalt mindestens 650 pt hoch (vorher 610)", inhaltMini >= 650 && inhaltMini < 655, "Inhalt: " + inhaltMini);
+    gleich("Inhalt hier (ohne Sicherheitsabstände) bis direkt an die Leiste", Math.round(wB11.document.getElementById("inhalt").getBoundingClientRect().bottom), Math.round(navB11.getBoundingClientRect().top));
+    // Toast 16 px über der Leiste
+    wB11.meldung("Probe", { rueckgaengig: true });
+    const toastB11 = wB11.document.getElementById("toast").getBoundingClientRect();
+    gleich("Meldung unten: 16 px über der Reiterleiste", Math.round(navB11.getBoundingClientRect().top - toastB11.bottom), 16);
+    gleich("B11 verändert keine Daten", localStorage.getItem(TEST_SCHLUESSEL), v9Text);
+    wB11.frameElement.remove();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
