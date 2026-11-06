@@ -116,6 +116,7 @@ function fahrtKarte(f, alt) {
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
     (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
     '<div style="margin-top:6px">👕 Kleidung</div><div class="klein">' + gefuehltZeileHtml(f, b.werte.gefuehlt) + '</div>' + kleidungBereicheHtml(f.kleidung) +
+    fahrtHinweisHtml(f.kleidung) +
     (f.wind ? windHtml(f.wind) : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
   return html + '</div>';
@@ -610,12 +611,14 @@ function bereicheLesen(praefix) {
 // Regenzusatz hat eine eigene Unterseite („‹ Kleidung“) mit „Speichern“.
 function kleidungFormular() { unterseiteZeigen("kleidung"); }
 function kleidungSeite() {
-  const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten();
+  const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten(), seit = rueckmeldungenSeitAenderung();
+  const hinweise = k.stufen.map((st, i) => ({ i, h: kleidungHinweis(st.id, seit) })).filter(x => x.h);
   const frueher = Object.keys(aus).filter(id => !k.stufen.some(s => s.id === id)).reduce((x, id) => x + aus[id].anzahl, 0);
   const zeile = (aktion, i, titel, unten) => '<div class="zeile"><button type="button" class="inhalt" data-action="' + aktion + '" data-i="' + i + '">' +
     '<div class="text"><div>' + titel + '</div>' + unten.map(u => '<div class="klein umbrechen">' + u + '</div>').join("") + '</div>' +
     '<span class="klein" style="padding-right:16px">›</span></button></div>';
   return (
+    hinweise.map(x => kleidungHinweisHtml(x.h, x.i)).join("") +
     '<h3 style="margin-top:8px">Stufe wählen nach</h3>' +
     umschalterHtml("kleidung-grundlage", k.grundlage, [["fahrt", "gefühlt beim Fahren"], ["gefuehlt", "gefühlt (Open-Meteo)"]], "Stufe wählen nach") +
     '<div class="feldhinweis">„Beim Fahren“ rechnet Fahrtwind, Windrichtung und Windstärke ein (je Teilstrecke, die für den Wind zählt). Es liegt meist 1–3 °C unter ' +
@@ -628,7 +631,7 @@ function kleidungSeite() {
     '), von warm nach kalt. ' +
     'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
     '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
-      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen: " + auswertungText(aus[s.id])])).join("") + '</div>' +
+      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen " + seitText(seit[s.id])])).join("") + '</div>' +
     (frueher ? '<p class="klein">' + (frueher === 1 ? "1 Rückmeldung" : frueher + " Rückmeldungen") + ' zu früheren Stufen (gibt es nicht mehr, werden nicht zugeordnet).</p>' : "") +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-stufe-neu">+ Stufe</button></div>' +
     '<h3 style="margin-top:16px">Regenzusatz</h3><p class="klein" style="margin-top:0">Ab dieser Regenwahrscheinlichkeit kommt das Regenzeug in seinem Bereich dazu. ' +
@@ -637,7 +640,12 @@ function kleidungSeite() {
     (k.regen.length ? '<div class="liste">' + k.regen.map((r, i) => zeile("kleidung-regen", i, "ab " + zahlFeld(r.ab) + " %", [esc(bereicheKurz(r.bereiche))])).join("") + '</div>'
       : '<div class="liste"><div class="leer">Kein Regenzusatz.</div></div>') +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-regen-neu">+ Regenzusatz</button></div>' +
-    '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>'
+    '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>' +
+    '<div class="liste" style="margin-top:16px">' + seitenZeile("kleidung-protokoll", "Änderungen",
+      k.protokoll.length ? (k.protokoll.length === 1 ? "1 Änderung" : k.protokoll.length + " Änderungen") + ", zuletzt am " +
+        datumText(isoAusDate(new Date(k.protokoll[k.protokoll.length - 1].zeitpunkt))) : "noch keine") + '</div>' +
+    '<p class="klein">Die App protokolliert jede Änderung an einer Stufe, am Regenzusatz und am Umschalter „Stufe wählen nach“. Die Rückmeldungen zählen je Stufe ab ihrer ' +
+    'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt, und des Umschalters). Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „gefühlt“).</p>'
   );
 }
 // Fahrgeschwindigkeit für „beim Fahren“: automatisch (Vorlage und Dauer) oder ein eigener Wert
@@ -693,6 +701,7 @@ function plausibilitaetHtml(jetzt = Date.now()) {
 function kleidungGrundlageSetzen(wert) {
   const k = daten.einstellungen.wetter.kleidung;
   if (!GRUNDLAGEN.includes(wert) || k.grundlage === wert) return;
+  k.protokoll.push(protokollEintrag("grundlage", null, k.grundlage, wert));
   k.grundlage = wert;
   if (speichern()) { zeichnen(); meldung(wert === "fahrt" ? "Stufe nach „gefühlt beim Fahren“" : "Stufe nach „gefühlt“ (Open-Meteo)"); }
 }
@@ -716,7 +725,7 @@ function kleidungStufeSeite(i) {
   const neu = i === null, letzte = !neu && i === n - 1;
   const vorschlag = k.stufen[n - 2].ab - 3;
   const s = neu ? { ab: vorschlag, bereiche: bereicheAus(), haendeBeiRegen: null } : k.stufen[i];
-  const z = neu ? null : rueckmeldungenAuswerten()[s.id];
+  const z = neu ? null : rueckmeldungenSeitAenderung()[s.id];
   return (
     (letzte ? '<p class="klein">Die letzte Stufe gilt unterhalb der vorigen (' + stufeBereich(k, i) + ').</p>'
       : '<label for="ks-ab">Ab gefühlter Temperatur (°C)</label><input type="text" id="ks-ab" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '">' +
@@ -725,7 +734,7 @@ function kleidungStufeSeite(i) {
     '<label for="ks-haende-regen">Hände bei Regen (optional)</label>' +
     '<input type="text" id="ks-haende-regen" autocomplete="off" placeholder="leer = wie bei Hände" value="' + esc(s.haendeBeiRegen || "") + '">' +
     '<div class="feldhinweis">Gilt statt „Hände“, sobald ein Regenzusatz greift, z. B. regenfeste Handschuhe. Mehrere Teile mit Komma trennen.</div>' +
-    (z ? '<p class="klein">Rückmeldungen: ' + auswertungText(z) + '</p>' : "") +
+    (z ? '<p class="klein">Rückmeldungen ' + seitText(z) + '</p>' : "") +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="kleidung-stufe-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +
     (!neu && n > 2 ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="kleidung-stufe-weg" data-i="' + i + '">Stufe entfernen</button></div>' : "")
@@ -745,6 +754,7 @@ function kleidungStufeSpeichern(iText) {
   const darunter = letzte ? stufe : andere.find(s => s.ab === null);
   const stufen = andere.filter(s => s.ab !== null).concat(letzte ? [] : [stufe]).sort((a, b) => b.ab - a.ab).concat(darunter);
   if (!kleidungPruefen({ stufen, regen: k.regen, rueckmeldung: k.rueckmeldung })) return;
+  k.protokoll.push(...stufenProtokoll(k.stufen, stufen));
   k.stufen = stufen;
   if (speichern()) { kleidungFormular(); zeichnen(); meldung(i === null ? "Stufe hinzugefügt" : "Stufe gespeichert"); }
 }
@@ -756,9 +766,10 @@ async function kleidungStufeWeg(i) {
     (letzte ? " Die Stufe " + esc(stufeBereich(k, i - 1)) + " gilt dann darunter." : "");
   if (!await frage(text, "Entfernen", "Abbrechen", true)) return;
   mitRueckgaengig(() => {
-    const st = daten.einstellungen.wetter.kleidung.stufen;
+    const kl = daten.einstellungen.wetter.kleidung, vorher = JSON.parse(JSON.stringify(kl.stufen)), st = kl.stufen;
     st.splice(i, 1);
     st[st.length - 1].ab = null;
+    kl.protokoll.push(...stufenProtokoll(vorher, st));
   }, "Stufe entfernt", () => kleidungFormular());
 }
 
@@ -791,6 +802,8 @@ function kleidungRegenSpeichern(iText) {
   if (andere.some(r => r.ab === ab)) { alert("Es gibt schon einen Regenzusatz ab " + zahlFeld(ab) + " %. Trage das Regenzeug dort ein."); return; }
   const regen = andere.concat({ ab, bereiche }).sort((a, b) => a.ab - b.ab);
   if (!kleidungPruefen({ stufen: k.stufen, regen, rueckmeldung: k.rueckmeldung })) return;
+  const alt = i === null ? null : k.regen[i];
+  if (!alt || !gleicherInhalt(alt, { ab, bereiche })) k.protokoll.push(protokollEintrag("regen", null, alt, { ab, bereiche }));
   k.regen = regen;
   if (speichern()) { kleidungFormular(); zeichnen(); meldung(i === null ? "Regenzusatz hinzugefügt" : "Regenzusatz gespeichert"); }
 }
@@ -798,7 +811,11 @@ async function kleidungRegenWeg(i) {
   const k = daten.einstellungen.wetter.kleidung;
   if (!k.regen[i]) return;
   if (!await frage("Regenzusatz ab " + zahlFeld(k.regen[i].ab) + " % entfernen?", "Entfernen", "Abbrechen", true)) return;
-  mitRueckgaengig(() => { daten.einstellungen.wetter.kleidung.regen.splice(i, 1); }, "Regenzusatz entfernt", () => kleidungFormular());
+  mitRueckgaengig(() => {
+    const kl = daten.einstellungen.wetter.kleidung;
+    kl.protokoll.push(protokollEintrag("regen", null, kl.regen[i], null));
+    kl.regen.splice(i, 1);
+  }, "Regenzusatz entfernt", () => kleidungFormular());
 }
 // Dieselben Regeln wie beim Einlesen einer Sicherung
 function kleidungPruefen(neu) {
@@ -809,6 +826,7 @@ async function kleidungStandard() {
   if (!await frage("Kleidungsregeln (Stufen und Regenzusatz) auf die Standardwerte zurücksetzen? Deine Rückmeldungen bleiben gespeichert.", "Zurücksetzen", "Abbrechen")) return;
   mitRueckgaengig(() => {
     const k = daten.einstellungen.wetter.kleidung, std = standardKleidung();
+    k.protokoll.push(...stufenProtokoll(k.stufen, std.stufen), ...regenProtokoll(k.regen, std.regen));
     Object.assign(k, { stufen: std.stufen, regen: std.regen });
   }, "Kleidungsregeln zurückgesetzt", () => kleidungFormular());
 }
@@ -844,7 +862,9 @@ function rueckmeldungGeben(id, fahrt, urteil, ausDetail) {
   if (!fw || !(urteil in RUECKMELDUNG_TEXT) || fw.rueckmeldung === urteil) return;
   mitRueckgaengig(() => { fw.rueckmeldung = urteil; }, () => {
     const k = daten.einstellungen.wetter.kleidung, i = k.stufen.findIndex(s => s.id === fw.kleidung);
-    return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + (i < 0 ? "" : " · Stufe " + stufeBereich(k, i) + ": " + auswertungText(rueckmeldungenAuswerten()[fw.kleidung]));
+    const z = rueckmeldungenSeitAenderung()[fw.kleidung];
+    const stand = !z ? "" : fw.empfohlenAm === null ? "vor 5d: " + auswertungText(z.vor5d) : seitText(z, false);
+    return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + (i < 0 || !stand ? "" : " · Stufe " + stufeBereich(k, i) + " " + stand);
   }, ausDetail ? () => { const y = fenster.scrollTop; eintragAnsicht(id); fenster.scrollTop = y; } : null);
 }
 function rueckmeldungKnoepfe(e, fahrt, fw, ausDetail) {
@@ -884,4 +904,136 @@ function rueckmeldungKarte(jetzt) {
     '<div class="klein" style="margin-top:8px">' + tagTitel(x.e.datum, x.h) + ', ' + x.name + ': ' + esc(fahrtKleidungText(x.fw)) + '</div>' +
     rueckmeldungKnoepfe(x.e, x.art, x.fw, false)).join("") +
     '<div class="feldhinweis">Die Auswertung je Stufe steht unter Einstellungen → Wetter → Kleidung. Die Grenzen ändern sich dadurch nicht.</div></div>';
+}
+
+// ---------- Änderungsprotokoll der Kleidung und Zählung ab der letzten Änderung (N4) ----------
+
+function protokollEintrag(art, stufe, vorher, nachher, auchBetroffen = []) {
+  const kopie = x => x === null || x === undefined ? null : JSON.parse(JSON.stringify(x));
+  return { zeitpunkt: new Date(Date.now()).toISOString(), art, stufe, vorher: kopie(vorher), nachher: kopie(nachher), auchBetroffen };
+}
+// Inhalt einer Stufe im Protokoll
+const stufeInhalt = s => s ? { ab: s.ab, bereiche: Object.assign({}, s.bereiche), haendeBeiRegen: s.haendeBeiRegen } : null;
+// Protokolleinträge für eine Änderung der Stufen: je geänderte, neue oder
+// entfernte Stufe einer; dazu die Stufen, deren Temperaturbereich sich dadurch
+// mit verschoben hat (auchBetroffen, z. B. die nächstwärmere bei einer neuen Grenze)
+function stufenProtokoll(vorher, nachher) {
+  const bereich = (liste, id) => { const i = liste.findIndex(s => s.id === id); return i < 0 ? null : stufeBereich({ stufen: liste }, i); };
+  const ids = [...new Set(vorher.map(s => s.id).concat(nachher.map(s => s.id)))];
+  const finde = (liste, id) => liste.find(s => s.id === id) || null;
+  const geaendert = ids.filter(id => !gleicherInhalt(stufeInhalt(finde(vorher, id)), stufeInhalt(finde(nachher, id))));
+  if (!geaendert.length) return [];
+  const auch = nachher.map(s => s.id).filter(id => !geaendert.includes(id) && finde(vorher, id) && bereich(vorher, id) !== bereich(nachher, id));
+  return geaendert.map(id => protokollEintrag("stufe", id, stufeInhalt(finde(vorher, id)), stufeInhalt(finde(nachher, id)), auch));
+}
+// Protokolleinträge für den Regenzusatz (Zuordnung über die Schwelle)
+function regenProtokoll(vorher, nachher) {
+  const finde = (liste, ab) => liste.find(r => r.ab === ab) || null;
+  const abs = [...new Set(vorher.map(r => r.ab).concat(nachher.map(r => r.ab)))].sort((a, b) => a - b);
+  return abs.filter(ab => !gleicherInhalt(finde(vorher, ab), finde(nachher, ab))).map(ab => protokollEintrag("regen", null, finde(vorher, ab), finde(nachher, ab)));
+}
+// Letzte Änderung (ms), ab der die Rückmeldungen einer Stufe zählen: Änderungen der
+// Stufe selbst, Änderungen, die ihren Bereich verschieben, und des Umschalters; null = keine
+function letzteAenderung(id, k = daten.einstellungen.wetter.kleidung) {
+  return k.protokoll.filter(p => p.art === "grundlage" || (p.art === "stufe" && (p.stufe === id || p.auchBetroffen.includes(id))))
+    .reduce((m, p) => { const t = Date.parse(p.zeitpunkt); return m === null || t > m ? t : m; }, null);
+}
+// Rückmeldungen je Stufe ab ihrer letzten Änderung: gezählt werden Fahrten, deren
+// Empfehlung nach der aktuellen Grundlage und nach der Änderung berechnet wurde
+// und die nach der Änderung lagen. Rückmeldungen von vor 5d (empfohlenAm null)
+// stehen getrennt in "vor5d". { id: { seit, anzahl, "zu-warm", passte, "zu-kalt",
+// regen: {…}, fahrten: [{ urteil, lage, regen }], vor5d: {…} } }
+function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w = daten.einstellungen.wetter) {
+  const leer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0 });
+  const erg = {};
+  const fuer = id => erg[id] || (erg[id] = Object.assign(leer(), { seit: letzteAenderung(id, k), regen: leer(), fahrten: [], vor5d: Object.assign(leer(), { regen: leer() }) }));
+  daten.eintraege.forEach(e => e.wetter && [["hin", "hinfahrt"], ["rueck", "rueckfahrt"]].forEach(([art, fahrt]) => {
+    const f = e.wetter[art];
+    if (!f || !f.kleidung || !f.rueckmeldung) return;
+    const z = fuer(f.kleidung);
+    const zaehle = x => { x.anzahl++; x[f.rueckmeldung]++; if (f.regenkleidung) { x.regen.anzahl++; x.regen[f.rueckmeldung]++; } };
+    if (f.empfohlenAm === null) { zaehle(z.vor5d); return; }
+    if (f.grundlage !== k.grundlage) return;
+    if (z.seit !== null && (Date.parse(f.empfohlenAm) < z.seit || zeitpunktAm(e.datum, minutenAus(w[fahrt].bis)) < z.seit)) return;
+    zaehle(z);
+    z.fahrten.push({ urteil: f.rueckmeldung, lage: windLageGespeichert(f), regen: !!f.regenkleidung });
+  }));
+  return erg;
+}
+// "seit deiner Änderung am 08.11.: 2× zu kalt · vor 5d: 1× passte" ("seit 5d", wenn die Stufe nie geändert wurde)
+function seitText(z, mitVor5d = true) {
+  if (!z) return "seit 5d: noch keine";
+  return (z.seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(z.seit)))) + ": " + auswertungText(z) +
+    (mitVor5d && z.vor5d.anzahl ? " · vor 5d: " + auswertungText(z.vor5d) : "");
+}
+const LAGE_BEI = { Gegenwind: "bei Gegenwind", Seitenwind: "bei Seitenwind", Rückenwind: "bei Rückenwind", wechselnd: "bei wechselndem Wind", "kaum Wind": "bei wenig Wind" };
+// Hinweis zu einer Stufe: ab 2 gleichen Abweichungen seit der letzten Änderung,
+// wenn sie häufiger sind als „passte“ (2× zu kalt, 5× passte: kein Hinweis). Gibt
+// es beide Richtungen gleich oft, heißt der Hinweis „uneinheitlich“. null = keiner.
+function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.einstellungen.wetter.kleidung) {
+  const z = seit[id], i = k.stufen.findIndex(s => s.id === id);
+  if (!z || i < 0) return null;
+  const richtungen = ["zu-kalt", "zu-warm"].filter(u => z[u] >= 2 && z[u] > z.passte);
+  if (!richtungen.length) return null;
+  const titel = "Stufe " + stufeBereich(k, i) + ": " + (z.seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(z.seit)))) + " ";
+  if (richtungen.length === 2 && z["zu-kalt"] === z["zu-warm"]) {
+    return { id, richtung: null, text: titel + z["zu-kalt"] + "× zu kalt und " + z["zu-warm"] + "× zu warm – uneinheitlich" };
+  }
+  const u = richtungen.length === 2 ? (z["zu-kalt"] > z["zu-warm"] ? "zu-kalt" : "zu-warm") : richtungen[0];
+  const fahrten = z.fahrten.filter(f => f.urteil === u), n = fahrten.length;
+  // Wind und Regen der abweichenden Fahrten: "beide bei Gegenwind", "1× bei Gegenwind, 1× bei Seitenwind", "alle bei Regen"
+  const lagen = fahrten.map(f => f.lage).filter(Boolean);
+  const zaehl = [...new Set(lagen)].map(l => [l, lagen.filter(x => x === l).length]);
+  const alle = n === 2 ? "beide " : "alle ";
+  const teile = [];
+  if (lagen.length === n && zaehl.length === 1) teile.push(alle + LAGE_BEI[zaehl[0][0]]);
+  else if (zaehl.length) teile.push(zaehl.map(([l, c]) => c + "× " + LAGE_BEI[l]).join(", "));
+  const regen = fahrten.filter(f => f.regen).length;
+  if (regen === n) teile.push(teile.length ? "bei Regen" : alle + "bei Regen");
+  else if (regen) teile.push("davon " + regen + "× bei Regen");
+  return { id, richtung: u, text: titel + z[u] + "× " + RUECKMELDUNG_TEXT[u] + (teile.length ? " (" + teile.join(", ") + ")" : "") };
+}
+function kleidungHinweisHtml(h, i) {
+  return '<div class="hinweis warn">💡 ' + esc(h.text) +
+    '<br><button type="button" data-action="kleidung-stufe" data-i="' + i + '">Stufe bearbeiten</button></div>';
+}
+// In der Fahrt-Karte: Hinweis zur empfohlenen Stufe (nur, wenn die Rückmeldung eingeschaltet ist)
+function fahrtHinweisHtml(kl) {
+  if (!kl || !rueckmeldungAn()) return "";
+  const h = kleidungHinweis(kl.stufe.id);
+  return h ? '<div class="klein">💡 ' + esc(h.text) + ' <button type="button" class="leise" data-action="kleidung-stufe" data-i="' + kl.index + '">Stufe bearbeiten ›</button></div>' : "";
+}
+
+// Unterseite „Änderungen der Kleidung“: das Protokoll, neueste zuerst
+function kleidungProtokollSeite() {
+  const k = daten.einstellungen.wetter.kleidung;
+  if (!k.protokoll.length) return '<div class="liste"><div class="leer">Noch keine Änderungen seit 5d.</div></div>';
+  const leerText = t => t ? esc(t) : "–";
+  const name = p => {
+    const i = k.stufen.findIndex(s => s.id === p.stufe), x = p.nachher || p.vorher;
+    return i >= 0 ? "Stufe " + stufeBereich(k, i) : "frühere Stufe" + (x && x.ab !== null ? " (ab " + minus(zahlFeld(x.ab)) + " °C)" : "");
+  };
+  const grenze = x => x === null ? "darunter" : minus(zahlFeld(x)) + " °C";
+  const bereichsTeile = (a, b) => BEREICHE.filter(([bb]) => (a[bb] || "") !== (b[bb] || "")).map(([bb, n]) => n + ": " + leerText(a[bb]) + " → " + leerText(b[bb]));
+  const unterschiede = (a, b) => (a.ab !== b.ab ? ["Grenze " + grenze(a.ab) + " → " + grenze(b.ab)] : []).concat(bereichsTeile(a.bereiche, b.bereiche),
+    (a.haendeBeiRegen || null) !== (b.haendeBeiRegen || null) ? ["Hände bei Regen: " + leerText(a.haendeBeiRegen) + " → " + leerText(b.haendeBeiRegen)] : []);
+  const GRUNDLAGE_TEXT = { fahrt: "gefühlt beim Fahren", gefuehlt: "gefühlt (Open-Meteo)" };
+  const zeilen = k.protokoll.slice().reverse().map(p => {
+    const wann = datumText(isoAusDate(new Date(p.zeitpunkt))) + " " + uhrzeit(Date.parse(p.zeitpunkt));
+    let titel, details = [];
+    if (p.art === "grundlage") { titel = "Stufe wählen nach"; details = [GRUNDLAGE_TEXT[p.vorher] + " → " + GRUNDLAGE_TEXT[p.nachher]]; }
+    else if (p.art === "regen") {
+      const x = p.nachher || p.vorher;
+      titel = "Regenzusatz ab " + zahlFeld(x.ab) + " %" + (!p.vorher ? " neu" : !p.nachher ? " entfernt" : "");
+      details = p.vorher && p.nachher ? (p.vorher.ab !== p.nachher.ab ? ["Schwelle " + zahlFeld(p.vorher.ab) + " → " + zahlFeld(p.nachher.ab) + " %"] : [])
+        .concat(bereichsTeile(p.vorher.bereiche, p.nachher.bereiche)) : [bereicheKurz(x.bereiche)];
+    } else {
+      titel = name(p) + (!p.vorher ? " neu" : !p.nachher ? " entfernt" : "");
+      details = p.vorher && p.nachher ? unterschiede(p.vorher, p.nachher) : [bereicheKurz((p.nachher || p.vorher).bereiche)];
+    }
+    return '<div class="zeile"><div class="text" style="padding:10px 16px"><div>' + esc(titel) + '</div><div class="klein">' + esc(wann) + '</div>' +
+      details.map(d => '<div class="klein umbrechen">' + esc(d) + '</div>').join("") + '</div></div>';
+  });
+  return '<div class="liste">' + zeilen.join("") + '</div>' +
+    '<p class="klein">Neueste zuerst. Das Protokoll gehört zu deinen Daten und steht in der Sicherung.</p>';
 }

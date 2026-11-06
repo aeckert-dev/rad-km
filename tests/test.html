@@ -2226,8 +2226,8 @@ async function start() {
     gleich("Liste: Schalter „Rückmeldung zur Kleidung“ an, 8 Stufen von warm nach kalt mit Bereichen und Auswertung, Regenzusatz ab 40 / 60 %",
       [feld("k-rueckmeldung").checked, listeZeilen("kleidung-stufe").length, listeZeilen("kleidung-stufe")[0], listeZeilen("kleidung-stufe")[3],
         listeZeilen("kleidung-stufe")[7].slice(0, 28), listeZeilen("kleidung-regen")],
-      [true, 8, "ab 20 °C Oberkörper T-Shirt · Beine kurze Hose · Füße Sneakersocken Rückmeldungen: noch keine ›",
-        "7 bis 11 °C Kopf leichte Mütze · Hände Unterziehhandschuhe · Oberkörper 2 T-Shirts, warmer Pullover · Beine Hose · Füße Socken · bei Regen Hände Übergangshandschuhe Rückmeldungen: noch keine ›",
+      [true, 8, "ab 20 °C Oberkörper T-Shirt · Beine kurze Hose · Füße Sneakersocken Rückmeldungen seit 5d: noch keine ›",
+        "7 bis 11 °C Kopf leichte Mütze · Hände Unterziehhandschuhe · Oberkörper 2 T-Shirts, warmer Pullover · Beine Hose · Füße Socken · bei Regen Hände Übergangshandschuhe Rückmeldungen seit 5d: noch keine ›",
         "unter −6 °C Kopf warme Mütze", ["ab 40 % Oberkörper Regenjacke ›", "ab 60 % Beine Regenhose · Füße Gamaschen ›"]]);
     w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="3"]').click();
     const BF = ["kopf", "hals", "haende", "oberkoerper", "beine", "fuesse"];
@@ -2322,7 +2322,9 @@ async function start() {
     frageAntwort = true;
     await w.kleidungStandard();
     gleich("„Auf Standard zurücksetzen“: Standardstufen und -regenzusatz, der Schalter bleibt, Meldung mit „Rückgängig“",
-      [kleidungJetzt(), toast()], [Object.assign(kopie(STD_WETTER.kleidung), { rueckmeldung: false, grundlage: "gefuehlt" }), ["Kleidungsregeln zurückgesetzt", true]]);
+      [Object.assign(kleidungJetzt(), { protokoll: [] }), toast()], [Object.assign(kopie(STD_WETTER.kleidung), { rueckmeldung: false, grundlage: "gefuehlt" }), ["Kleidungsregeln zurückgesetzt", true]]);
+    wahr("… im Protokoll je geänderte Stufe und je geänderten Regenzusatz ein Eintrag", kleidungJetzt().protokoll.length > meineKleidung.protokoll.length &&
+      kleidungJetzt().protokoll.slice(meineKleidung.protokoll.length).some(p => p.art === "regen"), JSON.stringify(kleidungJetzt().protokoll.slice(meineKleidung.protokoll.length)));
     w.rueckgaengig();
     gleich("… mit „Rückgängig“ wieder die eigenen Regeln", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung, meineKleidung);
     gleich("Kurzfassung für eigene Regeln", w.kleidungKurztext(meineKleidung), "8 Stufen nach „gefühlt“ · Regenzusatz ab 30 % / 60 % · Rückmeldung aus");
@@ -2346,14 +2348,14 @@ async function start() {
     w.rueckmeldungGeben("r1", "hin", "zu-kalt");
     gleich("„Zu kalt“: gespeichert, Grenzen unverändert, Meldung mit Auswertung der Stufe und „Rückgängig“", [eintrag("r1").wetter.hin.rueckmeldung, grenzen(kleidungJetzt()),
       JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.find(e => e.id === "r1").wetter.hin.rueckmeldung, toast()],
-      ["zu-kalt", STD_GRENZEN, "zu-kalt", ["Rückmeldung „zu kalt“ gespeichert · Stufe 7 bis 11 °C: 1× zu kalt (bei Regen: 1× zu kalt)", true]]);
+      ["zu-kalt", STD_GRENZEN, "zu-kalt", ["Rückmeldung „zu kalt“ gespeichert · Stufe 7 bis 11 °C vor 5d: 1× zu kalt (bei Regen: 1× zu kalt)", true]]);
     gleich("Keine Wirkung auf die Empfehlung (gefühlt 7,5 °C bleibt Stufe ab 7 °C)", kf(7.5, null).stufe.id, "stufe4");
     w.rueckgaengig();
     gleich("„Rückgängig“: Rückmeldung wie vorher", localStorage.getItem(TEST_SCHLUESSEL), vorRm);
     w.rueckmeldungGeben("r1", "hin", "zu-kalt");
     w.rueckmeldungGeben("r1", "hin", "passte");
     gleich("Rückmeldung ändern („zu kalt“ → „passte“): zählt nur noch als „passte“", [eintrag("r1").wetter.hin.rueckmeldung, w.auswertungText(w.rueckmeldungenAuswerten().stufe4), toast()[0]],
-      ["passte", "1× passte (bei Regen: 1× passte)", "Rückmeldung „passte“ gespeichert · Stufe 7 bis 11 °C: 1× passte (bei Regen: 1× passte)"]);
+      ["passte", "1× passte (bei Regen: 1× passte)", "Rückmeldung „passte“ gespeichert · Stufe 7 bis 11 °C vor 5d: 1× passte (bei Regen: 1× passte)"]);
     const vorGleich = datenText();
     w.rueckmeldungGeben("r1", "hin", "passte");
     w.rueckmeldungGeben("r1", "hin", "super");
@@ -2368,10 +2370,10 @@ async function start() {
     w.kleidungFormular();
     let detail = ohneTags(inhaltHtml());
     wahr("Kleidungsregeln: Auswertung je Stufe und „1 Rückmeldung zu früheren Stufen“",
-      detail.includes("7 bis 11 °C Kopf leichte Mütze") && detail.includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)") &&
-      detail.includes("3 bis 7 °C") && detail.includes("Rückmeldungen: 1× passte") && detail.includes("1 Rückmeldung zu früheren Stufen"), detail);
+      detail.includes("7 bis 11 °C Kopf leichte Mütze") && detail.includes("Rückmeldungen seit 5d: noch keine · vor 5d: 1× zu kalt, 1× passte (bei Regen: 1× passte)") &&
+      detail.includes("3 bis 7 °C") && detail.includes("Rückmeldungen seit 5d: noch keine · vor 5d: 1× passte") && detail.includes("1 Rückmeldung zu früheren Stufen"), detail);
     w.kleidungStufeFormular(3);
-    wahr("Formular der Stufe zeigt ihre Auswertung", ohneTags(inhaltHtml()).includes("Rückmeldungen: 1× zu kalt, 1× passte (bei Regen: 1× passte)"), ohneTags(inhaltHtml()));
+    wahr("Formular der Stufe zeigt ihre Auswertung (Rückmeldungen von vor 5d getrennt)", ohneTags(inhaltHtml()).includes("Rückmeldungen seit 5d: noch keine · vor 5d: 1× zu kalt, 1× passte (bei Regen: 1× passte)"), ohneTags(inhaltHtml()));
     rmDaten();
     w.eintragAnsicht("r4");
     detail = ohneTags(fensterInhaltHtml());
@@ -5181,6 +5183,137 @@ async function start() {
     w.eintragAnsicht("n1");
     wahr("Detailansicht eines nachgetragenen Eintrags von vor 5d: „… · Stufe nach „gefühlt“ (vor 5d)“", ohneTags(fensterInhaltHtml()).includes("· Stufe nach „gefühlt“ (vor 5d)"), ohneTags(fensterInhaltHtml()));
     w.fensterSchliessen();
+
+    // -------------------------------------------------------------
+    // 72. Änderungsprotokoll und Rückmeldungen ab der letzten Änderung (N4, Release 5d)
+    // -------------------------------------------------------------
+    abschnitt("72. Änderungsprotokoll der Kleidung, Zählung je Stufe ab der letzten Änderung, Hinweis „Stufe bearbeiten“ (N4)");
+    const echtNow = w.Date.now;
+    let uhrN4 = Date.parse("2026-11-08T07:30:00.000Z");
+    w.Date.now = () => uhrN4;
+    const T0 = "2026-11-08T07:30:00.000Z";
+    const S5_VOR = { ab: 3, bereiche: kopie(STD_WETTER.kleidung.stufen[4].bereiche), haendeBeiRegen: null };
+    const S5_NACH = Object.assign(kopie(S5_VOR), { bereiche: Object.assign(kopie(S5_VOR.bereiche), { haende: "Winterhandschuhe" }) });
+    const kleidungN4 = () => { const k = kopie(STD_WETTER.kleidung); k.stufen[4].bereiche.haende = "Winterhandschuhe";
+      k.protokoll = [{ zeitpunkt: T0, art: "stufe", stufe: "stufe5", vorher: S5_VOR, nachher: S5_NACH, auchBetroffen: [] }]; return k; };
+    const GEGEN = { windAnteil: { gegen: 1, seite: 0, ruecken: 0 }, teilstrecken: [{ laenge: 14, kurs: 90, zaehlt: true, wind: 15, richtung: 90, luftstrom: 27, beimFahren: 2 }] };
+    const SEITE = { windAnteil: { gegen: 0, seite: 1, ruecken: 0 }, teilstrecken: [{ laenge: 14, kurs: 90, zaehlt: true, wind: 15, richtung: 0, luftstrom: 20, beimFahren: 3 }] };
+    const FN = (urteil, empfohlenAm, aend = {}) => FW(Object.assign({ kleidung: "stufe5", rueckmeldung: urteil, beimFahren: 2, luftfeuchte: 80, windRichtung: 90, geschwindigkeit: 17,
+      grundlage: "fahrt", empfohlenAm }, GEGEN, aend));
+    const n4Daten = (eintraege, kleidung = kleidungN4()) => setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt({ kleidung }) }, eintraege });
+    const grund = [
+      AE("k1", "2026-11-06", 34, EW(FN("zu-kalt", "2026-11-06T05:00:00.000Z"), FN(null, "2026-11-06T05:00:00.000Z"))),   // vor der Änderung
+      AE("k2", "2026-11-09", 34, EW(FN("zu-kalt", "2026-11-09T05:00:00.000Z"), FN("passte", "2026-11-09T05:00:00.000Z"))),
+      AE("k3", "2026-11-10", 34, EW(FN("zu-kalt", "2026-11-10T05:00:00.000Z"), null)),
+      AE("k4", "2026-11-11", 34, EW(FN("zu-kalt", "2026-11-11T05:00:00.000Z", { grundlage: "gefuehlt" }), null)),           // andere Grundlage
+      AE("k5", "2026-11-12", 34, EW(FN("zu-kalt", "2026-11-12T05:00:00.000Z", { kleidung: "stufe4" }), null)),             // andere Stufe
+      AE("k6", "2026-10-20", 34, EW(FW({ kleidung: "stufe5", rueckmeldung: "zu-warm" }), null)),                             // vor 5d
+      AE("k7", "2026-11-05", 34, EW(FN("zu-kalt", "2026-11-09T06:00:00.000Z"), null))];                                     // nachgetragen: Fahrt vor der Änderung
+    n4Daten(grund);
+    let z5 = w.rueckmeldungenSeitAenderung().stufe5;
+    gleich("Zählung ab der Änderung am 08.11.: nur Fahrten danach, mit Empfehlung danach und derselben Grundlage; vor 5d getrennt",
+      [z5.seit, z5.anzahl, z5["zu-kalt"], z5.passte, z5.vor5d.anzahl, z5.vor5d["zu-warm"], z5.fahrten.map(f => [f.urteil, f.lage])],
+      [Date.parse(T0), 3, 2, 1, 1, 1, [["zu-kalt", "Gegenwind"], ["passte", "Gegenwind"], ["zu-kalt", "Gegenwind"]]]);
+    gleich("Hinweis: „Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei Gegenwind)“", w.kleidungHinweis("stufe5"),
+      { id: "stufe5", richtung: "zu-kalt", text: "Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei Gegenwind)" });
+    gleich("Andere Stufe mit nur einer Abweichung: kein Hinweis; Stufe ohne Rückmeldungen: kein Hinweis", [w.kleidungHinweis("stufe4"), w.kleidungHinweis("stufe1")], [null, null]);
+    n4Daten(grund.concat([AE("k8", "2026-11-13", 34, EW(FN("passte", "2026-11-13T05:00:00.000Z"), FN("passte", "2026-11-13T05:00:00.000Z")))]));
+    gleich("2× zu kalt, aber 3× passte: kein Hinweis (die Abweichungen müssen häufiger sein als „passte“)", w.kleidungHinweis("stufe5"), null);
+    n4Daten([AE("m1", "2026-11-09", 34, EW(FN("zu-kalt", "2026-11-09T05:00:00.000Z", { regenkleidung: true }), FN("zu-kalt", "2026-11-09T05:00:00.000Z", Object.assign({ regenkleidung: true }, SEITE)))),
+      AE("m2", "2026-11-10", 34, EW(FN("zu-kalt", "2026-11-10T05:00:00.000Z", { windAnteil: null, teilstrecken: null }), null))]);
+    gleich("Gemischte Windlage und Regen: „3× zu kalt (1× bei Gegenwind, 1× bei Seitenwind, davon 2× bei Regen)“", w.kleidungHinweis("stufe5").text,
+      "Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 3× zu kalt (1× bei Gegenwind, 1× bei Seitenwind, davon 2× bei Regen)");
+    n4Daten([AE("m1", "2026-11-09", 34, EW(FN("zu-kalt", "2026-11-09T05:00:00.000Z", { regenkleidung: true }), FN("zu-kalt", "2026-11-09T05:00:00.000Z", { regenkleidung: true })))]);
+    gleich("Beide bei Gegenwind und bei Regen", w.kleidungHinweis("stufe5").text, "Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei Gegenwind, bei Regen)");
+    n4Daten([AE("u1", "2026-11-09", 34, EW(FN("zu-kalt", "2026-11-09T05:00:00.000Z"), FN("zu-warm", "2026-11-09T05:00:00.000Z"))),
+      AE("u2", "2026-11-10", 34, EW(FN("zu-kalt", "2026-11-10T05:00:00.000Z"), FN("zu-warm", "2026-11-10T05:00:00.000Z")))]);
+    gleich("2× zu kalt und 2× zu warm: Hinweis „uneinheitlich“", w.kleidungHinweis("stufe5"),
+      { id: "stufe5", richtung: null, text: "Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt und 2× zu warm – uneinheitlich" });
+    n4Daten([AE("o1", "2026-11-09", 34, EW(FN("zu-warm", "2026-11-09T05:00:00.000Z", { kleidung: "stufe2" }), FN("zu-warm", "2026-11-09T05:00:00.000Z", { kleidung: "stufe2" })))]);
+    gleich("Stufe ohne Änderung: „seit 5d“", w.kleidungHinweis("stufe2").text, "Stufe 15 bis 20 °C: seit 5d 2× zu warm (beide bei Gegenwind)");
+    // Protokoll über die Oberfläche
+    n4Daten(grund);
+    const protN4 = () => kopie(w.eval("daten.einstellungen.wetter.kleidung.protokoll"));
+    uhrN4 = Date.parse("2026-11-14T08:00:00.000Z");
+    w.kleidungStufeFormular(4);
+    w.kleidungStufeSpeichern("4");
+    gleich("Stufe ohne Änderung gespeichert: kein Protokolleintrag", protN4().length, 1);
+    w.kleidungStufeFormular(4);
+    feld("ks-hals").value = "Schal, Tuch";
+    w.kleidungStufeSpeichern("4");
+    gleich("Stufe geändert (Hals): Eintrag mit Zeitpunkt, Stufe, Inhalt vorher und nachher; gespeichert", [protN4().length, protN4()[1],
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung.protokoll.length],
+      [2, { zeitpunkt: "2026-11-14T08:00:00.000Z", art: "stufe", stufe: "stufe5", vorher: S5_NACH,
+        nachher: Object.assign(kopie(S5_NACH), { bereiche: Object.assign(kopie(S5_NACH.bereiche), { hals: "Schal, Tuch" }) }), auchBetroffen: [] }, 2]);
+    gleich("… die Zählung beginnt neu („seit deiner Änderung am 14.11.: noch keine“), der Hinweis verschwindet",
+      [w.seitText(w.rueckmeldungenSeitAenderung().stufe5), w.kleidungHinweis("stufe5")], ["seit deiner Änderung am 14.11.: noch keine · vor 5d: 1× zu warm", null]);
+    uhrN4 = Date.parse("2026-11-14T08:05:00.000Z");
+    w.kleidungStufeFormular(3);
+    feld("ks-ab").value = "8";
+    w.kleidungStufeSpeichern("3");
+    gleich("Grenze von Stufe 4 (7 → 8 °C): Eintrag für Stufe 4, dazu betroffen Stufe 5 (ihr Bereich wird „3 bis 8 °C“)",
+      [protN4()[2].stufe, protN4()[2].vorher.ab, protN4()[2].nachher.ab, protN4()[2].auchBetroffen, w.letzteAenderung("stufe5"), w.letzteAenderung("stufe3")],
+      ["stufe4", 7, 8, ["stufe5"], Date.parse("2026-11-14T08:05:00.000Z"), null]);
+    uhrN4 = Date.parse("2026-11-14T08:10:00.000Z");
+    w.kleidungStufeFormular(null);
+    feld("ks-ab").value = "-3";
+    feld("ks-oberkoerper").value = "Pullover";
+    w.kleidungStufeSpeichern("");
+    const neuP = protN4()[3];
+    gleich("Neue Stufe ab −3 °C: Eintrag ohne „vorher“; betroffen die Stufe darunter (−6 bis −1 → −6 bis −3 °C)",
+      [neuP.vorher, neuP.nachher.ab, neuP.nachher.bereiche.oberkoerper, neuP.auchBetroffen], [null, -3, "Pullover", ["stufe7"]]);
+    frageAntwort = true;
+    uhrN4 = Date.parse("2026-11-14T08:15:00.000Z");
+    await w.kleidungStufeWeg(w.eval("daten.einstellungen.wetter.kleidung.stufen.findIndex(s => s.id === " + JSON.stringify(neuP.stufe) + ")"));
+    gleich("Stufe entfernt: Eintrag ohne „nachher“; „Rückgängig“ nimmt den Eintrag mit zurück", [protN4()[4].stufe, protN4()[4].nachher, (w.rueckgaengig(), protN4().length)],
+      [neuP.stufe, null, 4]);
+    uhrN4 = Date.parse("2026-11-14T08:20:00.000Z");
+    w.kleidungFormular();
+    w.document.querySelector('#inhalt [data-action="kleidung-grundlage"][data-wert="gefuehlt"]').click();
+    gleich("Umschalter: Eintrag „grundlage“ (fahrt → gefuehlt); die Zählung aller Stufen beginnt danach", [protN4()[4], w.letzteAenderung("stufe1")],
+      [{ zeitpunkt: "2026-11-14T08:20:00.000Z", art: "grundlage", stufe: null, vorher: "fahrt", nachher: "gefuehlt", auchBetroffen: [] }, Date.parse("2026-11-14T08:20:00.000Z")]);
+    w.document.querySelector('#inhalt [data-action="kleidung-grundlage"][data-wert="fahrt"]').click();
+    uhrN4 = Date.parse("2026-11-14T08:30:00.000Z");
+    w.kleidungRegenFormular(0);
+    feld("kr-kopf").value = "Kapuze";
+    w.kleidungRegenSpeichern("0");
+    gleich("Regenzusatz geändert: protokolliert (art „regen“), setzt die Zählung der Stufen nicht zurück",
+      [protN4()[6].art, protN4()[6].vorher.bereiche.kopf, protN4()[6].nachher.bereiche.kopf], ["regen", "", "Kapuze"]);
+    wahr("… Zählung der Stufe 1 weiter ab dem Umschalter (nicht ab dem Regenzusatz)", w.letzteAenderung("stufe1") === Date.parse("2026-11-14T08:20:00.000Z"));
+    await w.kleidungRegenWeg(0);
+    gleich("Regenzusatz entfernt: protokolliert", [protN4()[7].art, protN4()[7].nachher], ["regen", null]);
+    // Seite „Änderungen der Kleidung“
+    w.unterseiteZeigen("kleidung-protokoll");
+    const protSeite = ohneTags(w.document.getElementById("inhalt").innerHTML);
+    wahr("Unterseite „Änderungen der Kleidung“ (‹ Kleidung): neueste zuerst, mit Datum, Uhrzeit und den Unterschieden",
+      w.document.getElementById("seitentitel").textContent === "Änderungen der Kleidung" && protSeite.startsWith("‹ Kleidung Regenzusatz ab 40 % entfernt") &&
+      protSeite.includes("Stufe wählen nach 14.11.2026 " + w.uhrzeit(Date.parse("2026-11-14T08:20:00.000Z")) + " gefühlt beim Fahren → gefühlt (Open-Meteo)") &&
+      protSeite.includes("Stufe 3 bis 8 °C 14.11.2026 " + w.uhrzeit(Date.parse("2026-11-14T08:00:00.000Z")) + " Hals: Schal → Schal, Tuch") &&
+      protSeite.includes("Grenze 7 °C → 8 °C") && protSeite.includes("Hände: Übergangshandschuhe → Winterhandschuhe") && protSeite.includes("Kopf: – → Kapuze"), protSeite);
+    w.kleidungFormular();
+    wahr("Seite Kleidung: Zeile „Änderungen“ mit Anzahl und Datum", ohneTags(w.document.getElementById("inhalt").innerHTML).includes("Änderungen 8 Änderungen, zuletzt am 14.11.2026"));
+    // Hinweis auf der Seite Kleidung, in der Fahrt-Karte und in der Meldung
+    n4Daten(grund);
+    w.kleidungFormular();
+    const hinweisEl = w.document.querySelector("#inhalt .hinweis.warn");
+    gleich("Seite Kleidung: Hinweis oben mit Knopf „Stufe bearbeiten“; Zeile der Stufe mit der Zählung seit der Änderung und vor 5d",
+      [hinweisEl && ohneTags(hinweisEl.innerHTML), ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="4"] .text').innerHTML).split("Rückmeldungen ")[1]],
+      ["💡 Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei Gegenwind) Stufe bearbeiten",
+        "seit deiner Änderung am 08.11.: 2× zu kalt, 1× passte · vor 5d: 1× zu warm"]);
+    hinweisEl.querySelector("button").click();
+    gleich("„Stufe bearbeiten“ öffnet das Formular der Stufe", [w.eval("einstellungenSeite"), w.eval("einstellungenWert"), w.document.getElementById("seitentitel").textContent],
+      ["kleidung-stufe", 4, "Stufe 3 bis 7 °C"]);
+    const fh = w.fahrtHinweisHtml({ stufe: { id: "stufe5" }, index: 4 });
+    gleich("Fahrt-Karte: Hinweis zur empfohlenen Stufe mit „Stufe bearbeiten ›“; ohne Hinweis leer; bei ausgeschalteter Rückmeldung nicht",
+      [ohneTags(fh), fh.includes('data-action="kleidung-stufe" data-i="4"'), w.fahrtHinweisHtml({ stufe: { id: "stufe4" }, index: 3 }),
+        (w.eval("daten.einstellungen.wetter.kleidung.rueckmeldung = false"), w.fahrtHinweisHtml({ stufe: { id: "stufe5" }, index: 4 }))],
+      ["💡 Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei Gegenwind) Stufe bearbeiten ›", true, "", ""]);
+    w.eval("daten.einstellungen.wetter.kleidung.rueckmeldung = true");
+    w.rueckmeldungGeben("k3", "hin", "passte");
+    gleich("Meldung nach einer Rückmeldung: Stand seit der Änderung", toast()[0], "Rückmeldung „passte“ gespeichert · Stufe 3 bis 7 °C seit deiner Änderung am 08.11.: 1× zu kalt, 2× passte");
+    w.rueckmeldungGeben("k6", "hin", "zu-kalt");
+    gleich("… bei einer Fahrt von vor 5d der Stand „vor 5d“", toast()[0], "Rückmeldung „zu kalt“ gespeichert · Stufe 3 bis 7 °C vor 5d: 1× zu kalt");
+    w.Date.now = echtNow;
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

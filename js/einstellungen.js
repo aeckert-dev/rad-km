@@ -91,6 +91,7 @@ const EINSTELLUNGEN_SEITEN = {
   kleidung: { titel: "Kleidung", bild: () => kleidungSeite() },
   "kleidung-stufe": { titel: i => kleidungStufeTitel(i), bild: i => kleidungStufeSeite(i), zurueck: "kleidung", formular: true },
   "kleidung-regen": { titel: i => kleidungRegenTitel(i), bild: i => kleidungRegenSeite(i), zurueck: "kleidung", formular: true },
+  "kleidung-protokoll": { titel: "Änderungen der Kleidung", bild: () => kleidungProtokollSeite(), zurueck: "kleidung" },
   ampel: { titel: "Ampel-Grenzen", bild: () => ampelSeite(), formular: true },
   wartungsarten: { titel: "Wartungsarten", bild: () => wartungsartenBereich() }
 };
