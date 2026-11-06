@@ -14,6 +14,8 @@ const SPEICHER_SCHLUESSEL = TESTMODUS ? "radkm-test-daten" : "radkm-daten";
 const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzter-export";
 // Zuletzt geladene Wetterdaten (Zwischenspeicher, kein Teil der Daten und der Sicherung)
 const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
+// Die zuletzt gewählten Orte (ab 5d; nur auf dem Gerät, kein Teil der Daten und der Sicherung)
+const LETZTE_ORTE_SCHLUESSEL = TESTMODUS ? "radkm-test-letzte-orte" : "radkm-letzte-orte";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
 const APP_VERSION = "5c";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen

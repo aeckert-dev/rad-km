@@ -1362,10 +1362,10 @@ async function start() {
     const testUndAufhebung = dwdMit(["STURMBÖEN", "Moderate", 0, 1, { STATUS: "Test" }], ["GEWITTER", "Minor", 0, 1, { MSGTYPE: "Cancel" }], ["NEBEL", "Minor", 0, 1, { CATEGORY: "Health" }]);
     gleich("DWD: Test- und Aufhebungsmeldungen werden nicht übernommen; Kategorie „Health“ nur zur Info",
       w.dwdWarnungenLesen(testUndAufhebung).warnungen.map(x => [x.ereignis, x.art]), [["NEBEL", "gesundheit"]]);
-    gleichInhalt("Ortssuche: Treffer mit Bundesland und Land, Koordinaten sofort auf 4 Nachkommastellen gerundet", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche"])), [
-      { name: "Musterdorf", zusatz: "Beispielland, Deutschland", lat: 51.0043, lon: 10.005 },
-      { name: "Musterdorf am See", zusatz: "Beispielland, Deutschland", lat: 52.3367, lon: 11.6644 },
-      { name: "Musterdorf", zusatz: "Beispielbundesland, Österreich", lat: 47.1235, lon: 13.9877 }]);
+    gleichInhalt("Ortssuche: Treffer mit Bundesland und Land (und PLZ, falls vorhanden), Koordinaten sofort auf 4 Nachkommastellen gerundet", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche"])), [
+      { name: "Musterdorf", zusatz: "Beispielland, Deutschland", lat: 51.0043, lon: 10.005, plz: "00001" },
+      { name: "Musterdorf am See", zusatz: "Beispielland, Deutschland", lat: 52.3367, lon: 11.6644, plz: null },
+      { name: "Musterdorf", zusatz: "Beispielbundesland, Österreich", lat: 47.1235, lon: 13.9877, plz: null }]);
     gleich("Ortssuche ohne Treffer (Antwort ohne „results“)", w.ortsTrefferLesen(kopie(fx["wetter-ortssuche-leer"])), []);
     // Die aufgezeichnete Vorhersage selbst auswerten (unabhängig von der Zeitzone nur Plausibles)
     wetterDaten();
@@ -1760,7 +1760,9 @@ async function start() {
     const ohneTreffer = w.document.getElementById("o-treffer").textContent;
     netz();
     await w.ortSuchen();
-    gleich("Ortssuche ohne Treffer bzw. ohne Netz", [ohneTreffer, w.document.getElementById("o-treffer").textContent], ["Kein Ort gefunden.", "Ortssuche nicht möglich (keine Verbindung)."]);
+    gleich("Ortssuche ohne Treffer (mit Tipps) bzw. ohne Netz (Hinweis auf Koordinaten und Kartenlinks)", [ohneTreffer, w.document.getElementById("o-treffer").textContent],
+      ["Kein Ort gefunden. Tipps: kürzer eingeben (der Anfang des Namens genügt, z. B. nur „Muster“), die Postleitzahl versuchen oder Koordinaten bzw. einen Link einfügen – " +
+        "in Apple Karten eine Stelle lange drücken und bei der Markierung die Koordinaten kopieren.", "Ohne Netz keine Ortssuche. Koordinaten oder einen Kartenlink einfügen geht auch ohne Netz."]);
     w.fensterSchliessen();
     let standortMoeglich = true;
     try {
@@ -2135,7 +2137,7 @@ async function start() {
     abschnitt("37. Ort: Koordinaten direkt eingeben (gerundet auf 4 Nachkommastellen, W11)");
     wetterDaten();
     w.ortFormular("arbeitsort");
-    const ortHinweis = ohneTags(w.document.getElementById("fensterinhalt").innerHTML);
+    const ortHinweis = ohneTags(w.document.getElementById("inhalt").innerHTML);
     gleich("Formular zeigt die gespeicherten Koordinaten (Komma, 4 Stellen), Beispiele mit 4 Stellen und den Hinweis zur Rundung",
       [feld("o-lat").value, feld("o-lon").value, feld("o-lat").placeholder, feld("o-lon").placeholder,
         ortHinweis.includes("Gespeichert werden die Koordinaten mit 4 Nachkommastellen (ca. 10 m); an die Wetterdienste gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m).")],
@@ -2674,8 +2676,8 @@ async function start() {
       [["Wohnort Musterdorf · 51,0000 / 10,0000 ›", "Arbeitsort Beispielstadt · 51,1000 / 10,2000 ›"], true,
         [[true, "Musterdorf → Beispielstadt 17,9 km Luftlinie nach Nordost · zählt für den Wind"]]]);
     w.document.querySelector('#inhalt [data-action="wegpunkt-neu"]').click();
-    gleich("„+ Wegpunkt“: Formular wie bei den Orten (Suche, Standort, Koordinaten)", [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML),
-      !!feld("o-suche"), !!w.document.querySelector('#fensterinhalt [data-action="ort-standort"]'), !!feld("o-lat"), !!w.document.querySelector('#fensterinhalt [data-action="ort-entfernen"]')],
+    gleich("„+ Wegpunkt“: Formular wie bei den Orten (Suche, Standort, Koordinaten), als Unterseite", [w.document.getElementById("seitentitel").textContent,
+      !!feld("o-suche"), !!w.document.querySelector('#inhalt [data-action="ort-standort"]'), !!feld("o-lat"), !!w.document.querySelector('#inhalt [data-action="ort-entfernen"]')],
       ["Neuer Wegpunkt", true, true, true, false]);
     feld("o-lat").value = "51,00004";
     feld("o-lon").value = "10,20004";
@@ -2715,7 +2717,7 @@ async function start() {
     w.fensterSchliessen();
     w.ortFormular("wegpunkt", 0);
     gleich("Wegpunkt bearbeiten: Formular mit Name und Koordinaten, „Wegpunkt entfernen“",
-      [ohneTags(w.document.querySelector("#fensterinhalt h2").innerHTML), feld("o-name").value, feld("o-lat").value, ohneTags(w.document.querySelector('#fensterinhalt [data-action="ort-entfernen"]').innerHTML)],
+      [w.document.getElementById("seitentitel").textContent, feld("o-name").value, feld("o-lat").value, ohneTags(w.document.querySelector('#inhalt [data-action="ort-entfernen"]').innerHTML)],
       ["Wegpunkt 1", "Musterdorf am See", "52,3367", "Wegpunkt entfernen"]);
     frageAntwort = true;
     await w.ortEntfernen();
@@ -2900,7 +2902,7 @@ async function start() {
     eingeben("o-lat", "51,05"); eingeben("o-lon", "10,1");
     gleich("Neuer Wegpunkt: erst gesperrt, mit Koordinaten ohne Namen die Bezeichnung „Neuer Wegpunkt“ als Markierung", [neuGesperrt, kartenLink()[1]],
       ["true", "https://maps.apple.com/?ll=51.0500,10.1000&q=Neuer%20Wegpunkt"]);
-    const hinweisKarte = ohneTags(w.document.getElementById("fensterinhalt").innerHTML);
+    const hinweisKarte = ohneTags(w.document.getElementById("inhalt").innerHTML);
     w.fensterSchliessen();
     netz(["geocoding", fx["wetter-ortssuche"]]);
     w.ortFormular("wohnort");
@@ -4033,7 +4035,7 @@ async function start() {
     gleich("Alle Dateien vorhanden; jede JS-Datei mit Kopfzeile, \"use strict\" und gültigem JavaScript", dateiFehler, []);
     // Je Datei eine Funktion, die nur dort steht: alle Dateien sind geladen
     const jeDatei = { "grundlagen": "heute", "daten": "datenEinlesen", "berechnungen": "kmStandAm", "statistik": "bildStatistik", "wartung": "werkstattLage", "kalender": "kalenderDatei",
-      "wetter": "wetterAnsicht", "gefuehlt": "fahrtGefuehlt", "oberflaeche": "zeichnen", "uebersicht": "bildUebersicht", "wetter-ansicht": "bildWetter", "wartung-ansicht": "bildWartung",
+      "wetter": "wetterAnsicht", "gefuehlt": "fahrtGefuehlt", "orte": "ortAusText", "oberflaeche": "zeichnen", "uebersicht": "bildUebersicht", "wetter-ansicht": "bildWetter", "wartung-ansicht": "bildWartung",
       "einstellungen": "bildEinstellungen", "sicherung": "exportInhalt", "bedienung": "AKTIONEN", "start": "serviceWorkerStarten" };
     gleich("Jede JS-Datei ist in der App geladen (je eine Funktion bzw. Tabelle daraus vorhanden)",
       swDateien.filter(d => d.startsWith("js/")).map(d => d.slice(3, -3)).filter(n => !jeDatei[n] || !["function", "object"].includes(w.eval("typeof " + jeDatei[n]))), []);
@@ -5314,6 +5316,136 @@ async function start() {
     w.rueckmeldungGeben("k6", "hin", "zu-kalt");
     gleich("… bei einer Fahrt von vor 5d der Stand „vor 5d“", toast()[0], "Rückmeldung „zu kalt“ gespeichert · Stufe 3 bis 7 °C vor 5d: 1× zu kalt");
     w.Date.now = echtNow;
+
+    // -------------------------------------------------------------
+    // 73. Ortssuche ohne Schreibweise-Raten (B12, Release 5d)
+    // -------------------------------------------------------------
+    abschnitt("73. Ortssuche (B12): Koordinaten und Kartenlinks einfügen, Vorschläge beim Tippen, ohne Netz, Umlaute, zuletzt gewählte Orte, Namensvorschlag, Unterseite");
+    const liesOrt = t => { const o = w.ortAusText(t); return o && (o.kurzlink ? "kurzlink" : [Math.round(o.lat * 1e5) / 1e5, Math.round(o.lon * 1e5) / 1e5, o.name, o.quelle]); };
+    gleich("Dezimalgrad: Komma als Trenner, Semikolon, Schrägstrich (Format der App), Leerzeichen, Dezimalkomma, Süd/West mit Minus", [
+      liesOrt("51.5000, 9.9000"), liesOrt("51,5000; 9,9000"), liesOrt("51,5000 / 9,9000"), liesOrt("51.5 9.9"), liesOrt("51,5000, 9,9000"), liesOrt("-33.8688, -70.6693"), liesOrt("−33,8688; −70,6693")],
+      [[51.5, 9.9, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"],
+        [-33.8688, -70.6693, null, "Koordinaten"], [-33.8688, -70.6693, null, "Koordinaten"]]);
+    gleich("Apple Karten „Koordinaten kopieren“: Grad mit N/S und E/O/W (auch Dezimalkomma), Grad/Minuten/Sekunden", [
+      liesOrt("51.50000° N, 9.90000° E"), liesOrt("51,50000° N, 9,90000° O"), liesOrt("33.86880° S, 70.66930° W"), liesOrt("51° 30′ 0″ N, 9° 54′ 0″ E"), liesOrt("51°30'00.0\"N 9°54'00.0\"E")],
+      [[51.5, 9.9, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"], [-33.8688, -70.6693, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"], [51.5, 9.9, null, "Koordinaten"]]);
+    gleich("Links von Apple Karten (ll=, q=, coordinate=, mit Name), Google Maps (Markierung !3d!4d vor der Kartenmitte @, q=, query=), geo:", [
+      liesOrt("https://maps.apple.com/?ll=51.5,9.9&q=Musterdorf"), liesOrt("https://maps.apple.com/?q=51.5,9.9"), liesOrt("https://maps.apple.com/place?coordinate=51.5,9.9&name=Markierte%20Stelle"),
+      liesOrt("Musterdorf https://maps.apple.com/?address=Musterweg&ll=51.5,9.9&q=Musterweg%201"),
+      liesOrt("https://www.google.com/maps/place/Musterdorf+am+See/@51.49,9.88,15z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d51.5012!4d9.9034"),
+      liesOrt("https://www.google.com/maps/@51.5,9.9,15z"), liesOrt("https://maps.google.com/?q=51.5,9.9"), liesOrt("https://www.google.de/maps/search/?api=1&query=51.5%2C9.9"),
+      liesOrt("geo:51.5,9.9?q=51.5,9.9(Musterdorf)")],
+      [[51.5, 9.9, "Musterdorf", "Apple Karten"], [51.5, 9.9, null, "Apple Karten"], [51.5, 9.9, "Markierte Stelle", "Apple Karten"], [51.5, 9.9, "Musterweg 1", "Apple Karten"],
+        [51.5012, 9.9034, "Musterdorf am See", "Google Maps"], [51.5, 9.9, null, "Google Maps"], [51.5, 9.9, null, "Google Maps"], [51.5, 9.9, null, "Google Maps"],
+        [51.5, 9.9, "Musterdorf", "geo-Link"]]);
+    gleich("Kein Ort: Name, PLZ, Name mit PLZ, Werte außerhalb (Breite 95), andere Links; Kurzlinks erkannt",
+      [liesOrt("Musterdorf"), liesOrt("12345"), liesOrt("12345 Musterdorf"), liesOrt("95.0, 9.9"), liesOrt("51.5, 190"), liesOrt("https://example.com/?ll=51.5,9.9"),
+        liesOrt("https://maps.apple/p/AbCdEf"), liesOrt("https://maps.app.goo.gl/AbCdEf")], [null, null, null, null, null, null, "kurzlink", "kurzlink"]);
+    gleich("Umlaut-Varianten: ä/ö/ü/ß ↔ ae/oe/ue/ss; ohne Umlaut keine", [w.umlautVariante("Müsterdörf"), w.umlautVariante("Muesterdoerf"), w.umlautVariante("Großstraße"), w.umlautVariante("Musterdorf")],
+      ["Muesterdoerf", "Müsterdörf", "Grossstrasse", null]);
+    // Formular als Unterseite
+    setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() } });
+    localStorage.removeItem("radkm-test-letzte-orte");
+    netz();
+    w.ortFormular("arbeitsort");
+    gleich("Ortsformular als Unterseite (‹ Orte und Strecke), Feld „Ort oder PLZ“ mit Hinweis, ohne Knopf „Suchen“",
+      [w.eval("einstellungenSeite"), w.document.getElementById("seitentitel").textContent, ohneTags(w.document.querySelector("#inhalt .zurueck").innerHTML),
+        ohneTags(w.document.querySelector('label[for="o-suche"]').innerHTML), !!w.document.querySelector('#inhalt [data-action="ort-suchen"]'), w.eval("formularSeiteOffen()"),
+        ohneTags(w.document.getElementById("inhalt").innerHTML).includes("Anfang des Namens genügt (Umlaute und Groß/klein egal, PLZ möglich).")],
+      ["ort", "Arbeitsort", "‹ Orte und Strecke", "Ort oder PLZ", false, true, true]);
+    w.document.querySelector('#inhalt [data-action="einstellungen-seite"][data-seite="orte"]:not(.zurueck)').click();
+    gleich("„Abbrechen“: zurück zu Orte und Strecke, nichts gespeichert", [w.eval("einstellungenSeite"), w.eval("daten.einstellungen.wetter.arbeitsort")], ["orte", BEISPIELSTADT]);
+    // Einfügen (ohne Netz)
+    w.ortFormular("arbeitsort");
+    const tippeOrt = text => { feld("o-suche").value = text; feld("o-suche").dispatchEvent(new w.Event("input", { bubbles: true })); };
+    tippeOrt("https://maps.apple.com/?ll=51.12345,10.2&q=Neue%20Stelle");
+    gleich("Apple-Karten-Link eingefügt: Koordinaten sofort in den Feldern (4 Stellen), Name als Vorschlag zum Antippen, keine Abfrage",
+      [feld("o-lat").value, feld("o-lon").value, feld("o-gewaehlt").textContent, feld("o-name").value, ohneTags(feld("o-namenvorschlag").innerHTML), abrufe.length],
+      ["51,1235", "10,2000", "Erkannt (Apple Karten): 51,1235 / 10,2000.", "Beispielstadt", "Name übernehmen: Neue Stelle", 0]);
+    feld("o-namenvorschlag").querySelector("button").click();
+    gleich("Vorschlag antippen: Name übernommen, Karten-Link folgt", [feld("o-name").value, feld("o-karte").getAttribute("href")], ["Neue Stelle", "https://maps.apple.com/?ll=51.1235,10.2000&q=Neue%20Stelle"]);
+    tippeOrt("https://maps.apple/p/AbCdEf");
+    wahr("Kurzlink: Hinweis auf „Koordinaten kopieren“, keine Abfrage", feld("o-treffer").textContent.includes("Kurzlinks (maps.apple/p/…, maps.app.goo.gl/…) lassen sich ohne Netz nicht lesen") && abrufe.length === 0);
+    // Namensvorschlag über die Gemeinde des DWD
+    netz(["Warngebiete_Gemeinden", fx["wetter-dwd-gebiet"]]);
+    feld("o-name").value = "";
+    tippeOrt("51.0001° N, 10.0001° E");
+    for (let i = 0; i < 20 && !feld("o-namenvorschlag").textContent; i++) await warten(20);
+    gleich("Koordinaten ohne Namen: Vorschlag aus der Gemeinde des DWD (nur die gerundeten Koordinaten gehen an den DWD); der Name wird nicht selbst eingetragen",
+      [ohneTags(feld("o-namenvorschlag").innerHTML), feld("o-name").value, abrufe.length, new URL(abrufe[0]).host, decodeURIComponent(abrufe[0]).includes("POINT(51.000 10.000)")],
+      ["Name übernehmen: Gemeinde Musterdorf", "", 1, "maps.dwd.de", true]);
+    // Vorschläge beim Tippen: ab 3 Zeichen, 400 ms Verzögerung, ältere Anfragen abgebrochen
+    const offenOrt = [];
+    w.fetch = (url, opt) => new Promise((ok, nein) => {
+      abrufe.push(url);
+      const signal = opt && opt.signal;
+      const eintrag = { url, ok: daten => ok({ ok: true, status: 200, json: async () => kopie(daten) }), abgebrochen: false };
+      if (signal) signal.addEventListener("abort", () => { eintrag.abgebrochen = true; nein(Object.assign(new Error("abort"), { name: "AbortError" })); });
+      offenOrt.push(eintrag);
+    });
+    abrufe.length = 0;
+    tippeOrt("");
+    tippeOrt("Mu");
+    await warten(450);
+    gleich("Unter 3 Zeichen: keine Abfrage", abrufe.length, 0);
+    tippeOrt("Mus");
+    await warten(100);
+    tippeOrt("Must");
+    await warten(100);
+    tippeOrt("Muste");
+    gleich("Schnelles Tippen: noch keine Abfrage (400 ms nach der letzten Eingabe)", [abrufe.length, feld("o-treffer").textContent], [0, "Suche …"]);
+    await warten(450);
+    gleich("… dann genau eine Abfrage mit dem letzten Text", abrufe.map(u => new URL(u).searchParams.get("name")), ["Muste"]);
+    tippeOrt("Muster");
+    await warten(450);
+    gleich("Neue Eingabe, während die alte Abfrage läuft: die alte wird abgebrochen", [offenOrt.map(o => [new URL(o.url).searchParams.get("name"), o.abgebrochen])], [[["Muste", true], ["Muster", false]]]);
+    offenOrt[1].ok(fx["wetter-ortssuche"]);
+    for (let i = 0; i < 20 && !w.document.querySelector('#o-treffer [data-action="ort-waehlen"]'); i++) await warten(10);
+    gleich("Vorschläge erscheinen", [...w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]')].map(b => ohneTags(b.innerHTML)),
+      ["Musterdorf Beispielland, Deutschland", "Musterdorf am See Beispielland, Deutschland", "Musterdorf Beispielbundesland, Österreich"]);
+    // PLZ und Umlaute
+    netz(["name=12345", fx["wetter-ortssuche"]]);
+    feld("o-suche").value = "12345";
+    await w.ortSuchen();
+    gleich("Suche nach PLZ (Eingabetaste: sofort): PLZ vor dem Bundesland", ohneTags(w.document.querySelector('#o-treffer [data-action="ort-waehlen"]').innerHTML), "Musterdorf 00001 · Beispielland, Deutschland");
+    netz(["name=M%C3%BCsterdorf", fx["wetter-ortssuche"]], ["name=Muesterdorf", fx["wetter-ortssuche-leer"]]);
+    feld("o-suche").value = "Muesterdorf";
+    await w.ortSuchen();
+    gleich("Ohne Treffer: zweiter Versuch mit Umlaut (ue → ü)", [abrufe.map(u => new URL(u).searchParams.get("name")), w.document.querySelectorAll('#o-treffer [data-action="ort-waehlen"]').length],
+      [["Muesterdorf", "Müsterdorf"], 3]);
+    // Ohne Netz
+    let onlineMoeglich73 = true;
+    try { Object.defineProperty(w.navigator, "onLine", { configurable: true, get: () => false }); } catch (e) { onlineMoeglich73 = false; }
+    if (onlineMoeglich73) {
+      abrufe.length = 0;
+      tippeOrt("Musterdorf");
+      await warten(450);
+      gleich("Ohne Netz: sofort der Hinweis, keine Abfrage; Koordinaten einfügen geht weiter",
+        [feld("o-treffer").textContent, abrufe.length, (tippeOrt("51,2; 10,3"), feld("o-lat").value)],
+        ["Ohne Netz keine Ortssuche. Koordinaten oder einen Kartenlink einfügen geht auch ohne Netz.", 0, "51,2000"]);
+      delete w.navigator.onLine;
+    }
+    // Zuletzt gewählte Orte
+    const vorOrte73 = datenText();
+    const merkOrt = (name, lat, lon) => { w.ortFormular("weitererOrt"); feld("o-lat").value = String(lat); feld("o-lon").value = String(lon); feld("o-name").value = name; w.ortSpeichern(); };
+    [["Eins", 50.1, 8.1], ["Zwei", 50.2, 8.2], ["Drei", 50.3, 8.3], ["Vier", 50.4, 8.4], ["Fünf", 50.5, 8.5], ["Sechs", 50.6, 8.6], ["Zwei neu", 50.2, 8.2]].forEach(x => merkOrt(...x));
+    gleich("Zuletzt gewählt: die letzten 5 gespeicherten Orte, neueste zuerst, derselbe Ort nur einmal (nur auf dem Gerät)",
+      w.letzteOrte().map(o => o.name), ["Zwei neu", "Sechs", "Fünf", "Vier", "Drei"]);
+    w.ortFormular("wohnort");
+    gleich("Im Formular bei leerem Suchfeld zum Antippen; beim Tippen ausgeblendet",
+      [[...w.document.querySelectorAll('#o-letzte [data-action="ort-letzter"]')].map(b => ohneTags(b.innerHTML)).slice(0, 2), (tippeOrt("xy"), feld("o-letzte").hidden), (tippeOrt(""), feld("o-letzte").hidden)],
+      [["Zwei neu 50,2000 / 8,2000", "Sechs 50,6000 / 8,6000"], true, false]);
+    w.document.querySelector('#o-letzte [data-action="ort-letzter"][data-i="1"]').click();
+    gleich("Antippen übernimmt Name und Koordinaten", [feld("o-name").value, feld("o-lat").value, feld("o-lon").value], ["Sechs", "50,6000", "8,6000"]);
+    gleich("Nicht in den Daten und nicht in der Sicherung", [JSON.stringify(w.eval("daten")).includes("Fünf"), w.exportInhalt().includes("Fünf"), localStorage.getItem("radkm-test-letzte-orte").includes("Fünf")],
+      [false, false, true]);
+    w.document.querySelector('#inhalt [data-action="ort-letzte-leeren"]').click();
+    gleich("„Liste leeren“", [w.letzteOrte(), feld("o-letzte").textContent], [[], ""]);
+    const ohneWeiteren = t => { const d = JSON.parse(t); d.einstellungen.wetter.weitererOrt = null; return JSON.stringify(d); };
+    gleich("Gespeichert wurde nur der gewählte Ort (weiterer Ort); Suche, Einfügen und die Liste ändern sonst keine Daten",
+      [ohneWeiteren(datenText()) === ohneWeiteren(vorOrte73), w.eval("daten.einstellungen.wetter.weitererOrt.name")], [true, "Zwei neu"]);
+    localStorage.removeItem("radkm-test-letzte-orte");
+    w.eval("aktiverTab = 'uebersicht'; einstellungenSeite = null; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
@@ -5321,6 +5453,7 @@ async function start() {
     localStorage.removeItem(TEST_EXPORT_SCHLUESSEL);
     localStorage.removeItem("radkm-test-wetter");
     localStorage.removeItem("radkm-test-wartungsarten-pruefen");
+    localStorage.removeItem("radkm-test-letzte-orte");
   }
 
   const erg = document.getElementById("ergebnis");

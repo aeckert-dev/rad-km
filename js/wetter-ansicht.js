@@ -316,44 +316,66 @@ function ampelKurztext(g) {
     " mm/h · Regen ab " + zahlFeld(g.gelbRegenWahrscheinlichkeit) + " %" + (gleicherInhalt(g, standardAmpel()) ? " · Standard" : "");
 }
 
-// Zustand des Ort-Formulars; die Koordinaten stehen in den Feldern "Breite" und "Länge"
-let formOrt = null; // { rolle, index (nur Wegpunkt; null = neu), treffer }
+// Zustand des Ort-Formulars (Unterseite „ort“, ab 5d statt eines Fensters); die
+// Koordinaten stehen in den Feldern "Breite" und "Länge"
+let formOrt = null; // { rolle, index (nur Wegpunkt; null = neu), treffer, titel, vorschlag }
 
 // Ort des Formulars: Wohnort, Arbeitsort, weiterer Ort oder ein Wegpunkt
 function ortVon(rolle, index) {
   const w = daten.einstellungen.wetter;
   return rolle === "wegpunkt" ? (index === null ? null : w.wegpunkte[index] || null) : w[rolle];
 }
-function ortFormular(rolle, index = null) {
+function ortTitel(v) {
+  return !v ? "Ort" : v.rolle === "wegpunkt" ? (v.index === null ? "Neuer Wegpunkt" : wegpunktTitel(v.index)) : ORT_TITEL[v.rolle];
+}
+function ortFormular(rolle, index = null) { unterseiteZeigen("ort", { rolle, index }); }
+// Formular als Unterseite (‹ Orte und Strecke): Suche „Ort oder PLZ“ mit Vorschlägen
+// beim Tippen, Koordinaten oder Kartenlinks einfügen, zuletzt gewählte Orte,
+// aktueller Standort, Koordinaten direkt, Name (mit Vorschlag), Apple Karten
+function ortSeite(v) {
+  const { rolle, index } = v;
   const o = ortVon(rolle, index);
-  const titel = rolle === "wegpunkt" ? (index === null ? "Neuer Wegpunkt" : wegpunktTitel(index)) : ORT_TITEL[rolle];
-  formOrt = { rolle, index, treffer: [], titel };
-  fensterOeffnen(
-    '<h2>' + titel + '</h2>' +
+  formOrt = { rolle, index, treffer: [], titel: ortTitel(v), vorschlag: null };
+  const lat = o ? koordinateFeld(o.lat) : "", lon = o ? koordinateFeld(o.lon) : "";
+  return (
     (rolle === "wegpunkt" ? '<p class="klein" style="margin-top:0">Ein Punkt auf deinem Weg zwischen Wohn- und Arbeitsort. Ein neuer Wegpunkt kommt ans Ende, direkt vor den Arbeitsort; ' +
-      'die Reihenfolge änderst du in den Einstellungen mit ▲/▼.</p>' : "") +
-    '<label for="o-suche">Ort suchen</label>' +
-    '<div class="suchzeile"><input type="search" id="o-suche" enterkeyhint="search" autocomplete="off" placeholder="Name des Orts" data-enter="ort-suchen">' +
-    '<button type="button" data-action="ort-suchen">Suchen</button></div>' +
+      'die Reihenfolge änderst du unter „Orte und Strecke“ mit ▲/▼.</p>' : "") +
+    '<label for="o-suche">Ort oder PLZ</label>' +
+    '<input type="search" id="o-suche" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="z. B. Musterdorf oder 12345" ' +
+      'data-input="ort-eingabe" data-enter="ort-suchen">' +
+    '<div class="feldhinweis">Anfang des Namens genügt (Umlaute und Groß/klein egal, PLZ möglich). Vorschläge erscheinen ab ' + ORTSSUCHE_MIN + ' Buchstaben. ' +
+      'Du kannst auch Koordinaten oder einen Link aus Apple Karten oder Google Maps einfügen; die liest die App selbst, ohne Netz.</div>' +
     '<div id="o-treffer"></div>' +
+    '<div id="o-letzte">' + letzteOrteHtml() + '</div>' +
     '<div class="knopfreihe"><button type="button" class="voll" data-action="ort-standort">📍 Aktueller Standort</button></div>' +
     '<label for="o-lat">Koordinaten (Breite und Länge in Grad)</label>' +
     // Ohne Zifferntastatur: auf dem iPhone fehlt dort das Minus (Süd und West)
-    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" data-input="ort-karte" value="' + (o ? koordinateFeld(o.lat) : "") + '">' +
-    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" data-input="ort-karte" value="' + (o ? koordinateFeld(o.lon) : "") + '"></div>' +
-    '<div class="feldhinweis" id="o-gewaehlt">Aus der Suche, vom Standort oder direkt eingeben (Komma oder Punkt, Süd und West mit Minus).</div>' +
+    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" data-input="ort-karte" value="' + lat + '">' +
+    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" data-input="ort-karte" value="' + lon + '"></div>' +
+    '<div class="feldhinweis" id="o-gewaehlt">Aus der Suche, vom Standort, eingefügt oder direkt eingeben (Komma oder Punkt, Süd und West mit Minus).</div>' +
     // Öffnet Apple Karten mit den Werten in den Feldern (auch vor dem Speichern); vorher geht nichts an Apple
-    '<div class="knopfreihe"><a class="knopf voll" id="o-karte" target="_blank" rel="noopener noreferrer">🗺️ In Karten zeigen</a></div>' +
+    '<div class="knopfreihe"><a class="knopf voll" id="o-karte" target="_blank" rel="noopener noreferrer"' +
+      (o ? ' href="' + esc(kartenUrl(o)) + '"' : ' aria-disabled="true"') + '>🗺️ In Karten zeigen</a></div>' +
     '<label for="o-name">Name (zur Anzeige)</label><input type="text" id="o-name" data-input="ort-karte" value="' + esc(o ? o.name : "") + '">' +
+    '<div id="o-namenvorschlag"></div>' +
     (rolle === "weitererOrt" ? '<label class="haken"><input type="checkbox" id="o-aktiv"' + (o && o.aktiv ? " checked" : "") + '>' +
       '<span>Aktiv<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter an diesem Ort (ohne Hin- und Rückfahrt).</span></span></label>' : "") +
     '<div class="feldhinweis">Gespeichert werden die Koordinaten mit 4 Nachkommastellen (ca. 10 m); an die Wetterdienste gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
-    'Für die Suche geht nur der eingegebene Name an Open-Meteo. „In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple.</div>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    'Für die Suche geht nur der eingegebene Text an Open-Meteo, schon beim Tippen. Für den Namensvorschlag gehen die gerundeten Koordinaten an den Deutschen Wetterdienst. ' +
+    '„In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple.</div>' +
+    '<div class="knopfreihe"><button type="button" data-action="einstellungen-seite" data-seite="orte">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="ort-speichern">Speichern</button></div>' +
     (o ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="ort-entfernen">' + (rolle === "wegpunkt" ? "Wegpunkt entfernen" : "Ort entfernen") + '</button></div>' : "")
   );
-  ortKarteAktualisieren();
+}
+// Die zuletzt gewählten Orte zum Antippen (nur auf dem Gerät)
+function letzteOrteHtml() {
+  const l = letzteOrte();
+  if (!l.length) return "";
+  return '<div class="klein" style="margin-top:8px">Zuletzt gewählt</div><div class="liste">' + l.map((o, i) =>
+    '<div class="zeile"><button type="button" class="inhalt" data-action="ort-letzter" data-i="' + i + '"><div class="text"><div>' + esc(o.name) + '</div>' +
+    '<div class="klein">' + koordinatenText(o) + '</div></div></button></div>').join("") + '</div>' +
+    '<button type="button" class="leise weg" data-action="ort-letzte-leeren">Liste leeren</button>';
 }
 // "In Karten zeigen" folgt den Feldern; ohne gültige Koordinaten ist der Knopf gesperrt.
 // Ohne Namen trägt die Markierung die Bezeichnung des Orts (z. B. "Wohnort").
@@ -373,6 +395,13 @@ function ortGewaehltAnzeigen(text) {
   const el = document.getElementById("o-gewaehlt");
   if (el) el.textContent = text;
 }
+function ortTrefferAnzeigen(html) {
+  const el = document.getElementById("o-treffer");
+  if (el) el.innerHTML = html;
+  const letzte = document.getElementById("o-letzte");
+  // Die zuletzt gewählten Orte nur bei leerem Suchfeld
+  if (letzte) letzte.hidden = !!(document.getElementById("o-suche") || {}).value;
+}
 // Koordinaten in die Felder übernehmen (auf 4 Nachkommastellen gerundet)
 function ortKoordinatenSetzen(lat, lon, text) {
   document.getElementById("o-lat").value = koordinateFeld(lat);
@@ -380,32 +409,101 @@ function ortKoordinatenSetzen(lat, lon, text) {
   ortGewaehltAnzeigen(text);
   ortKarteAktualisieren();
 }
+const KEIN_TREFFER = "Kein Ort gefunden. Tipps: kürzer eingeben (der Anfang des Namens genügt, z. B. nur „Muster“), die Postleitzahl versuchen " +
+  "oder Koordinaten bzw. einen Link einfügen – in Apple Karten eine Stelle lange drücken und bei der Markierung die Koordinaten kopieren.";
+const OHNE_NETZ = "Ohne Netz keine Ortssuche. Koordinaten oder einen Kartenlink einfügen geht auch ohne Netz.";
+function trefferHtml(erg) {
+  if (erg.fehler) return '<div class="feldhinweis warn">' + (erg.fehler === "keine Verbindung" ? OHNE_NETZ : "Ortssuche nicht möglich (" + esc(erg.fehler) + ").") + '</div>';
+  if (!formOrt) return "";
+  formOrt.treffer = erg.treffer;
+  const plz = /^\d/.test(erg.text);
+  return erg.treffer.length
+    ? '<div class="liste" style="margin-top:8px">' + erg.treffer.map((t, i) => '<div class="zeile"><button type="button" class="inhalt" data-action="ort-waehlen" data-i="' + i + '">' +
+        '<div class="text"><div>' + esc(t.name) + '</div><div class="klein">' + esc((plz && t.plz ? t.plz + " · " : "") + t.zusatz) + '</div></div></button></div>').join("") + '</div>'
+    : '<div class="feldhinweis warn">' + KEIN_TREFFER + '</div>';
+}
+// Eingabe im Suchfeld: Koordinaten und Kartenlinks sofort (ohne Netz), sonst Vorschläge ab 3 Zeichen
+function ortEingabe() {
+  const el = document.getElementById("o-suche");
+  if (!el || !formOrt) return;
+  const text = el.value.trim();
+  if (ortEingefuegt(text)) return;
+  ortssucheAbbrechen();
+  if (text.length < ORTSSUCHE_MIN) { ortTrefferAnzeigen(""); return; }
+  if (ohneNetz()) { ortTrefferAnzeigen('<div class="feldhinweis warn">' + OHNE_NETZ + '</div>'); return; }
+  ortTrefferAnzeigen('<div class="feldhinweis">Suche …</div>');
+  ortssucheVormerken(text, erg => { if (formOrt && document.getElementById("o-treffer")) ortTrefferAnzeigen(trefferHtml(erg)); });
+}
+// Koordinaten oder Kartenlink im Suchfeld übernehmen; true, wenn es welche waren (auch ein Kurzlink)
+function ortEingefuegt(text) {
+  const c = ortAusText(text);
+  if (!c) return false;
+  ortssucheAbbrechen();
+  if (c.kurzlink) {
+    ortTrefferAnzeigen('<div class="feldhinweis warn">Kurzlinks (maps.apple/p/…, maps.app.goo.gl/…) lassen sich ohne Netz nicht lesen. Bitte in der Karten-App ' +
+      '„Koordinaten kopieren“ bzw. den vollständigen Link verwenden.</div>');
+    return true;
+  }
+  ortTrefferAnzeigen("");
+  ortKoordinatenSetzen(c.lat, c.lon, "Erkannt (" + c.quelle + "): " + koordinatenText({ lat: c.lat, lon: c.lon }) + ".");
+  ortNamenVorschlagen(c, c.name);
+  return true;
+}
+// Name vorschlagen (zum Antippen, nie automatisch): aus dem Kartenlink, sonst mit
+// Netz die Gemeinde des DWD an diesen Koordinaten
+async function ortNamenVorschlagen(o, ausLink = null) {
+  const ziel = () => document.getElementById("o-namenvorschlag");
+  if (!ziel() || !formOrt) return;
+  const zeigen = name => {
+    formOrt.vorschlag = name;
+    ziel().innerHTML = name ? '<button type="button" class="leise weg" data-action="ort-name-uebernehmen">Name übernehmen: ' + esc(name) + '</button>' : "";
+  };
+  zeigen(ausLink);
+  if (ausLink || ohneNetz()) return;
+  const schluessel = koordinateFeld(o.lat) + "/" + koordinateFeld(o.lon);
+  let name = null;
+  try { name = await gemeindeName(o); } catch (e) { return; }
+  // Formular inzwischen verlassen oder andere Koordinaten
+  if (!ziel() || !formOrt || wert("o-lat") + "/" + wert("o-lon") !== schluessel) return;
+  zeigen(name);
+}
+function ortNameUebernehmen() {
+  if (!formOrt || !formOrt.vorschlag) return;
+  document.getElementById("o-name").value = formOrt.vorschlag;
+  document.getElementById("o-namenvorschlag").innerHTML = "";
+  ortKarteAktualisieren();
+}
+// Eingabetaste: sofort suchen (ab 2 Zeichen; Koordinaten und Links ohne Netz)
 async function ortSuchen() {
   const text = wert("o-suche").trim();
-  const ziel = document.getElementById("o-treffer");
-  if (text.length < 2) { ziel.innerHTML = '<div class="feldhinweis warn">Bitte mindestens 2 Buchstaben eingeben.</div>'; return; }
-  ziel.innerHTML = '<div class="feldhinweis">Suche …</div>';
-  let treffer;
-  try {
-    treffer = ortsTrefferLesen(await jsonAbrufen(ortssucheUrl(text)));
-  } catch (e) {
-    if (document.getElementById("o-treffer")) ziel.innerHTML = '<div class="feldhinweis warn">Ortssuche nicht möglich (' + esc(e.message) + ').</div>';
-    return;
-  }
-  // Fenster inzwischen geschlossen oder ein anderes geöffnet
-  if (!formOrt || !document.getElementById("o-treffer")) return;
-  formOrt.treffer = treffer;
-  ziel.innerHTML = treffer.length
-    ? '<div class="liste" style="margin-top:8px">' + treffer.map((t, i) => '<div class="zeile"><button type="button" class="inhalt" data-action="ort-waehlen" data-i="' + i + '">' +
-        '<div class="text"><div>' + esc(t.name) + '</div><div class="klein">' + esc(t.zusatz) + '</div></div></button></div>').join("") + '</div>'
-    : '<div class="feldhinweis warn">Kein Ort gefunden.</div>';
+  if (ortEingefuegt(text)) return;
+  ortssucheAbbrechen();
+  if (text.length < 2) { ortTrefferAnzeigen('<div class="feldhinweis warn">Bitte mindestens 2 Buchstaben eingeben.</div>'); return; }
+  ortTrefferAnzeigen('<div class="feldhinweis">Suche …</div>');
+  let erg;
+  try { erg = await ortssucheAusfuehren(text); } catch (e) { erg = { fehler: e.message }; }
+  // Neuere Suche begonnen, Formular inzwischen verlassen
+  if (!erg || !formOrt || !document.getElementById("o-treffer")) return;
+  ortTrefferAnzeigen(trefferHtml(erg));
 }
 function ortWaehlen(i) {
-  const t = formOrt.treffer[i];
+  const t = formOrt && formOrt.treffer[i];
   if (!t) return;
   document.getElementById("o-name").value = t.name;
-  document.getElementById("o-treffer").innerHTML = "";
+  ortTrefferAnzeigen("");
   ortKoordinatenSetzen(t.lat, t.lon, "Übernommen aus der Suche: " + t.name + (t.zusatz ? ", " + t.zusatz : "") + ".");
+}
+function ortLetzterWaehlen(i) {
+  const o = letzteOrte()[i];
+  if (!o || !formOrt) return;
+  document.getElementById("o-name").value = o.name;
+  ortKoordinatenSetzen(o.lat, o.lon, "Übernommen aus „Zuletzt gewählt“: " + o.name + ".");
+}
+function ortLetzteLeeren() {
+  letzteOrteLeeren();
+  const el = document.getElementById("o-letzte");
+  if (el) el.innerHTML = "";
+  meldung("Liste „Zuletzt gewählt“ geleert");
 }
 function ortStandort() {
   if (!navigator.geolocation) { ortGewaehltAnzeigen("Der Standort ist auf diesem Gerät nicht verfügbar."); return; }
@@ -415,14 +513,22 @@ function ortStandort() {
     const name = document.getElementById("o-name");
     if (!name.value.trim()) name.value = "Aktueller Standort";
     ortKoordinatenSetzen(pos.coords.latitude, pos.coords.longitude, "Übernommen vom aktuellen Standort (auf 4 Nachkommastellen gerundet).");
+    ortNamenVorschlagen({ lat: koordinateSpeichern(pos.coords.latitude), lon: koordinateSpeichern(pos.coords.longitude) });
   }, err => {
     ortGewaehltAnzeigen("Standort nicht verfügbar" + (err && err.code === 1 ? " (Zugriff nicht erlaubt)." : "."));
   }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
 }
+// Nach dem Speichern oder Entfernen zurück zu „Orte und Strecke“
+function ortFertig(text) {
+  ortssucheAbbrechen();
+  unterseiteZeigen("orte");
+  meldung(text);
+  wetterBeiBedarf();
+}
 function ortSpeichern() {
   const name = wert("o-name").trim();
   const lat = zahlLesen(wert("o-lat")), lon = zahlLesen(wert("o-lon"));
-  if (lat === null || lon === null) { alert("Bitte einen Ort suchen und auswählen, den aktuellen Standort verwenden oder Breite und Länge eingeben, z. B. 51,1234 und 10,4567."); return; }
+  if (lat === null || lon === null) { alert("Bitte einen Ort suchen und auswählen, Koordinaten oder einen Kartenlink einfügen, den aktuellen Standort verwenden oder Breite und Länge eingeben, z. B. 51,1234 und 10,4567."); return; }
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { alert("Die Breite muss zwischen −90 und 90 liegen, die Länge zwischen −180 und 180."); return; }
   if (!name) { alert("Bitte einen Namen für den Ort eingeben."); return; }
   const ort = { name, lat: koordinateSpeichern(lat), lon: koordinateSpeichern(lon) };
@@ -439,7 +545,7 @@ function ortSpeichern() {
     if (formOrt.rolle === "weitererOrt") ort.aktiv = document.getElementById("o-aktiv").checked;
     w[formOrt.rolle] = ort;
   }
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung(formOrt.rolle === "wegpunkt" ? "Wegpunkt gespeichert" : "Ort gespeichert"); wetterBeiBedarf(); }
+  if (speichern()) { letzteOrteMerken(ort); ortFertig(formOrt.rolle === "wegpunkt" ? "Wegpunkt gespeichert" : "Ort gespeichert"); }
 }
 async function ortEntfernen() {
   const { rolle, index } = formOrt;
@@ -452,7 +558,7 @@ async function ortEntfernen() {
     w.wegpunkte.splice(index, 1);
     w.windTeilstrecken.splice(index, 2, w.windTeilstrecken[index] || w.windTeilstrecken[index + 1]);
   } else w[rolle] = null;
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung(rolle === "wegpunkt" ? "Wegpunkt entfernt" : "Ort entfernt"); wetterBeiBedarf(); }
+  if (speichern()) ortFertig(rolle === "wegpunkt" ? "Wegpunkt entfernt" : "Ort entfernt");
 }
 // Reihenfolge der Wegpunkte; die Schalter der Teilstrecken bleiben an ihrer Stelle
 function wegpunktVerschieben(i, richtung) {

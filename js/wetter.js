@@ -114,16 +114,22 @@ function kartenUrl(o) {
 function ortssucheUrl(text) { return ORTSSUCHE_URL + "?name=" + encodeURIComponent(text) + "&count=8&language=de&format=json"; }
 
 // Holt JSON. Wirft einen Fehler mit kurzer Begründung (keine Verbindung, Zeitüberschreitung, Fehler 503 …).
-async function jsonAbrufen(url) {
+// "aussen": AbortSignal zum Abbrechen (z. B. eine ältere Ortssuche); dann hat der Fehler "abgebrochen".
+async function jsonAbrufen(url, aussen = null) {
   const abbruch = typeof AbortController === "function" ? new AbortController() : null;
   const timer = abbruch && setTimeout(() => abbruch.abort(), ABRUF_ZEITLIMIT_MS);
+  const abgebrochen = () => { const f = new Error("abgebrochen"); f.abgebrochen = true; return f; };
+  if (aussen && abbruch) { if (aussen.aborted) abbruch.abort(); else aussen.addEventListener("abort", () => abbruch.abort()); }
   try {
     let antwort;
     try {
+      if (aussen && aussen.aborted) throw abgebrochen();
       antwort = await fetch(url, { credentials: "omit", signal: abbruch ? abbruch.signal : undefined });
     } catch (e) {
+      if (aussen && aussen.aborted) throw abgebrochen();
       throw new Error(e && e.name === "AbortError" ? "keine Antwort (Zeitüberschreitung)" : "keine Verbindung");
     }
+    if (aussen && aussen.aborted) throw abgebrochen();
     let inhalt = null;
     try { inhalt = await antwort.json(); } catch (e) { /* kein JSON */ }
     if (!antwort.ok) {
@@ -215,7 +221,8 @@ function brightSkyLesen(antwort) {
 function ortsTrefferLesen(antwort) {
   return (antwort && Array.isArray(antwort.results) ? antwort.results : [])
     .filter(r => r && r.name && istEndlich(r.latitude) && istEndlich(r.longitude))
-    .map(r => ({ name: String(r.name), zusatz: [r.admin1, r.country].filter(Boolean).join(", "), lat: koordinateSpeichern(r.latitude), lon: koordinateSpeichern(r.longitude) }));
+    .map(r => ({ name: String(r.name), zusatz: [r.admin1, r.country].filter(Boolean).join(", "), lat: koordinateSpeichern(r.latitude), lon: koordinateSpeichern(r.longitude),
+      plz: Array.isArray(r.postcodes) && r.postcodes.length ? String(r.postcodes[0]) : null }));
 }
 
 // ---------- Laden und Zwischenspeicher ----------

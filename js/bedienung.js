@@ -118,6 +118,9 @@ const AKTIONEN = {
   "wegpunkt-runter": el => wegpunktVerschieben(Number(el.dataset.i), 1),
   "ort-suchen": () => ortSuchen(),
   "ort-waehlen": el => ortWaehlen(Number(el.dataset.i)),
+  "ort-letzter": el => ortLetzterWaehlen(Number(el.dataset.i)),
+  "ort-letzte-leeren": () => ortLetzteLeeren(),
+  "ort-name-uebernehmen": () => ortNameUebernehmen(),
   "ort-standort": () => ortStandort(),
   "ort-speichern": () => ortSpeichern(),
   "ort-entfernen": () => ortEntfernen(),
@@ -176,6 +179,7 @@ const AENDERUNGEN = {
 const EINGABEN = {
   "termin-vorlauf": () => terminVorlaufEingabe(),
   "ort-karte": () => ortKarteAktualisieren(),
+  "ort-eingabe": () => ortEingabe(),
   "protokoll-km": () => protokollKmEingabe(),
   "prognose-datum": () => prognoseAnzeigen()
 };
