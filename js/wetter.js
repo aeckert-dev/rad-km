@@ -21,7 +21,9 @@ const KARTEN_URL = "https://maps.apple.com/";
 // Der Rückblick reicht etwa bis 2022 zurück; abgefragt wird in Abschnitten von höchstens so vielen Tagen
 const RUECKBLICK_AB = "2022-01-01";
 const RUECKBLICK_TAGE = 31;
-const WERTE_15_MIN = ["temperature_2m", "apparent_temperature", "precipitation", "weather_code", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"];
+// Luftfeuchte und Globalstrahlung (ab 5d) für „gefühlt beim Fahren“ mit derselben Formel wie apparent_temperature
+const WERTE_15_MIN = ["temperature_2m", "apparent_temperature", "precipitation", "weather_code", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
+  "relative_humidity_2m", "shortwave_radiation"];
 const WERTE_STUENDLICH = ["precipitation_probability", "soil_temperature_0cm"];
 // Je Tag (nur Vorhersage): Sonnenauf- und -untergang
 const WERTE_TAEGLICH = ["sunrise", "sunset"];
@@ -152,7 +154,8 @@ function vorhersageLesen(antwort, anzahl) {
       m15: {
         zeit: m.time.map(t => t * 1000), temperatur: spalte(m, "temperature_2m"), gefuehlt: spalte(m, "apparent_temperature"),
         niederschlag: spalte(m, "precipitation"), code: spalte(m, "weather_code"), wind: spalte(m, "wind_speed_10m"),
-        richtung: spalte(m, "wind_direction_10m"), boeen: spalte(m, "wind_gusts_10m")
+        richtung: spalte(m, "wind_direction_10m"), boeen: spalte(m, "wind_gusts_10m"),
+        luftfeuchte: spalte(m, "relative_humidity_2m"), strahlung: spalte(m, "shortwave_radiation")
       },
       stunde: { zeit: s.time.map(t => t * 1000), wahrscheinlichkeit: spalte(s, "precipitation_probability"), boden: spalte(s, "soil_temperature_0cm") },
       sonne: sonneLesen(o.daily)
@@ -610,6 +613,13 @@ function kleidungFuer(gefuehlt, wahrscheinlichkeit, k = daten.einstellungen.wett
   });
   return { index: i, stufe, mitRegen, bereiche, regenBereiche, text: empfehlungText(bereiche) };
 }
+// Wonach die Kleidungsstufe gewählt wird: „gefühlt beim Fahren“ (Grundlage
+// "fahrt"), wenn es berechnet werden konnte, sonst die gefühlte Temperatur von
+// Open-Meteo. Liefert { grundlage, wert }.
+function stufenGrundlage(gefuehlt, beimFahren, k = daten.einstellungen.wetter.kleidung) {
+  const fahrt = k.grundlage === "fahrt" && !!beimFahren;
+  return { grundlage: fahrt ? "fahrt" : "gefuehlt", wert: fahrt ? beimFahren.beimFahren : gefuehlt };
+}
 // Hinweis, wenn die Rückfahrt andere Kleidung braucht als die Hinfahrt, z. B.
 // "Für die Rückfahrt einpacken: Regenhose, Gamaschen; nicht mehr nötig: Schal."
 function kleidungsHinweis(hin, rueck) {
@@ -849,12 +859,17 @@ function tagesAnsicht(orteDaten, warnungen, datum, h) {
 function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w, sonnenOrt = 0) {
   const f = w[art];
   const von = zeitpunktAm(tag.datum, minutenAus(f.von)), bis = zeitpunktAm(tag.datum, minutenAus(f.bis));
-  const a = { art, name, fahrt: f, von, bis, vorbei: tag.heute && jetzt >= bis, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null };
+  const a = { art, name, fahrt: f, von, bis, vorbei: tag.heute && jetzt >= bis, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null,
+    beimFahren: null, grundlage: null };
   if (!orteDaten) return a;
   a.sonne = sonnenZeile(art, sonneAm(orteDaten[sonnenOrt], tag.datum), von, bis);
   a.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
   if (!a.bewertung) return a;
-  a.kleidung = kleidungFuer(a.bewertung.werte.gefuehlt, a.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
+  // Kleidung nach „gefühlt beim Fahren“ (oder, je nach Einstellung, nach der gefühlten Temperatur von Open-Meteo)
+  a.beimFahren = fahrtGefuehlt(orteDaten, strecken, von, bis, fahrgeschwindigkeit(art, w).kmh, art === "rueckfahrt");
+  const sg = stufenGrundlage(a.bewertung.werte.gefuehlt, a.beimFahren, w.kleidung);
+  a.grundlage = sg.grundlage;
+  a.kleidung = kleidungFuer(sg.wert, a.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
   // Wind: erste Zeile mit Himmelsrichtung und Böen, darunter je Teilstrecke, die zählt
   const wv = a.bewertung.werte;
   a.wind = windAllgemein(wv.windProben, wv.boeen);
@@ -960,12 +975,17 @@ function jetztAnsicht(a, w, v, wa, jetzt, h) {
   const d = new Date(jetzt), dauer = w.hinfahrt.dauer;
   const vonMin = d.getHours() * 60 + d.getMinutes() - d.getMinutes() % 15;
   const von = zeitpunktAm(h, vonMin), bis = zeitpunktAm(h, vonMin + dauer);
-  const f = { art: "jetzt", name: "Jetzt", fahrt: { von: uhrzeit(von), bis: uhrzeit(bis), dauer }, von, bis, vorbei: false, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null };
+  const f = { art: "jetzt", name: "Jetzt", fahrt: { von: uhrzeit(von), bis: uhrzeit(bis), dauer }, von, bis, vorbei: false, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null,
+    beimFahren: null, grundlage: null };
   if (orteDaten) {
     f.sonne = sonnenZeile("jetzt", sonneAm(orteDaten[0], h), von, bis, jetzt);
     f.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
     if (f.bewertung) {
-      f.kleidung = kleidungFuer(f.bewertung.werte.gefuehlt, f.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
+      // Ohne Fahrtrichtung: „beim Fahren“ als Mittel über alle Richtungen, mit der Spanne von Gegen- bis Rückenwind
+      f.beimFahren = fahrtGefuehlt(orteDaten, null, von, bis, fahrgeschwindigkeit("hinfahrt", w).kmh);
+      const sg = stufenGrundlage(f.bewertung.werte.gefuehlt, f.beimFahren, w.kleidung);
+      f.grundlage = sg.grundlage;
+      f.kleidung = kleidungFuer(sg.wert, f.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
       // Die Fahrtrichtung ist unbekannt: nur die erste Zeile (Wind mit Himmelsrichtung und Böen)
       f.wind = windAllgemein(f.bewertung.werte.windProben, f.bewertung.werte.boeen);
       f.abfahrt = jetztAbfahrtsfenster(orteDaten, warnungen, h, vonMin, dauer, w.ampel);
@@ -986,19 +1006,29 @@ function arbeitswegOrte(w = daten.einstellungen.wetter) { return streckenOrte(w)
 // Hin- und Rückfahrt am Tag "datum" aus Vorhersage- oder Rückblickdaten. Die
 // Ampel kommt nur aus den Wetterwerten, ohne amtliche Warnungen (die gibt es
 // im Rückblick nicht). null, wenn keine der Fahrten abgedeckt ist.
-function fahrtenWetter(orteDaten, datum, quelle, stand) {
+// Ab 5d je Fahrt dazu „gefühlt beim Fahren“ mit Windrichtung, Anteilen von
+// Gegen-, Seiten- und Rückenwind, den Werten je Teilstrecke und der
+// Fahrgeschwindigkeit, die Grundlage der Stufe und wann sie empfohlen wurde
+// ("berechnet", ms).
+function fahrtenWetter(orteDaten, datum, quelle, stand, berechnet = Date.now()) {
   const w = daten.einstellungen.wetter;
   const r1 = x => Math.round(x * 10) / 10;
-  const fahrt = f => {
-    const b = fahrtBewerten(orteDaten, [], zeitpunktAm(datum, minutenAus(f.von)), zeitpunktAm(datum, minutenAus(f.bis)), w.ampel);
+  const strecken = teilstrecken(w);
+  const mitStrecke = strecken.some(t => t.laenge > 0) ? strecken : null;
+  const fahrt = art => {
+    const f = w[art], von = zeitpunktAm(datum, minutenAus(f.von)), bis = zeitpunktAm(datum, minutenAus(f.bis));
+    const b = fahrtBewerten(orteDaten, [], von, bis, w.ampel);
     if (!b) return null;
     const v = b.werte;
     const wind = v.windProben.length ? v.windProben.reduce((x, p) => x + p.v, 0) / v.windProben.length : 0;
-    const kl = kleidungFuer(v.gefuehlt, v.regenWahrscheinlichkeit, w.kleidung);
-    return { temperatur: r1(v.temperatur), gefuehlt: r1(v.gefuehlt), niederschlag: v.niederschlag, regenWahrscheinlichkeit: v.regenWahrscheinlichkeit,
-      wind: r1(wind), boeen: r1(v.boeen), ampel: b.farbe, kleidung: kl.stufe.id, empfehlung: Object.assign({}, kl.bereiche), regenkleidung: kl.mitRegen, rueckmeldung: null };
+    const g = fahrtGefuehlt(orteDaten, mitStrecke, von, bis, fahrgeschwindigkeit(art, w).kmh, art === "rueckfahrt");
+    const sg = stufenGrundlage(v.gefuehlt, g, w.kleidung);
+    const kl = kleidungFuer(sg.wert, v.regenWahrscheinlichkeit, w.kleidung);
+    return Object.assign({ temperatur: r1(v.temperatur), gefuehlt: r1(v.gefuehlt), niederschlag: v.niederschlag, regenWahrscheinlichkeit: v.regenWahrscheinlichkeit,
+      wind: r1(wind), boeen: r1(v.boeen), ampel: b.farbe, kleidung: kl.stufe.id, empfehlung: Object.assign({}, kl.bereiche), regenkleidung: kl.mitRegen, rueckmeldung: null },
+      fahrtGefuehltSpeichern(g), { grundlage: sg.grundlage, empfohlenAm: new Date(berechnet).toISOString() });
   };
-  const hin = fahrt(w.hinfahrt), rueck = fahrt(w.rueckfahrt);
+  const hin = fahrt("hinfahrt"), rueck = fahrt("rueckfahrt");
   return hin || rueck ? { quelle, stand: new Date(stand).toISOString(), hin, rueck } : null;
 }
 // Wetter für den Tag "datum" aus der zuletzt geladenen Vorhersage (nur, wenn sie zu Wohn- und Arbeitsort gehört)
@@ -1013,10 +1043,36 @@ function eintragWetterSetzen(e) {
   if (!mitWetter(e)) e.wetter = null;
   else if (!e.wetter) e.wetter = wetterAusVorhersage(e.datum);
 }
-// Vergangene Fahrten zur Arbeit ohne Wetter oder mit dem Wetter aus der Vorhersage (ab Beginn des Rückblicks)
+// Fehlen einer gespeicherten Fahrt die Werte „beim Fahren“ (Wetter von vor 5d)?
+function ohneBeimFahren(ew) { return !!ew && [ew.hin, ew.rueck].some(f => f && f.beimFahren === null); }
+// Vergangene Fahrten zur Arbeit ohne Wetter, mit dem Wetter aus der Vorhersage
+// oder (ab 5d) mit Rückblick-Wetter ohne die Werte „beim Fahren“ (ab Beginn des Rückblicks)
 function rueckblickKandidaten(h = heute()) {
-  return daten.eintraege.filter(e => mitWetter(e) && e.datum < h && e.datum >= RUECKBLICK_AB && (!e.wetter || e.wetter.quelle === "vorhersage"))
+  return daten.eintraege.filter(e => mitWetter(e) && e.datum < h && e.datum >= RUECKBLICK_AB &&
+    (!e.wetter || e.wetter.quelle === "vorhersage" || ohneBeimFahren(e.wetter)))
     .sort((a, b) => a.datum.localeCompare(b.datum));
+}
+// Rückblick in ein gespeichertes Wetter übernehmen ("alt" darf null sein):
+// - Rückblick-Wetter: nur die Werte „beim Fahren“ ergänzen; alle vorhandenen
+//   Werte, die empfohlene Kleidung und die Rückmeldung bleiben unverändert;
+// - sonst (kein Wetter, Wetter aus der Vorhersage): die Werte aus dem Rückblick,
+//   dabei bleiben empfohlene Kleidung (Stufe, Empfehlung, Regenkleidung, Grundlage,
+//   Zeitpunkt der Empfehlung) und Rückmeldung; eine Fahrt ohne Rückblick bleibt.
+function rueckblickUebernehmen(alt, neu) {
+  const MESS = Object.keys(FAHRT_WERTE_11);
+  if (alt && alt.quelle === "rueckblick") {
+    const ergaenzt = art => alt[art] && neu[art] && alt[art].beimFahren === null
+      ? Object.assign({}, alt[art], Object.fromEntries(MESS.map(k => [k, neu[art][k]]))) : alt[art];
+    return Object.assign({}, alt, { hin: ergaenzt("hin"), rueck: ergaenzt("rueck") });
+  }
+  const erg = Object.assign({}, neu);
+  ["hin", "rueck"].forEach(art => {
+    const a = alt && alt[art];
+    if (a && !neu[art]) erg[art] = a;
+    else if (a && a.kleidung) erg[art] = Object.assign({}, neu[art], { kleidung: a.kleidung, empfehlung: a.empfehlung, regenkleidung: a.regenkleidung,
+      rueckmeldung: a.rueckmeldung, grundlage: a.grundlage, empfohlenAm: a.empfohlenAm });
+  });
+  return erg;
 }
 // Abschnitte für die Abfragen: aufeinanderfolgende Daten, je höchstens RUECKBLICK_TAGE Tage
 function rueckblickAbschnitte(liste) {

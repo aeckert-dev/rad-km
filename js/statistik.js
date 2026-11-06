@@ -186,7 +186,8 @@ function wetterStatistik(h) {
     '<button type="button" class="voll" data-action="wetter-nachtragen"' + (offen && !rueckblickLaeuft ? "" : " disabled") + '>' +
     (rueckblickLaeuft ? "Rückblick läuft …" : "Wetter nachtragen …" + (offen ? " (" + offen + ")" : "")) + '</button>' +
     '<p class="klein">Holt für vergangene Fahrten zur Arbeit ohne Wetter oder mit dem Wetter aus der Vorhersage das Wetter aus dem Rückblick von Open-Meteo ' +
-    '(ab 2022, für die aktuellen Wohn- und Arbeitsorte und Wegpunkte). Vorher fragt die App nach.</p></div>';
+    '(ab 2022, für die aktuellen Wohn- und Arbeitsorte und Wegpunkte). Bei Fahrten, die schon Wetter aus dem Rückblick haben, ergänzt es nur die Werte ' +
+    '„beim Fahren“. Vorher fragt die App nach.</p></div>';
 }
 
 let rueckblickLaeuft = false;
@@ -198,14 +199,15 @@ async function wetterNachtragen(jetzt = Date.now()) {
   if (!orte.length) { alert("Bitte zuerst unter Einstellungen → Wetter Wohn- und Arbeitsort festlegen."); return; }
   const h = isoAusDate(new Date(jetzt));
   const liste = rueckblickKandidaten(h);
-  if (!liste.length) { meldung("Alle vergangenen Fahrten zur Arbeit haben schon Wetter aus dem Rückblick"); return; }
+  if (!liste.length) { meldung("Alle vergangenen Fahrten zur Arbeit haben schon Wetter aus dem Rückblick (mit den Werten „beim Fahren“)"); return; }
   const n = liste.length;
   const zeitraum = (von, bis) => von === bis ? datumText(von) : datumText(von) + "–" + datumText(bis);
   // Datum je Eintrag jetzt merken: wird ein Eintrag während des Abrufs geändert, bleibt er, wie er ist
   const plan = rueckblickAbschnitte(liste).map(ab => ({ von: ab.von, bis: ab.bis, eintraege: ab.eintraege.map(e => ({ id: e.id, datum: e.datum })) }));
   if (!await frage("Für " + (n === 1 ? "1 Fahrtag" : n + " Fahrtage") + " zur Arbeit (" + zeitraum(liste[0].datum, liste[n - 1].datum) + ") " +
     "das Wetter aus dem Rückblick holen?<br><br>Dazu gehen die gerundeten Koordinaten von Wohn- und Arbeitsort" + (orte.length > 2 ? " und der Wegpunkte" : "") + " an Open-Meteo. " +
-    "Wetter aus der Vorhersage wird ersetzt; empfohlene Kleidung und Rückmeldungen bleiben.", "Wetter nachtragen", "Abbrechen")) return;
+    "Wetter aus der Vorhersage wird ersetzt; bei Wetter aus dem Rückblick kommen nur die Werte „beim Fahren“ dazu. Empfohlene Kleidung und Rückmeldungen bleiben.",
+    "Wetter nachtragen", "Abbrechen")) return;
   rueckblickLaeuft = true;
   zeichnen();
   const ergebnisse = new Map();
@@ -216,7 +218,7 @@ async function wetterNachtragen(jetzt = Date.now()) {
       let orteDaten;
       try { orteDaten = vorhersageLesen(await jsonAbrufen(rueckblickUrl(orte, ab.von, ab.bis)), orte.length); }
       catch (e) { fehler = e.message; break; }
-      ab.eintraege.forEach(e => ergebnisse.set(e.id, { datum: e.datum, wetter: fahrtenWetter(orteDaten, e.datum, "rueckblick", jetzt) }));
+      ab.eintraege.forEach(e => ergebnisse.set(e.id, { datum: e.datum, wetter: fahrtenWetter(orteDaten, e.datum, "rueckblick", jetzt, jetzt) }));
     }
   } finally {
     rueckblickLaeuft = false;
@@ -233,12 +235,7 @@ async function wetterNachtragen(jetzt = Date.now()) {
       // Inzwischen geänderte Einträge (anderes Datum, kein Arbeitsweg mehr) bleiben, wie sie sind
       const e = daten.eintraege.find(x => x.id === id);
       if (!neu || !e || e.datum !== datum || !mitWetter(e)) return;
-      ["hin", "rueck"].forEach(art => {
-        const alt = e.wetter && e.wetter[art];
-        if (alt && !neu[art]) neu[art] = alt;
-        else if (alt && alt.kleidung) Object.assign(neu[art], { kleidung: alt.kleidung, empfehlung: alt.empfehlung, regenkleidung: alt.regenkleidung, rueckmeldung: alt.rueckmeldung });
-      });
-      e.wetter = neu;
+      e.wetter = rueckblickUebernehmen(e.wetter, neu);
     });
   }, "Wetter für " + (gefunden === 1 ? "1 Fahrtag" : gefunden + " Fahrtage") + " nachgetragen" + (ohne ? ", " + ohne + " ohne Daten" : "") +
     (fehler ? " (Rückblick abgebrochen: " + fehler + ")" : ""));

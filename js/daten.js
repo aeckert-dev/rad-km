@@ -273,9 +273,10 @@ const MIGRATIONEN = {
   10: alt => {
     const d = Object.assign({}, alt, { version: 11 });
     const es = alt.einstellungen;
+    // Nur fehlende Felder ergänzen; vorhandene bleiben, wie sie sind
     if (istObjekt(es) && istObjekt(es.wetter)) {
-      const w = Object.assign({}, es.wetter, { geschwindigkeit: null });
-      if (istObjekt(w.kleidung)) w.kleidung = Object.assign({}, w.kleidung, { grundlage: "fahrt", protokoll: [] });
+      const w = Object.assign({ geschwindigkeit: null }, es.wetter);
+      if (istObjekt(w.kleidung)) w.kleidung = Object.assign({ grundlage: "fahrt", protokoll: [] }, w.kleidung);
       d.einstellungen = Object.assign({}, es, { wetter: w });
     }
     if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
@@ -288,7 +289,7 @@ const MIGRATIONEN = {
 const FAHRT_WERTE_11 = { beimFahren: null, luftfeuchte: null, windRichtung: null, windAnteil: null, teilstrecken: null, geschwindigkeit: null };
 function fahrtAusVersion10(f) {
   if (!istObjekt(f)) return f;
-  return Object.assign({}, f, FAHRT_WERTE_11, { grundlage: f.kleidung ? "gefuehlt" : null, empfohlenAm: null });
+  return Object.assign({}, FAHRT_WERTE_11, { grundlage: f.kleidung ? "gefuehlt" : null, empfohlenAm: null }, f);
 }
 
 // Ist eine Wartungsart aus Version 7 ein Auftrag? Mit Zeitfenster, einmalig oder
