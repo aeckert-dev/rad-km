@@ -1858,7 +1858,7 @@ async function start() {
     seite = ohneTags(ablageR.innerHTML);
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
-        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
+        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung gefühlt 9 °C · beim Fahren 7 °C (kaum Wind) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
         "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
@@ -2172,7 +2172,7 @@ async function start() {
     w.eval("aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     gleich("Einstellungen → Wetter: Kleidung und Ampel-Grenzen mit Kurzfassung",
       [...w.document.querySelectorAll('#inhalt [data-action="kleidung-bearbeiten"], #inhalt [data-action="ampel-bearbeiten"]')].map(b => ohneTags(b.innerHTML)),
-      ["Kleidung 8 Stufen · Regenzusatz ab 40 % / 60 % · Rückmeldung an · Standard ›", "Ampel-Grenzen Böen 40 / 60 km/h · Niederschlag 0,5 / 5 mm/h · Regen ab 50 % · Standard ›"]);
+      ["Kleidung 8 Stufen nach „gefühlt“ · Regenzusatz ab 40 % / 60 % · Rückmeldung an · Standard ›", "Ampel-Grenzen Böen 40 / 60 km/h · Niederschlag 0,5 / 5 mm/h · Regen ab 50 % · Standard ›"]);
     w.document.querySelector('#inhalt [data-action="ampel-bearbeiten"]').click();
     const AF = ["gelbRegenWahrscheinlichkeit", "gelbNiederschlag", "rotStarkregen", "gelbBoeen", "rotBoeen", "gelbTemperatur", "glaetteTemperatur"];
     gleich("Formular mit den aktuellen Werten (Komma)", [ohneTags(w.document.getElementById("seitentitel").innerHTML), AF.map(f => feld("ag-" + f).value), feld("ag-rotWarnstufe").value],
@@ -2325,7 +2325,7 @@ async function start() {
       [kleidungJetzt(), toast()], [Object.assign(kopie(STD_WETTER.kleidung), { rueckmeldung: false, grundlage: "gefuehlt" }), ["Kleidungsregeln zurückgesetzt", true]]);
     w.rueckgaengig();
     gleich("… mit „Rückgängig“ wieder die eigenen Regeln", JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung, meineKleidung);
-    gleich("Kurzfassung für eigene Regeln", w.kleidungKurztext(meineKleidung), "8 Stufen · Regenzusatz ab 30 % / 60 % · Rückmeldung aus");
+    gleich("Kurzfassung für eigene Regeln", w.kleidungKurztext(meineKleidung), "8 Stufen nach „gefühlt“ · Regenzusatz ab 30 % / 60 % · Rückmeldung aus");
     w.document.querySelector("#inhalt .zurueck").click();
     gleich("„‹ Einstellungen“ führt zurück zur Hauptseite", [w.eval("einstellungenSeite"), w.document.getElementById("seitentitel").textContent], [null, "Einstellungen"]);
 
@@ -2421,7 +2421,7 @@ async function start() {
       [offen(zeit(D, "17:30")), karte.includes("Wie war die Kleidung?"), detailAus.includes("Wie war die Kleidung?"), !!w.document.querySelector('#fensterinhalt [data-action="rueckmeldung"]'),
         detailAus2.includes("Rückmeldung: passte"), detailAus.includes("👕 leichte Mütze"), kopie(w.eval("daten.eintraege")), w.auswertungText(w.rueckmeldungenAuswerten().stufe5),
         w.kleidungKurztext(kleidungJetzt())],
-      [[], false, false, false, true, true, rmVorher, "1× passte", "8 Stufen · Regenzusatz ab 40 % / 60 % · Rückmeldung aus · Standard"]);
+      [[], false, false, false, true, true, rmVorher, "1× passte", "8 Stufen nach „gefühlt“ · Regenzusatz ab 40 % / 60 % · Rückmeldung aus · Standard"]);
     w.fensterSchliessen();
     w.kleidungFormular();
     feld("k-rueckmeldung").click();
@@ -2952,7 +2952,7 @@ async function start() {
         "Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00"]);
     seite = seiteBei(zeit(SA, "10:07"));
     wahr("Reiter: Karte „Jetzt“ mit Ampel, Werten (Temperatur, gefühlt, Regen), Kleidung, Wind mit Böen und Abfahrtsfenster",
-      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 🌇 Sonnenuntergang 16:42 👕 Kleidung (gefühlt 9 °C) Kopf leichte Mütze " +
+      seite.includes("Jetzt 10:00–11:00 gelb: 70 % Regen ab 10:30 10 °C (gefühlt 9 °C) · Regen 70 %, 0,6 mm 🌇 Sonnenuntergang 16:42 👕 Kleidung gefühlt 9 °C · beim Fahren ca. 6 °C (4 °C bei Gegen-, 9 °C bei Rückenwind) Kopf leichte Mütze " +
         "Hände Übergangshandschuhe ☔ Oberkörper T-Shirt, warmer Pullover, Regenjacke ☔ Beine Hose, Regenhose ☔ Füße Socken, Gamaschen ☔") &&
         seite.includes("🧭 Wind 20 km/h aus West, Böen bis 15 km/h 10:00 11:00 12:00 🕒 Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00") &&
         seite.includes("Amtliche Warnungen") && seite.includes("Stand: Vorhersage") && seite.includes("Aktualisieren") && seite.includes("Vorhersage: Open-Meteo.com"), seite);
@@ -5077,6 +5077,110 @@ async function start() {
     gleich("Abfrage: Luftfeuchte und Globalstrahlung je 15 Minuten (Vorhersage und Rückblick)",
       ["relative_humidity_2m", "shortwave_radiation"].map(x => new URL(w.vorhersageUrl([MUSTERDORF])).searchParams.get("minutely_15").split(",").includes(x) &&
         new URL(w.rueckblickUrl([MUSTERDORF], "2026-10-01", "2026-10-02")).searchParams.get("minutely_15").split(",").includes(x)), [true, true]);
+
+    // -------------------------------------------------------------
+    // 71. Gefühlt beim Fahren in der Oberfläche (N5): Fahrt-Karte, „Jetzt“, Seite Kleidung, Eintrag, „Wetter nachtragen“
+    // -------------------------------------------------------------
+    abschnitt("71. Gefühlt beim Fahren (N5): Fahrt-Karte, „Jetzt“-Karte, Umschalter, Fahrgeschwindigkeit, Plausibilitätsanzeige, Eintrag und „Wetter nachtragen“");
+    const SO = zeit("2026-11-08", "18:00");    // Sonntagabend: der Reiter zeigt Mo 09.11.
+    const mitFahrt = (aend = {}) => wetterEinst(Object.assign({ arbeitsort: OSTDORF, kleidung: Object.assign(kopie(STD_WETTER.kleidung), { grundlage: "fahrt" }) }, aend));
+    setze7({ fahrrad: F("2026-01-01", 0), vorlagen: [{ id: "v-einkauf", name: "Einkauf", km: 3.5, arbeitsweg: false }, { id: "v-arbeit", name: "Arbeit", km: 34, arbeitsweg: true }],
+      einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt() } });
+    let a71 = await laden(kopie(gfRoh), fx["wetter-dwd-leer"], SO);
+    const [hin71, rueck71] = a71.fahrten;
+    gleich("Mo, Wind aus Ost: Hinfahrt Gegenwind, Rückfahrt Rückenwind; Grundlage „beim Fahren“, 17 km/h aus der Vorlage (34 km, 60 min)",
+      [a71.tag.datum, hin71.grundlage, hin71.beimFahren.lage, rueck71.beimFahren.lage, hin71.beimFahren.geschwindigkeit], ["2026-11-09", "fahrt", "Gegenwind", "Rückenwind", 17]);
+    gleich("Stufe nach „beim Fahren“ gewählt (Gegenwind kälter als gefühlt)", [hin71.kleidung.stufe.id, hin71.beimFahren.beimFahren < hin71.bewertung.werte.gefuehlt],
+      [w.kleidungFuer(hin71.beimFahren.beimFahren, hin71.bewertung.werte.regenWahrscheinlichkeit, w.eval("daten.einstellungen.wetter.kleidung")).stufe.id, true]);
+    const karte71 = w.bildWetter(SO);
+    const zeileHin = "gefühlt " + w.gradText(hin71.bewertung.werte.gefuehlt) + " · <strong>beim Fahren " + w.gradText(hin71.beimFahren.beimFahren) + "</strong> (Gegenwind)";
+    wahr("Fahrt-Karte: „gefühlt … · beim Fahren … (Gegenwind)“, fett der Wert für die Stufe; Rückfahrt mit Rückenwind",
+      karte71.includes("👕 Kleidung</div><div class=\"klein\">" + zeileHin) && karte71.includes("</strong> (Rückenwind)"), karte71);
+    // Seite Kleidung
+    w.kleidungFormular();
+    const seite71 = () => w.document.getElementById("inhalt");
+    const knoepfe71 = () => [...seite71().querySelectorAll('[data-action="kleidung-grundlage"]')].map(b => [b.dataset.wert, b.textContent, b.getAttribute("aria-pressed")]);
+    gleich("Seite Kleidung: Umschalter „Stufe wählen nach“ mit „gefühlt beim Fahren“ (Standard, gewählt) und „gefühlt (Open-Meteo)“", knoepfe71(),
+      [["fahrt", "gefühlt beim Fahren", "true"], ["gefuehlt", "gefühlt (Open-Meteo)", "false"]]);
+    const text71 = () => ohneTags(seite71().innerHTML);
+    wahr("… mit Erklärung: meist 1–3 °C unter „gefühlt“, die Empfehlung oft eine Stufe wärmer", text71().includes("Es liegt meist 1–3 °C unter „gefühlt“ von Open-Meteo (für einen stehenden Menschen); " +
+      "die Empfehlung fällt dadurch oft eine Stufe wärmer aus."), text71());
+    wahr("Fahrgeschwindigkeit: leer = automatisch, mit Herkunft", feld("k-geschwindigkeit").value === "" &&
+      text71().includes("Leer = automatisch: 17 km/h aus der Vorlage „Arbeit“ (34 km, je Richtung die Hälfte in 60 min)."), text71());
+    const pl71 = w.plausibilitaet(w.eval("wetter.vorhersage.orte"));
+    wahr("Plausibilitätsanzeige (Testmodus): größte Abweichung über alle Schritte beider Orte, Toleranz eingehalten",
+      text71().includes("Plausibilität (Testmodus) Größte Abweichung " + pl71.abweichung.toFixed(2).replace(".", ",") + " °C über 1152 Schritte (2 Orte)") &&
+      text71().includes("Toleranz 0,3 °C: eingehalten"), text71());
+    seite71().querySelector('[data-action="kleidung-grundlage"][data-wert="gefuehlt"]').click();
+    gleich("Umschalter auf „gefühlt (Open-Meteo)“: gespeichert, Meldung; die Stufe richtet sich nach gefühlt, fett ist jetzt gefühlt",
+      [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).einstellungen.wetter.kleidung.grundlage, toast()[0], knoepfe71().map(k => k[2]),
+        w.wetterAnsicht(SO).fahrten[0].grundlage, w.wetterAnsicht(SO).fahrten[0].kleidung.stufe.id, w.bildWetter(SO).includes("<strong>gefühlt " + w.gradText(hin71.bewertung.werte.gefuehlt) + "</strong>")],
+      ["gefuehlt", "Stufe nach „gefühlt“ (Open-Meteo)", ["false", "true"], "gefuehlt", w.kleidungFuer(hin71.bewertung.werte.gefuehlt, 0, w.eval("daten.einstellungen.wetter.kleidung")).stufe.id, true]);
+    seite71().querySelector('[data-action="kleidung-grundlage"][data-wert="fahrt"]').click();
+    const geschw = v => { feld("k-geschwindigkeit").value = v; feld("k-geschwindigkeit").dispatchEvent(new w.Event("change", { bubbles: true })); return w.eval("daten.einstellungen.wetter.geschwindigkeit"); };
+    alerts.length = 0;
+    gleich("Eigene Fahrgeschwindigkeit „20,5“ gespeichert, gilt für die Fahrt; „3“ und „schnell“ abgelehnt (Feld zurückgesetzt); leer = wieder automatisch",
+      [geschw("20,5"), w.wetterAnsicht(SO).fahrten[0].beimFahren.geschwindigkeit, text71().includes("Es gilt 20,5 km/h (automatisch wären es 17 km/h"),
+        geschw("3"), feld("k-geschwindigkeit").value, geschw("schnell"), alerts.length, geschw(""), w.wetterAnsicht(SO).fahrten[0].beimFahren.geschwindigkeit],
+      [20.5, 20.5, true, 20.5, "20,5", 20.5, 2, null, 17]);
+    wetterLeeren();
+    w.kleidungFormular();
+    wahr("Plausibilitätsanzeige ohne geladene Vorhersage: Hinweis auf „Aktualisieren“", text71().includes("Keine Vorhersage geladen. Im Testmodus lädt die App das Wetter nur mit „Aktualisieren“"), text71());
+    a71 = await laden(kopie(gfRoh), fx["wetter-dwd-leer"], SO);
+    // „Jetzt“: ohne Fahrtrichtung, Mittel aller Richtungen mit Spanne
+    const SO10 = zeit("2026-11-08", "10:07");
+    const j71 = w.wetterAnsicht(SO10).jetzt.fahrt;
+    gleich("„Jetzt“: beim Fahren als Mittel aller Richtungen (Stufe danach), mit Gegen- und Rückenwind", [j71.grundlage, j71.beimFahren.ohneRichtung,
+      j71.beimFahren.gegen < j71.beimFahren.beimFahren && j71.beimFahren.beimFahren < j71.beimFahren.ruecken, j71.kleidung.stufe.id],
+      ["fahrt", true, true, w.kleidungFuer(j71.beimFahren.beimFahren, j71.bewertung.werte.regenWahrscheinlichkeit, w.eval("daten.einstellungen.wetter.kleidung")).stufe.id]);
+    const jetztKarte71 = ohneTags(w.bildWetter(SO10));
+    wahr("„Jetzt“-Karte: „beim Fahren ca. … (… bei Gegen-, … bei Rückenwind)“", jetztKarte71.includes("· beim Fahren ca. " + w.gradText(j71.beimFahren.beimFahren) + " (" +
+      w.gradText(j71.beimFahren.gegen) + " bei Gegen-, " + w.gradText(j71.beimFahren.ruecken) + " bei Rückenwind)"), jetztKarte71);
+    // Eintrag mit Wetter: Werte beim Fahren gespeichert
+    w.eintragNeu({ datum: "2026-11-09" });
+    feld("f-km").value = "34";
+    feld("f-arbeitsweg").checked = true;
+    const vorSpeichern = Date.now();
+    await w.eintragSpeichern();
+    const e71 = eintrag(w.eval("eintragAm('2026-11-09').id"));
+    gleich("Eintrag (Mo): je Fahrt beim Fahren, Luftfeuchte, Windrichtung, Anteile, Teilstrecke, Geschwindigkeit, Grundlage und Zeitpunkt der Empfehlung",
+      [e71.wetter.hin.beimFahren, e71.wetter.hin.windAnteil, e71.wetter.rueck.windAnteil, e71.wetter.hin.windRichtung, e71.wetter.hin.teilstrecken.length,
+        e71.wetter.hin.teilstrecken[0].zaehlt, e71.wetter.hin.geschwindigkeit, e71.wetter.hin.grundlage, Date.parse(e71.wetter.hin.empfohlenAm) >= vorSpeichern - 1000,
+        e71.wetter.hin.kleidung, typeof e71.wetter.hin.luftfeuchte],
+      [Math.round(hin71.beimFahren.beimFahren * 10) / 10, { gegen: 1, seite: 0, ruecken: 0 }, { gegen: 0, seite: 0, ruecken: 1 }, 90, 1, true, 17, "fahrt", true, hin71.kleidung.stufe.id, "number"]);
+    gleich("… Import → Export → Import verlustfrei", kopie(w.datenEinlesen(w.exportInhalt())).eintraege.find(e => e.datum === "2026-11-09").wetter, e71.wetter);
+    w.eintragAnsicht(e71.id);
+    const detail71 = ohneTags(fensterInhaltHtml());
+    wahr("Detailansicht: „beim Fahren … (Gegenwind) bei 17 km/h · Stufe nach „beim Fahren““", detail71.includes("beim Fahren " + w.gradText(e71.wetter.hin.beimFahren) +
+      " (Gegenwind) bei 17 km/h · Stufe nach „beim Fahren“") && detail71.includes("(Rückenwind) bei 17 km/h"), detail71);
+    w.fensterSchliessen();
+    // „Wetter nachtragen“ mit dem Rückblick: Rückblick-Wetter von vor 5d bekommt nur die neuen Werte
+    setze7({ fahrrad: F("2026-01-01", 0), vorlagen: [{ id: "v-arbeit", name: "Arbeit", km: 34, arbeitsweg: true }], einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt() }, eintraege: [
+      AE("n1", "2026-11-09", 34, EW(FW({ rueckmeldung: "zu-kalt" }), FW(), "rueckblick")),
+      AE("n2", "2026-11-10", 34, EW(FW({ kleidung: "stufe6", rueckmeldung: "passte", empfehlung: B("warme Mütze", "", "", "Jacke", "", "") }), null))] });
+    const n1vor = eintrag("n1"), n2vor = eintrag("n2");
+    gleich("Kandidaten: Rückblick-Wetter ohne Werte „beim Fahren“ und Wetter aus der Vorhersage", w.rueckblickKandidaten("2026-11-12").map(e => e.id), ["n1", "n2"]);
+    netz(["historical-forecast-api.open-meteo.com", kopie(gfRoh)]);
+    frageAntwort = true;
+    const NB = zeit("2026-11-12", "20:00");
+    await w.wetterNachtragen(NB);
+    const n1 = eintrag("n1"), n2 = eintrag("n2");
+    gleich("Rückblick-Wetter: alle vorhandenen Werte, Stufe, Empfehlung, Grundlage („vor 5d“) und Rückmeldung unverändert",
+      [bis5c(n1.wetter.hin), bis5c(n1.wetter.rueck), n1.wetter.quelle, n1.wetter.stand, n1.wetter.hin.grundlage, n1.wetter.hin.empfohlenAm],
+      [bis5c(n1vor.wetter.hin), bis5c(n1vor.wetter.rueck), "rueckblick", n1vor.wetter.stand, "gefuehlt", null]);
+    gleich("… dazu die Werte beim Fahren aus dem Rückblick (Hinfahrt Gegenwind, Rückfahrt Rückenwind, 17 km/h)",
+      [typeof n1.wetter.hin.beimFahren, n1.wetter.hin.windAnteil, n1.wetter.rueck.windAnteil, n1.wetter.hin.geschwindigkeit],
+      ["number", { gegen: 1, seite: 0, ruecken: 0 }, { gegen: 0, seite: 0, ruecken: 1 }, 17]);
+    const rbGf = w.fahrtenWetter(w.vorhersageLesen(kopie(gfRoh), 2), "2026-11-10", "rueckblick", NB, NB);
+    gleich("Wetter aus der Vorhersage: Werte aus dem Rückblick (auch beim Fahren, Di Seitenwind); Stufe, Empfehlung, Rückmeldung, Grundlage und Zeitpunkt bleiben",
+      [n2.wetter.quelle, n2.wetter.hin.temperatur, n2.wetter.hin.beimFahren, n2.wetter.hin.windAnteil, n2.wetter.hin.kleidung, n2.wetter.hin.empfehlung, n2.wetter.hin.rueckmeldung,
+        n2.wetter.hin.grundlage, n2.wetter.hin.empfohlenAm, n2.wetter.rueck.empfohlenAm, n2.wetter.rueck.grundlage],
+      ["rueckblick", rbGf.hin.temperatur, rbGf.hin.beimFahren, { gegen: 0, seite: 1, ruecken: 0 }, "stufe6", n2vor.wetter.hin.empfehlung, "passte", "gefuehlt", null,
+        new Date(NB).toISOString(), "fahrt"]);
+    gleich("Danach nichts mehr nachzutragen", w.rueckblickKandidaten("2026-11-12").map(e => e.id), []);
+    w.eintragAnsicht("n1");
+    wahr("Detailansicht eines nachgetragenen Eintrags von vor 5d: „… · Stufe nach „gefühlt“ (vor 5d)“", ohneTags(fensterInhaltHtml()).includes("· Stufe nach „gefühlt“ (vor 5d)"), ohneTags(fensterInhaltHtml()));
+    w.fensterSchliessen();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

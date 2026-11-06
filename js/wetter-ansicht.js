@@ -115,10 +115,22 @@ function fahrtKarte(f, alt) {
   if (f.vorbei) return html + '</div>';
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
     (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
-    '<div style="margin-top:6px">👕 Kleidung <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' + kleidungBereicheHtml(f.kleidung) +
+    '<div style="margin-top:6px">👕 Kleidung</div><div class="klein">' + gefuehltZeileHtml(f, b.werte.gefuehlt) + '</div>' + kleidungBereicheHtml(f.kleidung) +
     (f.wind ? windHtml(f.wind) : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
   return html + '</div>';
+}
+
+// Werte für die Kleidung: „gefühlt 2 °C · beim Fahren −1 °C (Gegenwind)“; fett der
+// Wert, nach dem die Stufe gewählt ist. Ohne Fahrtrichtung (Fahrt ab jetzt) das
+// Mittel aller Richtungen mit der Spanne: „beim Fahren ca. −1 °C (−2 °C bei
+// Gegen-, 2 °C bei Rückenwind)“. Ohne Luftfeuchte: „beim Fahren –“.
+function gefuehltZeileHtml(f, gefuehlt) {
+  const g = f.beimFahren, fett = (an, text) => an ? "<strong>" + text + "</strong>" : text;
+  const fahren = !g ? "beim Fahren –"
+    : g.ohneRichtung ? fett(f.grundlage === "fahrt", "beim Fahren ca. " + gradText(g.beimFahren)) + " (" + gradText(g.gegen) + " bei Gegen-, " + gradText(g.ruecken) + " bei Rückenwind)"
+    : fett(f.grundlage === "fahrt", "beim Fahren " + gradText(g.beimFahren)) + (g.lage ? " (" + g.lage + ")" : "");
+  return fett(f.grundlage === "gefuehlt" && !!g, "gefühlt " + gradText(gefuehlt)) + " · " + fahren;
 }
 
 // Wind: erste Zeile mit Himmelsrichtung und Böen (nur Text), darunter je
@@ -294,7 +306,8 @@ function regelZeile(aktion, titel, text) {
 }
 function kleidungKurztext(k) {
   const std = standardKleidung();
-  return k.stufen.length + " Stufen · Regenzusatz " + (k.regen.length ? "ab " + k.regen.map(r => r.ab + " %").join(" / ") : "keiner") +
+  return k.stufen.length + " Stufen nach " + (k.grundlage === "fahrt" ? "„beim Fahren“" : "„gefühlt“") +
+    " · Regenzusatz " + (k.regen.length ? "ab " + k.regen.map(r => r.ab + " %").join(" / ") : "keiner") +
     " · Rückmeldung " + (k.rueckmeldung ? "an" : "aus") + (gleicherInhalt([k.stufen, k.regen], [std.stufen, std.regen]) ? " · Standard" : "");
 }
 function ampelKurztext(g) {
@@ -603,10 +616,16 @@ function kleidungSeite() {
     '<div class="text"><div>' + titel + '</div>' + unten.map(u => '<div class="klein umbrechen">' + u + '</div>').join("") + '</div>' +
     '<span class="klein" style="padding-right:16px">›</span></button></div>';
   return (
+    '<h3 style="margin-top:8px">Stufe wählen nach</h3>' +
+    umschalterHtml("kleidung-grundlage", k.grundlage, [["fahrt", "gefühlt beim Fahren"], ["gefuehlt", "gefühlt (Open-Meteo)"]], "Stufe wählen nach") +
+    '<div class="feldhinweis">„Beim Fahren“ rechnet Fahrtwind, Windrichtung und Windstärke ein (je Teilstrecke, die für den Wind zählt). Es liegt meist 1–3 °C unter ' +
+    '„gefühlt“ von Open-Meteo (für einen stehenden Menschen); die Empfehlung fällt dadurch oft eine Stufe wärmer aus. Ohne Luftfeuchte in der Vorhersage gilt „gefühlt“.</div>' +
+    geschwindigkeitHtml() + plausibilitaetHtml() +
     '<label class="haken"><input type="checkbox" id="k-rueckmeldung" data-change="kleidung-rueckmeldung"' + (k.rueckmeldung ? " checked" : "") + '>' +
     '<span>Rückmeldung zur Kleidung<br><span class="klein">Karte „Wie war die Kleidung?“ im Reiter Wetter und die Knöpfe in den Einträgen. ' +
     'Ausgeschaltet bleiben gegebene Rückmeldungen und die Auswertung erhalten.</span></span></label>' +
-    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach der niedrigsten gefühlten Temperatur der Fahrt, von warm nach kalt. ' +
+    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach dem kältesten Wert der Fahrt (' + (k.grundlage === "fahrt" ? "gefühlt beim Fahren" : "gefühlt") +
+    '), von warm nach kalt. ' +
     'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
     '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
       [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen: " + auswertungText(aus[s.id])])).join("") + '</div>' +
@@ -621,6 +640,63 @@ function kleidungSeite() {
     '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>'
   );
 }
+// Fahrgeschwindigkeit für „beim Fahren“: automatisch (Vorlage und Dauer) oder ein eigener Wert
+function geschwindigkeitHtml() {
+  const w = daten.einstellungen.wetter, hin = fahrgeschwindigkeit("hinfahrt", w);
+  const kmh = x => zahl1.format(x) + " km/h";
+  const auto = fahrgeschwindigkeit("hinfahrt", Object.assign({}, w, { geschwindigkeit: null }));
+  const autoR = fahrgeschwindigkeit("rueckfahrt", Object.assign({}, w, { geschwindigkeit: null }));
+  const autoText = auto.quelle === "annahme" ? "angenommen " + kmh(auto.kmh) + " (keine Vorlage mit Arbeitsweg)"
+    : (auto.kmh === autoR.kmh ? kmh(auto.kmh) : "Hinfahrt " + kmh(auto.kmh) + ", Rückfahrt " + kmh(autoR.kmh)) + " aus der Vorlage „" + esc(auto.vorlage.name) + "“ (" +
+      zahl1.format(auto.vorlage.km) + " km, je Richtung die Hälfte in " + (w.hinfahrt.dauer === w.rueckfahrt.dauer ? w.hinfahrt.dauer : w.hinfahrt.dauer + " bzw. " + w.rueckfahrt.dauer) + " min)";
+  return '<label for="k-geschwindigkeit">Eigene Fahrgeschwindigkeit (km/h, optional)</label>' +
+    '<input type="text" id="k-geschwindigkeit" class="kurzfeld" inputmode="decimal" autocomplete="off" placeholder="automatisch" data-change="kleidung-geschwindigkeit" value="' +
+    (w.geschwindigkeit === null ? "" : zahlFeld(w.geschwindigkeit)) + '">' +
+    '<div class="feldhinweis">' + (hin.quelle === "eigen" ? "Es gilt " + kmh(hin.kmh) + " (automatisch wären es " + autoText + ")."
+      : "Leer = automatisch: " + autoText + ".") + ' Die Dauer enthält Ampelstopps; der Fahrtwind wirkt nur in Bewegung, die eigene Angabe darf deshalb höher sein. ' +
+    GESCHWINDIGKEIT_MIN + " bis " + GESCHWINDIGKEIT_MAX + ' km/h.</div>';
+}
+function geschwindigkeitGeaendert(el) {
+  const text = el.value.trim(), w = daten.einstellungen.wetter;
+  const v = text === "" ? null : zahlLesen(text);
+  if (text !== "" && (v === null || v < GESCHWINDIGKEIT_MIN || v > GESCHWINDIGKEIT_MAX)) {
+    alert("Bitte eine Fahrgeschwindigkeit von " + GESCHWINDIGKEIT_MIN + " bis " + GESCHWINDIGKEIT_MAX + " km/h eingeben oder das Feld leeren (automatisch).");
+    el.value = w.geschwindigkeit === null ? "" : zahlFeld(w.geschwindigkeit);
+    return;
+  }
+  if (v === w.geschwindigkeit) return;
+  w.geschwindigkeit = v === null ? null : Math.round(v * 10) / 10;
+  if (speichern()) { zeichnen(); meldung(v === null ? "Fahrgeschwindigkeit: automatisch" : "Fahrgeschwindigkeit " + zahl1.format(w.geschwindigkeit) + " km/h gespeichert"); }
+}
+// Plausibilität (nur im Testmodus „?test“): eigene Rechnung mit dem Wind, wie
+// Open-Meteo ihn einsetzt (0,75 · w10), gegen apparent_temperature der zuletzt
+// geladenen Vorhersage, größte Abweichung über alle Orte und Schritte
+const PLAUSIBEL_TOLERANZ = 0.3;
+function plausibilitaetHtml(jetzt = Date.now()) {
+  if (!TESTMODUS) return "";
+  const v = wetter.vorhersage, p = v ? plausibilitaet(v.orte) : null;
+  const zahl2 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let text;
+  if (!v) text = "Keine Vorhersage geladen. Im Testmodus lädt die App das Wetter nur mit „Aktualisieren“ im Reiter Wetter.";
+  else if (!p) text = "Die geladene Vorhersage enthält keine Luftfeuchte (älterer Stand). Bitte im Reiter Wetter „Aktualisieren“.";
+  else {
+    const orte = wetterOrte(), ort = orte.map(x => ortSchluessel(x.ort)).join(";") === v.schluessel && orte[p.ort] ? orte[p.ort].titel : "Ort " + (p.ort + 1);
+    const ok = p.abweichung <= PLAUSIBEL_TOLERANZ;
+    text = '<span class="' + (ok ? "status-gruen" : "status-rot") + '">Größte Abweichung ' + zahl2.format(p.abweichung) + " °C</span> über " + p.schritte + " Schritte (" +
+      (v.orte.length === 1 ? "1 Ort" : v.orte.length + " Orte") + "), am " + esc(ort) + " " + wochentag(isoAusDate(new Date(p.zeit))) + " " + kurzDatum(isoAusDate(new Date(p.zeit))) +
+      " " + uhrzeit(p.zeit) + ": eigene Rechnung " + zahl2.format(p.eigen).replace("-", "−") + " °C, Open-Meteo " + zahl1.format(p.openMeteo).replace("-", "−") + " °C. Toleranz " +
+      zahl1.format(PLAUSIBEL_TOLERANZ) + " °C: " + (ok ? "eingehalten" : "überschritten") + ". Stand: " + standText(v.stand, jetzt) + ".";
+  }
+  return '<div class="hinweis info" id="k-plausibel"><strong>Plausibilität (Testmodus)</strong><br>' + text + '</div>';
+}
+// Umschalter "Stufe wählen nach" (sofort gespeichert)
+function kleidungGrundlageSetzen(wert) {
+  const k = daten.einstellungen.wetter.kleidung;
+  if (!GRUNDLAGEN.includes(wert) || k.grundlage === wert) return;
+  k.grundlage = wert;
+  if (speichern()) { zeichnen(); meldung(wert === "fahrt" ? "Stufe nach „gefühlt beim Fahren“" : "Stufe nach „gefühlt“ (Open-Meteo)"); }
+}
+
 // Schalter "Rückmeldung zur Kleidung" (sofort gespeichert; Rückmeldungen und Auswertung bleiben)
 function kleidungRueckmeldungSchalten(an) {
   daten.einstellungen.wetter.kleidung.rueckmeldung = an;

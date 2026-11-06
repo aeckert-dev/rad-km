@@ -286,6 +286,9 @@ function eintragWetterHtml(e) {
     return '<div class="eintrag-wetter"><div><strong>' + name + '</strong> ' + ampelHtml(f.ampel) + FARBWORT[f.ampel] + '</div>' +
       '<div class="klein">' + gradText(f.temperatur) + ' (gefühlt ' + gradText(f.gefuehlt) + ') · Regen ' +
       (f.regenWahrscheinlichkeit === null ? "" : f.regenWahrscheinlichkeit + ' %, ') + zahl1.format(f.niederschlag) + ' mm · Wind ' + kmhText(f.wind) + ' · Böen ' + kmhText(f.boeen) + '</div>' +
+      (f.beimFahren === null ? "" : '<div class="klein">beim Fahren ' + gradText(f.beimFahren) + (windLageGespeichert(f) ? " (" + windLageGespeichert(f) + ")" : "") +
+        (f.geschwindigkeit ? " bei " + zahl1.format(f.geschwindigkeit) + " km/h" : "") + ' · Stufe nach ' + (f.grundlage === "fahrt" ? "„beim Fahren“" : "„gefühlt“") +
+        (f.empfohlenAm ? "" : " (vor 5d)") + '</div>') +
       (f.kleidung ? '<div>👕 ' + esc(fahrtKleidungText(f)) + '</div>' : "") + rueckmeldung + '</div>';
   };
   return '<h3 style="margin-top:16px">Wetter</h3>' + fahrt("Hinfahrt", "hin") + fahrt("Rückfahrt", "rueck") +
