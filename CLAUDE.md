@@ -20,11 +20,16 @@ sind immer erfunden.
   Pull-Request-Beschreibungen sind auf Deutsch. Bezeichner im Code ebenfalls
   deutsch, passend zum vorhandenen Code.
 - Die Daten liegen nur im `localStorage` des Geräts. Nichts darf sie ungefragt
-  verändern; Prüfungen und Datensicherung lesen nur.
+  verändern; Prüfungen und Datensicherung lesen nur. Die App ändert auch nie
+  selbst Kleidungsstufen (Rückmeldungen ergeben nur Hinweise). Hilfsspeicher
+  außerhalb der Daten (nicht in der Sicherung): `radkm-wetter`,
+  `radkm-wartungsarten-pruefen`, `radkm-letzte-orte`.
 - Für das iPhone optimiert, Hell- und Dunkelmodus über die Farbvariablen in
   `:root` (`css/app.css`).
 - Seitenaufbau: feste Seitenhöhe, nur `main` scrollt, die Reiterleiste ist
-  nicht `position: fixed` (B3, 5c). Zum Scrollen nach oben `nachOben()` statt
+  nicht `position: fixed` (B3, 5c). Höhe der Reiter und freie Home-Zone über
+  `--reiter-hoehe`, `--home-abzug`, `--home-frei` in `:root` (B11, 5d); was
+  sich an der Leiste ausrichtet (z. B. `#toast`), nutzt diese Variablen. Zum Scrollen nach oben `nachOben()` statt
   `window.scrollTo`. Längere Formulare als Unterseite der Einstellungen
   (`EINSTELLUNGEN_SEITEN`, ggf. `formular: true`) statt als Fenster.
 
@@ -41,8 +46,10 @@ sind immer erfunden.
 | `js/wartung.js` | Werkstatt-Berechnung: Fälligkeit (`intervallStatus`, `saisonStatus`), `werkstattLage`, Standard-Zuordnung, Vorschläge |
 | `js/kalender.js` | Kalenderdatei (.ics) zum Termin eines geplanten Auftrags (UTC aus Europe/Berlin, Vorlaufzeit), Stand im Kalender (`imKalender`) |
 | `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten-Liste, Aufträge, Termin mit Vorlaufzeit, Kalender (Knopf in der Karte, Fenster, veralteter Eintrag), Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
-| `js/wetter.js` | Wetter-Logik: Abruf, Zwischenspeicher, Standort, Ampel, Kleidung, Wind (Pfeilrichtung/-farbe), Sonnenauf-/untergang, Abfahrt, Rückblick |
-| `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Windpfeile, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, außerhalb, Kleidung mit Stufe/Regenzusatz, Ampel-Grenzen), Rückmeldung |
+| `js/wetter.js` | Wetter-Logik: Abruf, Zwischenspeicher, Standort, Ampel, Kleidung (`stufenGrundlage`), Wind (Pfeilrichtung/-farbe), Sonnenauf-/untergang, Abfahrt, Wetter je Eintrag, Rückblick (`rueckblickUebernehmen`) |
+| `js/gefuehlt.js` | Gefühlt beim Fahren: Formel wie Open-Meteo, Luftstrom, Wind auf 1,5 m, Fahrgeschwindigkeit, `fahrtGefuehlt` (Teilstrecken, kältester Schritt, ohne Richtung), Windlage, Plausibilität |
+| `js/orte.js` | Ortseingabe: Koordinaten/Kartenlinks lesen (`ortAusText`), Ortssuche beim Tippen (Verzögerung, Abbruch, Umlaute), zuletzt gewählte Orte, Namensvorschlag (DWD-Gemeinde) |
+| `js/wetter-ansicht.js` | Reiter Wetter, Kachel, Windpfeile, „gefühlt · beim Fahren“, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, Ort-Formular, außerhalb, Kleidung mit Umschalter/Fahrgeschwindigkeit/Plausibilität im Testmodus, Stufe/Regenzusatz, Änderungen, Ampel-Grenzen), Rückmeldung, Änderungsprotokoll, Zählung ab der letzten Änderung, Hinweise |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (Fahrten → Einträge), Eintragsformular, Prognosefenster |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Export, Prüfung, Vergleich, Import |
@@ -50,7 +57,7 @@ sind immer erfunden.
 | `js/bedienung.js` | `AKTIONEN`: Zuordnung von `data-action`/`data-change` zu Funktionen |
 | `js/start.js` | Service Worker anmelden, „Neue Version verfügbar“, Start |
 | `sw.js` | Service Worker: vollständiger Satz aller Dateien offline, Update erst nach „Neu laden“ |
-| `tests/test.html` | Testseite (lädt `index.html?test` unsichtbar) |
+| `tests/test.html` | Testseite (lädt `index.html?test` unsichtbar); Testdateien `tests/daten-v*.json`, `tests/wetter-*.json` (u. a. `wetter-gefuehlt.json`, stimmig nach der Formel von Open-Meteo) |
 | `tests/offline-update-test.js` | Offline-Start und neue Versionen mit Playwright |
 
 ## Datenmodell

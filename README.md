@@ -13,10 +13,14 @@ ist für das iPhone optimiert.
   ab jetzt, am Wohnort oder am aktuellen Standort
 - Bis zu 3 Wegpunkte: Wind je Teilstrecke, Temperatur, Regen und Warnungen auch
   unterwegs; Orte mit 4 Nachkommastellen (ca. 10 m), auf Wunsch in Apple Karten
-  gezeigt
-- Kleidung (Kopf, Hals, Hände, Oberkörper, Beine, Füße) und Ampel-Grenzen selbst
-  einstellen; bei Regen nach dem Zwiebelprinzip; die Rückmeldung „zu warm /
-  passte / zu kalt“ nach der Fahrt wird je Stufe ausgewertet
+  gezeigt; Ortssuche mit Vorschlägen beim Tippen, Koordinaten und Links aus
+  Apple Karten oder Google Maps lassen sich einfügen
+- Kleidung (Kopf, Hals, Hände, Oberkörper, Beine, Füße) nach der gefühlten
+  Temperatur **beim Fahren** (mit Fahrtwind, Windrichtung und Windstärke je
+  Teilstrecke) und Ampel-Grenzen selbst einstellen; bei Regen nach dem
+  Zwiebelprinzip; die Rückmeldung „zu warm / passte / zu kalt“ nach der Fahrt
+  zählt je Stufe ab ihrer letzten Änderung (mit Änderungsprotokoll und Hinweis
+  „Stufe bearbeiten“)
 - Wetter jeder Fahrt zur Arbeit beim Eintrag gespeichert, auf Wunsch auch
   nachträglich; Statistik „km bei Regen“, „Tage unter 0 °C“ und Ampelverteilung
 - Aktueller Kilometerstand und Summen für heute, diese Woche, diesen Monat, dieses Jahr
@@ -69,6 +73,10 @@ Das bedeutet:
   `radkm-wartungsarten-pruefen`, dass der Hinweis „Bitte Wartungsarten prüfen“
   noch angezeigt werden soll. Das gehört nicht zu deinen Daten und nicht zur
   Sicherung.
+- Die zuletzt gewählten Orte (höchstens 5, zum Antippen im Formular eines
+  Orts) liegen unter `radkm-letzte-orte`. Sie gehören nicht zu deinen Daten und
+  nicht zur Sicherung; die Orte selbst stehen in den Einstellungen und damit in
+  der Sicherung.
 
 ### Was geht beim Wetter ins Netz?
 
@@ -77,11 +85,11 @@ festgelegt hast:
 
 | Dienst | Wofür | Was gesendet wird |
 |---|---|---|
-| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes, mit Sonnenauf- und -untergang (in derselben Abfrage) | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort und den Wegpunkten bzw. des weiteren Orts; ist „aktueller Standort“ gewählt, außerhalb der Fahrten auch die des Standorts |
-| [Deutscher Wetterdienst](https://www.dwd.de/) (GeoServer `maps.dwd.de`) | amtliche Warnungen für die Gemeinde jedes Orts (auch der Wegpunkte und des aktuellen Standorts); der Name der Gemeinde ist zugleich der Name des Standorts | dieselben gerundeten Koordinaten |
+| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes, mit Sonnenauf- und -untergang (in derselben Abfrage); ab 5d auch Luftfeuchte und Globalstrahlung für „gefühlt beim Fahren“ (dieselbe Abfrage, keine weiteren Daten) | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort und den Wegpunkten bzw. des weiteren Orts; ist „aktueller Standort“ gewählt, außerhalb der Fahrten auch die des Standorts |
+| [Deutscher Wetterdienst](https://www.dwd.de/) (GeoServer `maps.dwd.de`) | amtliche Warnungen für die Gemeinde jedes Orts (auch der Wegpunkte und des aktuellen Standorts); der Name der Gemeinde ist zugleich der Name des Standorts. Ab 5d auch der Namensvorschlag im Formular eines Orts, wenn du Koordinaten einfügst oder den Standort übernimmst | dieselben gerundeten Koordinaten |
 | [Bright Sky](https://brightsky.dev/) (`api.brightsky.dev`) | nur wenn der DWD nicht erreichbar ist: dieselben amtlichen Warnungen des DWD | dieselben gerundeten Koordinaten |
-| Ortssuche von Open-Meteo (`geocoding-api.open-meteo.com`) | Ort beim Festlegen suchen | nur der eingegebene Name |
-| Rückblick von Open-Meteo (`historical-forecast-api.open-meteo.com`) | nur nach „Wetter nachtragen …“ und deiner Bestätigung: das Wetter vergangener Fahrten zur Arbeit | die gerundeten Koordinaten von Wohn- und Arbeitsort und den Wegpunkten und der Zeitraum (Datum von–bis) |
+| Ortssuche von Open-Meteo (`geocoding-api.open-meteo.com`) | Ort beim Festlegen suchen; ab 5d schon beim Tippen (ab 3 Zeichen, 400 ms nach der letzten Eingabe; ohne Treffer ein zweites Mal mit der anderen Schreibweise der Umlaute) | nur der eingegebene Text (Name oder PLZ) |
+| Rückblick von Open-Meteo (`historical-forecast-api.open-meteo.com`) | nur nach „Wetter nachtragen …“ und deiner Bestätigung: das Wetter vergangener Fahrten zur Arbeit (ab 5d mit Luftfeuchte und Globalstrahlung, auch zum Ergänzen der Werte „beim Fahren“) | die gerundeten Koordinaten von Wohn- und Arbeitsort und den Wegpunkten und der Zeitraum (Datum von–bis) |
 | [Apple Karten](https://maps.apple.com/) (`maps.apple.com`) | nur beim Antippen von „In Karten zeigen“ im Formular eines Orts: die Stelle in Apple Karten | die Koordinaten mit 4 Nachkommastellen und der Name des Orts |
 
 - Gespeichert werden Orte mit 4 Nachkommastellen (ca. 10 m); genauere Werte (aus
@@ -95,6 +103,9 @@ festgelegt hast:
   der Name der Gemeinde bleiben nur im Arbeitsspeicher und werden weder in den
   Daten noch im Wetter-Zwischenspeicher gespeichert. Einen Dienst für Ortsnamen
   gibt es nicht.
+- **Koordinaten und Kartenlinks**, die du ins Suchfeld einfügst, liest die App
+  selbst; dafür geht nichts ins Netz. Kurzlinks (`maps.apple/p/…`,
+  `maps.app.goo.gl/…`) liest sie deshalb nicht.
 - Wie bei jedem Abruf im Internet sehen die Dienste deine IP-Adresse. Es gibt
   keine Anmeldung, keinen Schlüssel und keine Cookies.
 - Die Orte und Wegpunkte gehören zu den Einstellungen, bleiben auf dem Gerät und
@@ -348,14 +359,37 @@ Der Reiter **Wetter** zeigt für deine Fahrten zur Arbeit, wie das Wetter wird,
 was du anziehen sollst und ob amtliche Warnungen bestehen.
 
 - **Orte** (Einstellungen → Orte und Strecke): Wohnort, Arbeitsort und optional ein
-  weiterer Ort (z. B. Urlaub). Antippen öffnet das Formular:
-  - **Ort suchen:** Namen eingeben, „Suchen“ (oder Eingabetaste), Treffer
-    antippen.
+  weiterer Ort (z. B. Urlaub). Antippen öffnet das Formular, seit 5d als
+  Unterseite („‹ Orte und Strecke“, mit „Abbrechen“ und „Speichern“):
+  - **Ort oder PLZ:** Der Anfang des Namens genügt (Umlaute und Groß/klein sind
+    egal, eine PLZ geht auch). Ab 3 Zeichen erscheinen beim Tippen Vorschläge
+    (kurz nach der letzten Eingabe; eine ältere Suche wird abgebrochen), die
+    Eingabetaste sucht sofort (ab 2 Zeichen). Treffer antippen übernimmt Name
+    und Koordinaten. Findet die Suche nichts, versucht sie es mit der anderen
+    Schreibweise der Umlaute (z. B. „ue“ statt „ü“) und nennt dann Tipps:
+    kürzer eingeben, die PLZ versuchen, Koordinaten oder einen Link einfügen.
+    Ohne Netz steht gleich ein Hinweis da.
+  - **Koordinaten oder Kartenlink einfügen** (ins selbe Feld, ohne Netz):
+    Dezimalgrad wie `51.5000, 9.9000`, `51,5000; 9,9000` oder `51,5000 / 9,9000`,
+    das Format von Apple Karten (eine Stelle lange drücken, bei der Markierung
+    die Koordinaten kopieren: `51.50000° N, 9.90000° E`, auch mit Komma, `S`,
+    `W` und `O`), Grad/Minuten/Sekunden (`51° 30′ 0″ N, 9° 54′ 0″ E`) sowie
+    Links von Apple Karten (`ll=`, `q=`, `coordinate=`), Google Maps (Markierung
+    `!3d…!4d…`, sonst `@Breite,Länge`, `q=`, `query=`) und `geo:`. Kurzlinks
+    (`maps.apple/p/…`, `maps.app.goo.gl/…`) lassen sich ohne Netz nicht lesen;
+    dann hilft „Koordinaten kopieren“.
+  - **Namensvorschlag:** Steht im Link ein Name, schlägt die App ihn vor; sonst
+    (mit Netz) die Gemeinde des DWD an diesen Koordinaten, z. B. „Name
+    übernehmen: Stadt Beispielbad“. Übernommen wird er erst beim Antippen; den
+    Namen vergibst du selbst.
+  - **Zuletzt gewählt:** Bei leerem Suchfeld stehen die letzten 5 gespeicherten
+    Orte zum Antippen da („Liste leeren“ löscht sie). Sie bleiben nur auf dem
+    Gerät und stehen nicht in der Sicherung.
   - **📍 Aktueller Standort:** übernimmt den Standort des iPhones (es fragt
-    einmal nach der Erlaubnis). Den Namen vergibst du selbst.
+    einmal nach der Erlaubnis), mit Namensvorschlag wie oben.
   - **Koordinaten direkt:** Breite und Länge in Grad eingeben, z. B. `51,1234`
-    und `10,4567` (Komma oder Punkt, Süd und West mit Minus). Suche und Standort
-    tragen ihre Koordinaten in dieselben Felder ein.
+    und `10,4567` (Komma oder Punkt, Süd und West mit Minus). Suche, Einfügen und
+    Standort tragen ihre Koordinaten in dieselben Felder ein.
   - Die Koordinaten werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an die
     Wetterdienste gehen sie auf 3 Nachkommastellen gerundet (ca. 100 m), siehe
     „Was geht beim Wetter ins Netz?“.
@@ -369,7 +403,7 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     Einstellungen oder mit „Zurück zu Wohn- und Arbeitsort“ im Reiter.
 - **Wegpunkte** (Einstellungen → Orte und Strecke, zwischen Wohn- und Arbeitsort): bis zu
   3 Punkte auf deinem Weg, in Fahrtrichtung der Hinfahrt. **+ Wegpunkt** öffnet
-  dasselbe Formular wie bei den Orten (Suche, Standort oder Koordinaten mit 4
+  dasselbe Formular wie bei den Orten (Suche, Einfügen, Standort oder Koordinaten mit 4
   Nachkommastellen, „In Karten zeigen“); ein neuer Wegpunkt kommt direkt vor den
   Arbeitsort, mit ▲/▼ änderst du die Reihenfolge, im Formular entfernst du ihn.
   - Aus Wohnort, Wegpunkten und Arbeitsort ergeben sich bis zu 4
@@ -471,13 +505,16 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   (Wettercode 56, 57, 66, 67), oder kalt und nass: Luft höchstens 1 °C oder
   Boden höchstens 0 °C, dazu Niederschlag während der Fahrt oder in den 6
   Stunden davor („nasse Straße“).
-- **Kleidung** nach der niedrigsten gefühlten Temperatur der Fahrt (sie
-  enthält schon Wind, Luftfeuchte und Sonne), je Körperbereich. Im Reiter steht
-  sie Zeile für Zeile (Kopf, Hals, Hände, Oberkörper, Beine, Füße); leere
-  Bereiche (nichts anzuziehen) entfallen dort, damit die Karte kompakt bleibt.
-  Standardstufen (– = nichts):
+- **Kleidung** nach dem kältesten Wert der Fahrt, je Körperbereich. Seit 5d
+  gilt die gefühlte Temperatur **beim Fahren** (siehe unten); auf der Seite
+  Kleidung lässt sich stattdessen die gefühlte Temperatur von Open-Meteo wählen
+  (für einen stehenden Menschen). Im Reiter steht die Kleidung Zeile für Zeile
+  (Kopf, Hals, Hände, Oberkörper, Beine, Füße); leere Bereiche (nichts
+  anzuziehen) entfallen dort, damit die Karte kompakt bleibt. Darüber stehen
+  beide Werte, fett der für die Stufe, z. B. „gefühlt 2 °C · **beim Fahren
+  −1 °C** (Gegenwind)“. Standardstufen (– = nichts):
 
-  | Gefühlte Temperatur | Kopf | Hals | Hände | Oberkörper | Beine | Füße |
+  | Temperatur (beim Fahren bzw. gefühlt) | Kopf | Hals | Hände | Oberkörper | Beine | Füße |
   |---|---|---|---|---|---|---|
   | ab 20 °C | – | – | – | T-Shirt | kurze Hose | Sneakersocken |
   | 15–20 °C | – | – | – | T-Shirt, leichter Pullover | Hose | Sneakersocken |
@@ -516,11 +553,69 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Braucht die Rückfahrt andere Kleidung, steht ein Hinweis darunter, z. B.
     „Für die Rückfahrt einpacken: Regenhose, Gamaschen; nicht mehr nötig:
     Schal.“
+- **Gefühlt beim Fahren** (seit 5d): Open-Meteo liefert die gefühlte
+  Temperatur für einen stehenden Menschen; Fahrtwind und Windrichtung fehlen
+  darin. Die App rechnet deshalb mit derselben Formel wie Open-Meteo (nach
+  Steadman 1994, mit Luftfeuchte und Sonne), setzt aber statt des Winds den
+  Luftstrom am Körper ein:
+  - Formel (Open-Meteo, `Meteorology.swift`): Dampfdruck
+    e = RH/100 · 6,105 · exp(17,27·T/(237,7 + T)) hPa, aufgenommene Strahlung
+    Q = max(0; 0,1 · (Globalstrahlung − 550)), gefühlte Temperatur
+    T + 0,348·e − 0,70·w + 0,70·Q/(w + 10) − 4,25 (w in m/s). Open-Meteo setzt
+    für w den 10-m-Wind mal 0,75 ein (Umrechnung auf 2 m nach FAO-56).
+  - **Luftstrom am Körper:** Betrag der Relativgeschwindigkeit aus Fahrt und
+    Wind, L = √(u² + v² + 2·u·v·cos φ) mit der Fahrgeschwindigkeit v, dem Wind
+    auf Körperhöhe u und dem Winkel φ zwischen der Richtung, aus der der Wind
+    kommt, und der Fahrtrichtung der Teilstrecke: Gegenwind u + v, Rückenwind
+    |u − v|, Seitenwind √(u² + v²) – auch Seitenwind kühlt.
+  - **Wind auf Körperhöhe (1,5 m):** 0,67 × Wind in 10 m Höhe
+    (logarithmisches Windprofil ln(1,5/z₀)/ln(10/z₀) mit der Rauigkeit
+    z₀ = 0,03 m für offenes Gelände; in Siedlungen wäre es weniger – nimm solche
+    Teilstrecken unter „Orte und Strecke“ aus dem Wind heraus).
+  - **Fahrgeschwindigkeit:** je Richtung die halbe Strecke der ersten Vorlage
+    mit Arbeitsweg in der Dauer der Hin- bzw. Rückfahrt (z. B. 34 km in je
+    60 min → 17 km/h; begrenzt auf 5–40 km/h), ohne solche Vorlage 15 km/h.
+    Auf der Seite Kleidung lässt sich eine eigene Geschwindigkeit eintragen
+    (die Dauer enthält Ampelstopps, der Fahrtwind wirkt nur in Bewegung).
+  - **Je Fahrt:** je 15-Minuten-Schritt je Teilstrecke die Werte ihrer beiden
+    Enden (Temperatur, Luftfeuchte, Sonne, Wind gemittelt); Teilstrecken, die
+    nicht für den Wind zählen, nur mit Fahrtwind. Der Wert eines Schritts ist
+    das nach der Länge (Luftlinie) gewichtete Mittel; für die Stufe gilt der
+    kälteste Schritt der Fahrt.
+  - Die **Windlage** in Klammern stammt aus diesem Schritt: Gegenwind (bis
+    67,5° von vorn), Seitenwind, Rückenwind (ab 112,5°), „wechselnd“ (keine
+    Lage über die Hälfte der Länge) oder „kaum Wind“ (unter 10 km/h).
+  - **„Jetzt“** (die Richtung ist unbekannt): das Mittel über alle Richtungen
+    für die Stufe, dazu die Spanne, z. B. „beim Fahren ca. −1 °C (−2 °C bei
+    Gegen-, 2 °C bei Rückenwind)“. Der weitere Ort zeigt keine Kleidung.
+  - Beispiel: 5 °C, 80 % Luftfeuchte, 15 km/h Wind, 17 km/h, keine Sonne:
+    gefühlt (Open-Meteo) 1 °C, beim Fahren −2,1 °C bei Gegenwind, −0,7 °C bei
+    Seitenwind, 1,8 °C bei Rückenwind.
+  - „Beim Fahren“ liegt meist 1–3 °C unter „gefühlt“; bei gleichen Grenzen
+    fällt die Empfehlung oft eine Stufe wärmer aus. Fehlt die Luftfeuchte (z. B.
+    im Wetter-Zwischenspeicher von vor 5d), gilt „gefühlt“, bis das Wetter neu
+    geladen ist.
 - **Kleidung anpassen** (Einstellungen → Wetter → Kleidung, eine Unterseite mit
-  „‹ Einstellungen“): Oben der Schalter **Rückmeldung zur Kleidung**, darunter
-  die Stufen von warm nach kalt mit ihrer Kleidung und der Auswertung der
-  Rückmeldungen, dann der Regenzusatz. Bereiche stehen mit „bis“, z. B.
-  „−6 bis −1 °C“ (seit 5c statt „−6––1 °C“).
+  „‹ Einstellungen“): Oben gegebenenfalls die Hinweise aus den Rückmeldungen
+  (siehe unten), dann der Umschalter **Stufe wählen nach: gefühlt beim Fahren
+  (Standard) / gefühlt (Open-Meteo)** mit kurzer Erklärung, das Feld **Eigene
+  Fahrgeschwindigkeit** (leer = automatisch, mit Angabe, woher der Wert kommt),
+  der Schalter **Rückmeldung zur Kleidung**, die Stufen von warm nach kalt mit
+  ihrer Kleidung und den Rückmeldungen, der Regenzusatz und die Zeile
+  **Änderungen**. Bereiche stehen mit „bis“, z. B. „−6 bis −1 °C“ (seit 5c statt
+  „−6––1 °C“).
+  - **Änderungen** (Unterseite „Änderungen der Kleidung“, neueste zuerst): Die
+    App protokolliert jede Änderung an einer Stufe (Speichern, neue Stufe,
+    entfernen, „Auf Standard zurücksetzen“), am Regenzusatz und am Umschalter
+    mit Datum, Uhrzeit und den Unterschieden, z. B. „Hände:
+    Übergangshandschuhe → Winterhandschuhe“. „Rückgängig“ nimmt den Eintrag mit
+    zurück. Das Protokoll gehört zu deinen Daten und steht in der Sicherung.
+  - **Plausibilität (nur im Testmodus):** Ruft man die App mit `?test` auf
+    (`…/rad-km/index.html?test`, eigener Speicherplatz, das Wetter lädt dort nur
+    mit „Aktualisieren“ im Reiter Wetter), zeigt die Seite Kleidung die größte
+    Abweichung der eigenen Rechnung (mit dem Wind, wie Open-Meteo ihn einsetzt)
+    von Open-Meteos gefühlter Temperatur über alle Orte und 15-Minuten-Schritte
+    der geladenen Vorhersage, mit der Toleranz 0,3 °C.
   - Antippen einer Stufe öffnet ihr Formular als eigene Unterseite (z. B.
     „Stufe 7 bis 11 °C“, zurück mit „‹ Kleidung“): Grenze („ab … °C“; die letzte
     Stufe gilt darunter), die sechs Bereiche (leer = nichts; mehrere Teile mit
@@ -548,11 +643,28 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   auf die tatsächlich empfohlene Kleidung (mit Zwiebelprinzip).
   - Die Rückmeldung wird je Fahrt gespeichert (mit „Rückgängig“) und
     **verschiebt keine Grenzen**. Eine geänderte Rückmeldung ersetzt die
-    vorige.
-  - **Auswertung** je Stufe in den Kleidungsregeln, z. B. „3× zu kalt, 1×
-    passte (bei Regen: 1× zu kalt)“; die Meldung nach einer Rückmeldung nennt
-    den neuen Stand. Rückmeldungen zu Stufen, die es nicht mehr gibt (z. B. die
+    vorige. Die App ändert nie selbst etwas an den Stufen.
+  - **Auswertung** je Stufe ab ihrer **letzten Änderung** (seit 5d), z. B.
+    „Rückmeldungen seit deiner Änderung am 08.11.: 3× zu kalt, 1× passte (bei
+    Regen: 1× zu kalt)“, ohne Änderung „seit 5d“. Gezählt werden Fahrten nach
+    der Änderung, deren Empfehlung nach der Änderung und nach der aktuellen
+    Grundlage (Umschalter) berechnet wurde. Als Änderung einer Stufe zählt auch
+    eine Grenze einer anderen Stufe, die ihren Bereich verschiebt (z. B. wird
+    „3 bis 7 °C“ zu „3 bis 8 °C“), und der Umschalter (für alle Stufen); der
+    Regenzusatz nicht. Die Meldung nach einer Rückmeldung nennt den neuen Stand.
+  - **Vor 5d** gegebene Rückmeldungen (Stufe damals nach „gefühlt“) bleiben
+    erhalten und stehen getrennt, z. B. „· vor 5d: 2× zu kalt“; sie lösen keinen
+    Hinweis aus. Rückmeldungen zu Stufen, die es nicht mehr gibt (z. B. die
     Stufen von 4b), stehen gesammelt als „… Rückmeldungen zu früheren Stufen“.
+  - **Hinweis:** ab 2 gleichen Abweichungen seit der letzten Änderung, wenn sie
+    häufiger sind als „passte“ (2× zu kalt und 5× passte: kein Hinweis), z. B.
+    „Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei
+    Gegenwind)“ mit dem Knopf **Stufe bearbeiten**. In der Klammer stehen Wind
+    und Regen der Fahrten („1× bei Gegenwind, 1× bei Seitenwind“, „bei
+    Regen“); gibt es beide Richtungen gleich oft, heißt es „uneinheitlich“. Der
+    Hinweis steht oben auf der Seite Kleidung und – bei eingeschalteter
+    Rückmeldung – in der Fahrt-Karte unter der Kleidung, wenn sie diese Stufe
+    empfiehlt.
   - **Schalter „Rückmeldung zur Kleidung“** aus: Die Karte „Wie war die
     Kleidung?“ und die Knöpfe in der Detailansicht verschwinden; eine schon
     gegebene Rückmeldung steht dort nur noch als Text. Rückmeldungen und
@@ -564,9 +676,13 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   aktuellen Wohn- und Arbeitsorte geladen ist. Die gespeicherte Ampel kommt nur
   aus den Wetterwerten, ohne amtliche Warnungen (die gibt es im Rückblick
   nicht). Gespeichert wird die tatsächlich empfohlene Kleidung (je Bereich, mit
-  Zwiebelprinzip), auch wenn du die Regeln später änderst. Die Detailansicht des
-  Eintrags zeigt das Wetter, die Kleidung in einer Zeile und „Wie war die
-  Kleidung?“. Sind Wegpunkte festgelegt, zählen deren Werte mit.
+  Zwiebelprinzip), auch wenn du die Regeln später änderst. Seit 5d kommen dazu
+  „beim Fahren“, Luftfeuchte, Windrichtung, die Anteile von Gegen-, Seiten- und
+  Rückenwind, die Werte je Teilstrecke, die Fahrgeschwindigkeit, wonach die
+  Stufe gewählt wurde und wann. Die Detailansicht des Eintrags zeigt das
+  Wetter (z. B. „beim Fahren −1 °C (Gegenwind) bei 17 km/h · Stufe nach „beim
+  Fahren““), die Kleidung in einer Zeile und „Wie war die Kleidung?“. Sind
+  Wegpunkte festgelegt, zählen deren Werte mit.
   - Beim Ändern eines Eintrags bleibt das Wetter bei gleichem Datum; bei
     neuem Datum holt die App es neu aus der Vorhersage, ohne Arbeitsweg
     entfällt es.
@@ -575,7 +691,11 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
 - **Wetter nachtragen …** (Statistik): holt für vergangene Fahrten zur Arbeit
   ohne Wetter oder mit dem Wetter aus der Vorhersage das Wetter aus dem
   **Rückblick** von Open-Meteo (archivierte Vorhersagen desselben Modells, ab
-  2022). Die App fragt vorher nach (Anzahl, Zeitraum, was gesendet wird) und
+  2022). Seit 5d auch für Fahrten, die schon Wetter aus dem Rückblick haben,
+  aber noch nicht die Werte „beim Fahren“: Bei ihnen kommen nur diese dazu;
+  alle vorhandenen Werte, die empfohlene Kleidung und die Rückmeldung bleiben
+  unverändert. Wetter aus der Vorhersage wird wie bisher durch den Rückblick
+  ersetzt (Kleidung, Empfehlung und Rückmeldung bleiben). Die App fragt vorher nach (Anzahl, Zeitraum, was gesendet wird) und
   fragt je bis zu 31 Tage auf einmal ab, mit den aktuellen Wohn- und
   Arbeitsorten und Wegpunkten. Empfohlene Kleidung und Rückmeldungen bleiben,
   damit die Auswertung stimmt. Danach gibt es „Rückgängig“. Ohne Netz oder bei einem
@@ -1081,7 +1201,7 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `10` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `11` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
@@ -1147,6 +1267,7 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 | `ortAusserhalb` | `"wohnort"` oder `"standort"` | nein | Ab Version 7: Wetter außerhalb der Fahrten (Ansicht „Jetzt“) am Wohnort oder am aktuellen Standort; Standard `"wohnort"`. Der Standort selbst wird nie gespeichert |
 | `hinfahrt` | Fahrzeit | nein | Standard `{ "von": "06:00", "bis": "07:00", "abfahrtAn": true, "abfahrt": "06:00", "dauer": 60 }`; `dauer` gilt auch für die Fahrt ab jetzt außerhalb der Fahrten |
 | `rueckfahrt` | Fahrzeit | nein | Standard `{ "von": "16:00", "bis": "17:00", "abfahrtAn": true, "abfahrt": "16:00", "dauer": 60 }`; nach `bis` zählt für den Reiter Wetter der nächste Tag |
+| `geschwindigkeit` | Zahl 5–40 oder `null` | nein | Ab Version 11: eigene Fahrgeschwindigkeit in km/h für „gefühlt beim Fahren“; `null` (Standard) = automatisch aus der ersten Vorlage mit Arbeitsweg (je Richtung die Hälfte) und der `dauer` der Fahrt, ohne solche Vorlage 15 km/h |
 | `ampel` | Objekt | nein | Grenzen der Ampel (siehe unten) |
 | `kleidung` | Objekt | nein | Kleidungsregeln (siehe unten) |
 
@@ -1187,15 +1308,31 @@ kleiner als `rotStarkregen` sein):
 | `stufen` | Liste | von warm nach kalt, mindestens zwei (siehe unten). Die letzte Stufe hat `"ab": null` und gilt darunter; die Untergrenzen müssen abnehmen |
 | `regen` | Liste | Regenzusatz ab einer Regenwahrscheinlichkeit, aufsteigend (jede Schwelle nur einmal): `{ "ab": 60, "bereiche": { "beine": "Regenhose", "fuesse": "Gamaschen" } }`; mindestens ein Bereich ausgefüllt |
 | `rueckmeldung` | `true`/`false` | Schalter „Rückmeldung zur Kleidung“: Karte „Wie war die Kleidung?“ und Knöpfe in den Einträgen; Standard `true`. Gespeicherte Rückmeldungen bleiben auch bei `false` |
+| `grundlage` | `"fahrt"` oder `"gefuehlt"` | Ab Version 11: Umschalter „Stufe wählen nach“: `"fahrt"` (Standard) = gefühlt beim Fahren, `"gefuehlt"` = gefühlte Temperatur von Open-Meteo |
+| `protokoll` | Liste | Ab Version 11: Änderungsprotokoll der Kleidung in zeitlicher Reihenfolge (siehe unten); Standard `[]` |
 
 **Stufe:**
 
 | Feld | Typ | Bedeutung |
 |---|---|---|
 | `id` | Text | eindeutige Kennung; neue Stufen bekommen eine eigene. Gespeichertes Wetter und Rückmeldungen verweisen darauf |
-| `ab` | Zahl oder `null` | die Stufe gilt ab dieser gefühlten Temperatur (°C); `null` bei der letzten Stufe |
+| `ab` | Zahl oder `null` | die Stufe gilt ab dieser Temperatur (°C; ab Version 11 je nach `grundlage` gefühlt beim Fahren bzw. gefühlt); `null` bei der letzten Stufe |
 | `bereiche` | Objekt | Kleidung je Körperbereich: `kopf`, `hals`, `haende`, `oberkoerper`, `beine`, `fuesse`, je ein Text (mehrere Teile mit Komma); fehlend oder `""` = nichts; mindestens ein Bereich ausgefüllt |
 | `haendeBeiRegen` | Text oder `null` | gilt statt `haende`, sobald ein Regenzusatz greift; `null` = wie `haende` |
+
+**Eintrag im Protokoll** (ab Version 11):
+
+| Feld | Typ | Bedeutung |
+|---|---|---|
+| `zeitpunkt` | Text | Zeitpunkt der Änderung (ISO 8601) |
+| `art` | `"stufe"`, `"grundlage"` oder `"regen"` | geändert wurde eine Stufe, der Umschalter bzw. ein Regenzusatz |
+| `stufe` | Text oder `null` | bei `"stufe"`: `id` der Stufe (darf eine inzwischen entfernte sein), sonst `null` |
+| `vorher`, `nachher` | Objekt, Text oder `null` | Inhalt vor und nach der Änderung: bei einer Stufe `{ "ab", "bereiche", "haendeBeiRegen" }`, beim Regenzusatz `{ "ab", "bereiche" }`, `null` = neu bzw. entfernt (nicht beide); beim Umschalter `"fahrt"` bzw. `"gefuehlt"` |
+| `auchBetroffen` | Liste von Texten | bei `"stufe"`: `id`s der Stufen, deren Temperaturbereich sich dadurch mit verschoben hat (z. B. die Stufe unter einer geänderten Grenze); fehlt das Feld, gilt `[]` |
+
+Die Rückmeldungen einer Stufe zählen ab ihrer letzten Änderung: Einträge
+mit `"stufe"` für diese Stufe oder mit ihr in `auchBetroffen` und jeder
+Eintrag `"grundlage"`; Änderungen am Regenzusatz zählen nicht.
 
 Standard-Stufen (ab Version 6): `stufe1` ab 20, `stufe2` ab 15, `stufe3` ab 11,
 `stufe4` ab 7 (mit `haendeBeiRegen` „Übergangshandschuhe“), `stufe5` ab 3,
@@ -1254,7 +1391,24 @@ Werte sind die ungünstigsten an Wohnort, Wegpunkten und Arbeitsort.
 |---|---|---|
 | `quelle` | `"vorhersage"` oder `"rueckblick"` | aus der Vorhersage übernommen bzw. nachträglich für einen vergangenen Tag geholt |
 | `stand` | Text | Zeitpunkt der Daten (ISO 8601) |
-| `hin`, `rueck` | Objekt oder `null` | je Fahrt: `temperatur` (niedrigste, °C), `gefuehlt` (niedrigste gefühlte, °C), `niederschlag` (Summe, mm, ≥ 0), `regenWahrscheinlichkeit` (höchste, 0–100 oder `null`), `wind` (Mittel, km/h), `boeen` (höchste, km/h), `ampel` (`"gruen"`, `"gelb"`, `"rot"`), `kleidung` (`id` der empfohlenen Kleidungsstufe oder `null`), `empfehlung` (ab Version 6: die tatsächlich empfohlene Kleidung je Bereich wie bei `bereiche` einer Stufe, mit Zwiebelprinzip, oder `null`), `regenkleidung` (ab Version 6: `true`, wenn ein Regenzusatz galt; fehlt das Feld, gilt `false`), `rueckmeldung` (`"zu-warm"`, `"passte"`, `"zu-kalt"` oder `null`; wird je Stufe ausgewertet) |
+| `hin`, `rueck` | Objekt oder `null` | je Fahrt: `temperatur` (niedrigste, °C), `gefuehlt` (niedrigste gefühlte, °C), `niederschlag` (Summe, mm, ≥ 0), `regenWahrscheinlichkeit` (höchste, 0–100 oder `null`), `wind` (Mittel, km/h), `boeen` (höchste, km/h), `ampel` (`"gruen"`, `"gelb"`, `"rot"`), `kleidung` (`id` der empfohlenen Kleidungsstufe oder `null`), `empfehlung` (ab Version 6: die tatsächlich empfohlene Kleidung je Bereich wie bei `bereiche` einer Stufe, mit Zwiebelprinzip, oder `null`), `regenkleidung` (ab Version 6: `true`, wenn ein Regenzusatz galt; fehlt das Feld, gilt `false`), `rueckmeldung` (`"zu-warm"`, `"passte"`, `"zu-kalt"` oder `null`; wird je Stufe ausgewertet); ab Version 11 dazu die Werte „beim Fahren“ (siehe unten) |
+
+**Werte „beim Fahren“ je Fahrt** (ab Version 11; jedes Feld darf fehlen oder
+`null` sein, z. B. bei Wetter von vor 5d):
+
+| Feld | Typ | Bedeutung |
+|---|---|---|
+| `beimFahren` | Zahl | gefühlt beim Fahren im kältesten 15-Minuten-Schritt (°C) |
+| `luftfeuchte` | Zahl 0–100 | relative Luftfeuchte, Mittel der Fahrt (%) |
+| `windRichtung` | Zahl 0–360 | Richtung, aus der der Wind kommt, Mittel der Fahrt (Grad) |
+| `windAnteil` | Objekt | `{ "gegen", "seite", "ruecken" }`: Anteile der Länge der Teilstrecken, die für den Wind zählen, mit Gegen-, Seiten- und Rückenwind im kältesten Schritt (je 0–1, zusammen 1); `null` ohne Strecke oder ohne zählende Teilstrecke |
+| `teilstrecken` | Liste | je Teilstrecke im kältesten Schritt `{ "laenge" (km Luftlinie), "kurs" (Fahrtrichtung, Grad), "zaehlt" (für den Wind), "wind" (km/h in 10 m), "richtung" (Grad oder null), "luftstrom" (km/h am Körper), "beimFahren" (°C) }`; `null` ohne Strecke |
+| `geschwindigkeit` | Zahl 5–40 | Fahrgeschwindigkeit (km/h) |
+| `grundlage` | `"fahrt"` oder `"gefuehlt"` | wonach die Stufe tatsächlich gewählt wurde; bei Wetter von vor 5d `"gefuehlt"` |
+| `empfohlenAm` | Text | Zeitpunkt der Empfehlung (ISO 8601); `null` = vor 5d (zählt als „vor 5d“) |
+
+„Wetter nachtragen“ ergänzt bei Rückblick-Wetter von vor 5d nur `beimFahren`
+bis `geschwindigkeit`; `grundlage` und `empfohlenAm` bleiben.
 
 ### `wartungsarten[]`
 
@@ -1336,8 +1490,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ```json
 {
-  "version": 10,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5c", "eintraege": 4,
+  "version": 11,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5d", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1355,6 +1509,7 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
       "ortAusserhalb": "standort",
       "hinfahrt": { "von": "06:00", "bis": "07:00", "abfahrtAn": true, "abfahrt": "06:00", "dauer": 60 },
       "rueckfahrt": { "von": "16:00", "bis": "17:00", "abfahrtAn": false, "abfahrt": "16:00", "dauer": 60 },
+      "geschwindigkeit": null,
       "ampel": { "rotBoeen": 60, "rotStarkregen": 5, "rotWarnstufe": 2, "gelbRegenWahrscheinlichkeit": 50,
                  "gelbNiederschlag": 0.5, "gelbBoeen": 40, "gelbTemperatur": 0, "glaetteTemperatur": 1 },
       "kleidung": {
@@ -1371,7 +1526,17 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
         ],
         "regen": [{ "ab": 40, "bereiche": { "oberkoerper": "Regenjacke" } },
                   { "ab": 60, "bereiche": { "beine": "Regenhose", "fuesse": "Gamaschen" } }],
-        "rueckmeldung": true
+        "rueckmeldung": true,
+        "grundlage": "fahrt",
+        "protokoll": [
+          { "zeitpunkt": "2025-01-18T19:30:00.000Z", "art": "stufe", "stufe": "s1a2b3c",
+            "vorher": { "ab": null, "bereiche": { "kopf": "warme Mütze", "hals": "Schal", "haende": "Übergangshandschuhe",
+              "oberkoerper": "2 T-Shirts, warmer Pullover, Regenjacke als Windschutz", "beine": "Hose, Regenhose als Windschutz",
+              "fuesse": "Socken, Gamaschen" }, "haendeBeiRegen": null },
+            "nachher": { "ab": null, "bereiche": { "kopf": "warme Mütze", "hals": "Schal", "haende": "Winterhandschuhe",
+              "oberkoerper": "2 T-Shirts, warmer Pullover, Regenjacke als Windschutz", "beine": "Hose, Regenhose als Windschutz",
+              "fuesse": "Socken, Gamaschen" }, "haendeBeiRegen": null }, "auchBetroffen": [] }
+        ]
       }
     }
   },
@@ -1388,12 +1553,21 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
                  "boeen": 25, "ampel": "gruen", "kleidung": "s1a2b3c",
                  "empfehlung": { "kopf": "warme Mütze", "hals": "Schal", "haende": "Winterhandschuhe",
                    "oberkoerper": "2 T-Shirts, warmer Pullover, Regenjacke als Windschutz", "beine": "Hose, Regenhose als Windschutz",
-                   "fuesse": "Socken, Gamaschen" }, "regenkleidung": false, "rueckmeldung": "passte" },
+                   "fuesse": "Socken, Gamaschen" }, "regenkleidung": false, "rueckmeldung": "passte",
+                 "beimFahren": -5.8, "luftfeuchte": 85, "windRichtung": 250,
+                 "windAnteil": { "gegen": 0.6, "seite": 0.4, "ruecken": 0 },
+                 "teilstrecken": [
+                   { "laenge": 2.1, "kurs": 54, "zaehlt": true, "wind": 12, "richtung": 250, "luftstrom": 11.2, "beimFahren": -5.4 },
+                   { "laenge": 2.5, "kurs": 80, "zaehlt": false, "wind": 12, "richtung": 251, "luftstrom": 10, "beimFahren": -4.9 },
+                   { "laenge": 1.6, "kurs": 250, "zaehlt": true, "wind": 13, "richtung": 249, "luftstrom": 18.7, "beimFahren": -7.6 }],
+                 "geschwindigkeit": 10, "grundlage": "fahrt", "empfohlenAm": "2025-01-20T04:50:12.000Z" },
         "rueck": { "temperatur": 9, "gefuehlt": 8.5, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18,
                    "boeen": 42, "ampel": "gelb", "kleidung": "stufe4",
                    "empfehlung": { "kopf": "leichte Mütze", "hals": "", "haende": "Übergangshandschuhe",
                      "oberkoerper": "T-Shirt, leichter Pullover, Regenjacke", "beine": "Hose, Regenhose", "fuesse": "Socken, Gamaschen" },
-                   "regenkleidung": true, "rueckmeldung": "zu-kalt" } } },
+                   "regenkleidung": true, "rueckmeldung": "zu-kalt",
+                   "beimFahren": null, "luftfeuchte": null, "windRichtung": null, "windAnteil": null, "teilstrecken": null,
+                   "geschwindigkeit": null, "grundlage": "gefuehlt", "empfohlenAm": null } } },
     { "datum": "2025-01-21", "km": 12.5, "notiz": "Umweg" }
   ],
   "wartungsarten": [
@@ -1550,8 +1724,18 @@ damit nichts verloren geht.
   weiß die App bei vorhandenen Aufträgen nicht; ein Hinweis auf einen alten
   Eintrag erscheint erst nach der nächsten Übernahme in den Kalender. Die
   umgewandelten Daten werden beim nächsten Speichern als Version 10 abgelegt.
-- Daten aus Version 1 bis 8 werden in einem Schritt über die Zwischenversionen
-  auf Version 10 gebracht.
+- **Version 10 → 11** (Release 5d): Alle Daten bleiben erhalten (Einträge mit
+  Wetter, empfohlener Kleidung und Rückmeldungen, Kleidungsstufen, Regenzusatz,
+  Orte, Aufträge …); es kommen nur fehlende Felder dazu. Ergänzt werden
+  `geschwindigkeit: null` (automatisch) in `einstellungen.wetter`,
+  `grundlage: "fahrt"` (Stufe nach „gefühlt beim Fahren“) und ein leeres
+  `protokoll` in der Kleidung sowie bei jeder gespeicherten Fahrt die Werte
+  „beim Fahren“ als `null`, `grundlage: "gefuehlt"` (die Stufe war damals nach
+  der gefühlten Temperatur von Open-Meteo gewählt; ohne Stufe `null`) und
+  `empfohlenAm: null`. Bisherige Rückmeldungen zählen damit als „vor 5d“. Die
+  umgewandelten Daten werden beim nächsten Speichern als Version 11 abgelegt.
+- Daten aus Version 1 bis 9 werden in einem Schritt über die Zwischenversionen
+  auf Version 11 gebracht.
 
 **App-Versionen:** Die Zahl `version` oben gilt für die Daten. Die App selbst
 zählt ab Release 5c so: fortlaufende Buchstaben für jedes Release (5c, 5d …)
@@ -1566,12 +1750,23 @@ Unterseiten, Temperaturbereiche mit „bis“, Windpfeile je Teilstrecke,
 Sonnenauf- und -untergang und eine Reiterleiste, die unten bleibt (feste
 Seitenhöhe, nur der Inhalt scrollt).
 
+**Release 5d** (Datenversion 11): Kleidungsstufe nach der gefühlten
+Temperatur beim Fahren (Formel wie Open-Meteo mit dem Luftstrom am Körper aus
+Fahrgeschwindigkeit, Windrichtung und Windstärke je Teilstrecke), Umschalter
+und eigene Fahrgeschwindigkeit auf der Seite Kleidung, Werte „beim Fahren“ je
+Eintrag (auch nachträglich aus dem Rückblick), Änderungsprotokoll der Kleidung
+mit Rückmeldungen ab der letzten Änderung und Hinweis „Stufe bearbeiten“,
+eine flachere Reiterleiste und ein kleinerer Seitentitel (Inhalt am iPhone 13
+mini rund 650 statt 610 pt hoch) und die Ortssuche mit Vorschlägen beim
+Tippen, eingefügten Koordinaten und Kartenlinks, Namensvorschlag und den
+zuletzt gewählten Orten (Formular als Unterseite).
+
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1 bis 9 auf Version 10 (`tests/daten-v1.json`
-  bis `tests/daten-v9.json`, erfundene Werte; auch dass geänderte
+- die Umwandlung von Version 1 bis 10 auf Version 11 (`tests/daten-v1.json`
+  bis `tests/daten-v10.json`, erfundene Werte; auch dass geänderte
   Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
   werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
@@ -1735,7 +1930,47 @@ Seitenhöhe, nur der Inhalt scrollt).
   auch ganz unten im Inhalt (375 × 812), Tipp auf den aktiven Reiter, ein Feld
   unten auf der Seite wird beim Antippen sichtbar, Zurücksetzen nur bei
   geschlossener Tastatur und ohne Zoom (nach dem Verlassen eines Felds und
-  beim Zurückkehren in die App).
+  beim Zurückkehren in die App),
+- Release 5d, Reiterleiste und Seitentitel (B11): Reiter 50 px, Symbol 21 px,
+  Beschriftung 11 px, Innenabstand 4 px, die Variablen `--reiter-hoehe`,
+  `--home-abzug` und `--home-frei` (Formel mit 34 pt Home-Zone: 20 bzw. 26 pt,
+  ohne Home-Zone 8 px), Titel 22 px mit Abstand 4 px (auch auf Unterseiten),
+  Inhalt am iPhone 13 mini mindestens 650 pt, Meldung 16 px über der Leiste,
+- Release 5d, Datenversion 11: die Umwandlung 10 → 11 mit
+  `tests/daten-v10.json` beim Laden und beim Import (alle Daten erhalten,
+  neue Felder ergänzt, Rückmeldungen „vor 5d“, „Sicherung prüfen“ identisch,
+  Export → Import) und die Prüfung von Fahrgeschwindigkeit, Grundlage,
+  Protokoll (alle Arten, ungültige Einträge) und der Werte „beim Fahren“ je
+  Fahrt,
+- Release 5d, gefühlt beim Fahren (N5): die Formel von Open-Meteo mit
+  Beispielwerten (mit und ohne Sonne), Faktor und Windprofil, Luftstrom bei
+  Gegen-, Rücken- und Seitenwind, die Werte je Richtung, das Mittel ohne
+  Richtung, die Fahrgeschwindigkeit (Vorlage, Dauer, eigene, Annahme,
+  Grenzen), die Plausibilität mit `tests/wetter-gefuehlt.json` (nach der
+  Formel von Open-Meteo gerechnet und gerundet, höchstens 0,3 °C), die
+  Rechnung je Fahrt nachgerechnet (Mittel der Enden, kältester Schritt,
+  Gewichtung nach Länge, Teilstrecke ohne Wind, Anteile, Windlage), fehlende
+  Luftfeuchte, die Grundlage, die Fahrt- und „Jetzt“-Karte, die Seite Kleidung
+  (Umschalter, Erklärung, Fahrgeschwindigkeit, Plausibilitätsanzeige), das
+  Speichern im Eintrag mit Detailansicht und „Wetter nachtragen“ (Rückblick:
+  nur die neuen Werte; Vorhersage: ersetzt, Kleidung und Rückmeldung bleiben),
+- Release 5d, Änderungsprotokoll (N4): Einträge beim Speichern, ohne Änderung
+  keiner, neue und entfernte Stufe, verschobene Grenze mit betroffener
+  Nachbarstufe, Umschalter, Regenzusatz (setzt die Zählung nicht zurück),
+  „Rückgängig“, die Unterseite „Änderungen der Kleidung“; die Zählung ab der
+  letzten Änderung (Fahrt und Empfehlung danach, gleiche Grundlage, vor 5d
+  getrennt), der Hinweis (2× zu kalt bei 1× passte ja, bei 3× passte nicht,
+  Windlage und Regen, „uneinheitlich“, „seit 5d“) auf der Seite Kleidung, in
+  der Fahrt-Karte und in der Meldung,
+- Release 5d, Ortssuche (B12): Koordinaten in allen Formaten (Dezimalgrad,
+  Apple Karten mit N/S/E/O/W, Grad/Minuten/Sekunden), Links von Apple Karten,
+  Google Maps und `geo:`, Kurzlinks, keine Koordinaten bei Namen und PLZ, die
+  Umlaut-Varianten, das Formular als Unterseite, Einfügen ohne Abfrage,
+  Namensvorschlag aus dem Link und vom DWD (nur zum Antippen), Vorschläge ab
+  3 Zeichen erst 400 ms nach der letzten Eingabe, Abbruch der älteren
+  Abfrage, PLZ, der zweite Versuch mit Umlaut, ohne Netz, die zuletzt
+  gewählten Orte (höchstens 5, ohne Doppelte, nicht in Daten und Sicherung,
+  „Liste leeren“).
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -1746,7 +1981,12 @@ antwortet (`tests/wetter-*.json`, aufgezeichnet am 25.10.2026 für erfundene
 Koordinaten; Ortsnamen, Warngebiete und Kennungen sind durch erfundene ersetzt;
 `tests/wetter-rueckblick.json` ist der Rückblick für den 12.–23.10.2026; die
 Sonnenauf- und -untergangszeiten in `tests/wetter-open-meteo*.json` sind
-erfunden und werden in den Tests in der Ortszeit des Testgeräts gesetzt).
+erfunden und werden in den Tests in der Ortszeit des Testgeräts gesetzt; seit
+5d enthalten die Dateien erfundene Werte für Luftfeuchte und Globalstrahlung).
+`tests/wetter-gefuehlt.json` ist ganz erfunden: eine Woche an zwei erfundenen
+Orten (Fahrt nach Osten) mit Wind aus Ost (Gegen- bzw. Rückenwind), aus Nord
+(Seitenwind) und einem sonnigen Tag; ihre gefühlte Temperatur ist mit der
+Formel von Open-Meteo gerechnet und wie die API gerundet.
 Für die einzelnen Fälle setzen die Tests die aufgezeichnete Vorhersage auf
 ruhiges Wetter und ändern dann gezielt einzelne Werte; für Wegpunkte setzen sie
 die Vorhersage eines weiteren Orts aus den Aufzeichnungen zusammen. Die Tests laufen in jeder
@@ -1808,8 +2048,10 @@ fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
 | `js/wartung.js` | Werkstatt (Berechnung): Fälligkeit (Zeitfenster, Intervall), offene Aufträge, berechnete Standard-Zuordnung, Vorschläge |
 | `js/kalender.js` | Kalenderdatei (`.ics`) zum Termin eines geplanten Auftrags (Zeiten in UTC aus Europe/Berlin, Vorlaufzeit), Stand im Kalender (`imKalender`) |
 | `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten (für Einstellungen → Wartungsarten): Aufträge, Termin mit Vorlaufzeit, „In Kalender übernehmen“ (Karte, Fenster, Hinweis auf veralteten Eintrag), Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
-| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung, Wind (Pfeilrichtung und -farbe), Sonnenauf- und -untergang, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick |
-| `js/wetter-ansicht.js` | Reiter Wetter und Kachel (mit Windpfeilen und Sonnenzeile), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“, „Außerhalb der Fahrten“, „Kleidung“ mit Stufe und Regenzusatz, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt |
+| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung (Grundlage der Stufe), Wind (Pfeilrichtung und -farbe), Sonnenauf- und -untergang, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick (auch Ergänzen der Werte „beim Fahren“) |
+| `js/gefuehlt.js` | Gefühlt beim Fahren: Formel wie Open-Meteo, Luftstrom am Körper, Wind auf Körperhöhe, Fahrgeschwindigkeit, Rechnung je Fahrt (Teilstrecken, kältester Schritt, ohne Richtung), Windlage, Plausibilität |
+| `js/orte.js` | Ortseingabe: Koordinaten und Kartenlinks lesen, Ortssuche beim Tippen (Verzögerung, Abbruch, Umlaute), zuletzt gewählte Orte, Namensvorschlag über die Gemeinde des DWD |
+| `js/wetter-ansicht.js` | Reiter Wetter und Kachel (mit Windpfeilen, Sonnenzeile und „gefühlt · beim Fahren“), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ mit dem Formular eines Orts, „Außerhalb der Fahrten“, „Kleidung“ mit Umschalter, Fahrgeschwindigkeit, Plausibilität im Testmodus, Stufe, Regenzusatz und „Änderungen“, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt, Änderungsprotokoll, Zählung ab der letzten Änderung und Hinweise |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (für Fahrten → Einträge), Eintragsformular, Kilometerstand für ein Datum |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Datensicherung: Export, Prüfung vor dem Teilen, Vergleich mit einer Sicherung, Import |

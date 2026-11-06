@@ -588,7 +588,7 @@ function enthaelt(text, teil) { return String(text || "").toLowerCase().includes
 // Empfehlung in einer Zeile, leere Bereiche weggelassen: "leichte Mütze · Socken"
 function empfehlungText(bereiche) { return BEREICH_SCHLUESSEL.map(b => bereiche[b]).filter(Boolean).join(" · "); }
 
-// Kleidung je Körperbereich nach der niedrigsten gefühlten Temperatur (Stufe:
+// Kleidung je Körperbereich nach dem kältesten Wert der Fahrt (gefühlt beim Fahren bzw. gefühlt, siehe stufenGrundlage; Stufe:
 // die erste, deren Untergrenze erreicht ist) und der Regenwahrscheinlichkeit
 // (Regenzusatz). Bei Regen gilt das Zwiebelprinzip:
 // - Kopf und Hals wie in der Stufe; Hände ebenso, außer die Stufe nennt
