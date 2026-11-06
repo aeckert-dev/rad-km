@@ -66,7 +66,10 @@ function standardKleidung() {
         "2 T-Shirts, leichter Pullover, warmer Pullover, Regenjacke als Windschutz", "lange Unterhose, Hose, Regenhose als Windschutz", "2 Paar Socken, Gamaschen"))
     ],
     regen: [{ ab: 40, bereiche: b("", "", "", "Regenjacke", "", "") }, { ab: 60, bereiche: b("", "", "", "", "Regenhose", "Gamaschen") }],
-    rueckmeldung: true
+    rueckmeldung: true,
+    // Ab Version 11: Stufe nach „gefühlt beim Fahren“ und das Änderungsprotokoll
+    grundlage: "fahrt",
+    protokoll: []
   };
 }
 // Die Standard-Kleidungsstufen aus Version 5 (Release 4b; für die Umwandlung auf Version 6)
@@ -98,7 +101,10 @@ function standardWetter() {
   const v4 = wetterVersion4();
   return {
     wohnort: null, arbeitsort: null, weitererOrt: null, wegpunkte: [], windTeilstrecken: [true], ortAusserhalb: "wohnort",
-    hinfahrt: fahrzeitMitSchalter(v4.hinfahrt, true), rueckfahrt: fahrzeitMitSchalter(v4.rueckfahrt, true), ampel: v4.ampel, kleidung: standardKleidung()
+    hinfahrt: fahrzeitMitSchalter(v4.hinfahrt, true), rueckfahrt: fahrzeitMitSchalter(v4.rueckfahrt, true),
+    // Ab Version 11: eigene Fahrgeschwindigkeit in km/h (null = aus Vorlage und Dauer)
+    geschwindigkeit: null,
+    ampel: v4.ampel, kleidung: standardKleidung()
   };
 }
 // Fahrzeit ab Version 7: { von, bis, abfahrtAn, abfahrt, dauer }; abfahrt ist immer eine Uhrzeit
@@ -258,8 +264,32 @@ const MIGRATIONEN = {
     const d = Object.assign({}, alt, { version: 10 });
     if (Array.isArray(alt.auftraege)) d.auftraege = alt.auftraege.map(a => istObjekt(a) ? Object.assign({}, a, { vorlauf: null, imKalender: null }) : a);
     return d;
+  },
+  // Version 10 → 11 (Release 5d): Kleidungsstufe nach „gefühlt beim Fahren“
+  // (grundlage "fahrt"), leeres Änderungsprotokoll, Fahrgeschwindigkeit aus
+  // Vorlage und Dauer. Gespeicherte Fahrten bekommen die neuen Werte leer;
+  // ihre Stufe war nach der gefühlten Temperatur von Open-Meteo gewählt
+  // (grundlage "gefuehlt", empfohlenAm null = „vor 5d“). Alles andere bleibt.
+  10: alt => {
+    const d = Object.assign({}, alt, { version: 11 });
+    const es = alt.einstellungen;
+    if (istObjekt(es) && istObjekt(es.wetter)) {
+      const w = Object.assign({}, es.wetter, { geschwindigkeit: null });
+      if (istObjekt(w.kleidung)) w.kleidung = Object.assign({}, w.kleidung, { grundlage: "fahrt", protokoll: [] });
+      d.einstellungen = Object.assign({}, es, { wetter: w });
+    }
+    if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion10(e.wetter.hin), rueck: fahrtAusVersion10(e.wetter.rueck) }) }) : e);
+    return d;
   }
 };
+
+// Neue Werte je Fahrt ab Version 11 (gefühlt beim Fahren), bei älteren Fahrten leer
+const FAHRT_WERTE_11 = { beimFahren: null, luftfeuchte: null, windRichtung: null, windAnteil: null, teilstrecken: null, geschwindigkeit: null };
+function fahrtAusVersion10(f) {
+  if (!istObjekt(f)) return f;
+  return Object.assign({}, f, FAHRT_WERTE_11, { grundlage: f.kleidung ? "gefuehlt" : null, empfohlenAm: null });
+}
 
 // Ist eine Wartungsart aus Version 7 ein Auftrag? Mit Zeitfenster, einmalig oder
 // mit „Inspektion“, „Reparatur“ bzw. „Eigenleistung“ im Namen; sonst eine Aufgabe.
@@ -595,13 +625,65 @@ function wetterPruefen(w, fehler) {
     }
     const rueckmeldung = k.rueckmeldung ?? true;
     if (typeof rueckmeldung !== "boolean") fehler(wo + ": rueckmeldung muss true oder false sein.");
-    kleidung = { stufen, regen, rueckmeldung };
+    const grundlage = k.grundlage ?? "fahrt";
+    if (!GRUNDLAGEN.includes(grundlage)) fehler(wo + ": grundlage muss „fahrt“ oder „gefuehlt“ sein.");
+    const protokoll = k.protokoll === undefined || k.protokoll === null ? [] : protokollPruefen(k.protokoll, wo, fehler);
+    kleidung = { stufen, regen, rueckmeldung, grundlage, protokoll };
+  }
+
+  // Eigene Fahrgeschwindigkeit (ab Version 11); null = aus Vorlage und Dauer
+  const geschwindigkeit = w.geschwindigkeit ?? null;
+  if (geschwindigkeit !== null && !(istEndlich(geschwindigkeit) && geschwindigkeit >= GESCHWINDIGKEIT_MIN && geschwindigkeit <= GESCHWINDIGKEIT_MAX)) {
+    fehler("Wetter: „geschwindigkeit“ muss eine Zahl von " + GESCHWINDIGKEIT_MIN + " bis " + GESCHWINDIGKEIT_MAX + " (km/h) oder null sein.");
   }
 
   return {
     wohnort: ort("wohnort", "Wohnort"), arbeitsort: ort("arbeitsort", "Arbeitsort"), weitererOrt: ort("weitererOrt", "weiterer Ort"),
-    wegpunkte, windTeilstrecken, ortAusserhalb, hinfahrt: fahrt("hinfahrt", "Hinfahrt"), rueckfahrt: fahrt("rueckfahrt", "Rückfahrt"), ampel, kleidung
+    wegpunkte, windTeilstrecken, ortAusserhalb, hinfahrt: fahrt("hinfahrt", "Hinfahrt"), rueckfahrt: fahrt("rueckfahrt", "Rückfahrt"), geschwindigkeit, ampel, kleidung
   };
+}
+
+// Änderungsprotokoll der Kleidung (ab Version 11): je Änderung Zeitpunkt, Art
+// ("stufe", "grundlage", "regen") und der Inhalt vorher und nachher (null =
+// neu bzw. entfernt). Bei einer Stufe deren id und die Stufen, deren
+// Temperaturbereich sich dadurch mit geändert hat (auchBetroffen).
+function protokollPruefen(liste, wo, fehler) {
+  if (!Array.isArray(liste)) fehler(wo + ": „protokoll“ muss eine Liste sein.");
+  const zahlOderNull = v => v === null || istEndlich(v);
+  return liste.map((p, i) => {
+    const wn = wo + ", Protokoll Nr. " + (i + 1);
+    if (!istObjekt(p)) fehler(wn + ": ist kein Objekt.");
+    if (typeof p.zeitpunkt !== "string" || isNaN(Date.parse(p.zeitpunkt))) fehler(wn + ": zeitpunkt muss ein Zeitpunkt sein (ISO 8601).");
+    if (!PROTOKOLL_ARTEN.includes(p.art)) fehler(wn + ": art muss „stufe“, „grundlage“ oder „regen“ sein.");
+    const vorher = p.vorher ?? null, nachher = p.nachher ?? null;
+    if (p.art === "grundlage") {
+      if (!GRUNDLAGEN.includes(vorher) || !GRUNDLAGEN.includes(nachher)) fehler(wn + ": vorher und nachher müssen „fahrt“ oder „gefuehlt“ sein.");
+      return { zeitpunkt: p.zeitpunkt, art: p.art, stufe: null, vorher, nachher, auchBetroffen: [] };
+    }
+    if (vorher === null && nachher === null) fehler(wn + ": vorher und nachher dürfen nicht beide null sein.");
+    const inhalt = (x, name) => {
+      if (x === null) return null;
+      if (!istObjekt(x)) fehler(wn + ": " + name + " muss ein Objekt oder null sein.");
+      const bereiche = bereichePruefen(x.bereiche, wn + " (" + name + ")", fehler, false);
+      if (p.art === "regen") {
+        if (!(istEndlich(x.ab) && x.ab >= 0 && x.ab <= 100)) fehler(wn + " (" + name + "): ab muss eine Regenwahrscheinlichkeit von 0 bis 100 sein.");
+        return { ab: x.ab, bereiche };
+      }
+      const ab = x.ab ?? null, hr = x.haendeBeiRegen ?? null;
+      if (!zahlOderNull(ab)) fehler(wn + " (" + name + "): ab muss eine Zahl (°C) oder null sein.");
+      if (hr !== null && typeof hr !== "string") fehler(wn + " (" + name + "): haendeBeiRegen muss ein Text oder null sein.");
+      return { ab, bereiche, haendeBeiRegen: hr };
+    };
+    let stufe = null, auchBetroffen = [];
+    if (p.art === "stufe") {
+      if (typeof p.stufe !== "string" || !p.stufe) fehler(wn + ": stufe muss die id einer Kleidungsstufe sein.");
+      stufe = p.stufe;
+      const a = p.auchBetroffen ?? [];
+      if (!Array.isArray(a) || a.some(x => typeof x !== "string" || !x)) fehler(wn + ": auchBetroffen muss eine Liste von ids sein.");
+      auchBetroffen = [...a];
+    }
+    return { zeitpunkt: p.zeitpunkt, art: p.art, stufe, vorher: inhalt(vorher, "vorher"), nachher: inhalt(nachher, "nachher"), auchBetroffen };
+  });
 }
 
 // Kleidung je Körperbereich prüfen: sechs Texte (fehlend = ""), mindestens einer ausgefüllt
@@ -641,8 +723,35 @@ function eintragWetterPruefen(ew, wo, fehler) {
     if (typeof regenkleidung !== "boolean") fehler(wn + ": regenkleidung muss true oder false sein.");
     const rm = f.rueckmeldung ?? null;
     if (rm !== null && !RUECKMELDUNGEN.includes(rm)) fehler(wn + ": rueckmeldung muss „zu-warm“, „passte“, „zu-kalt“ oder null sein.");
+    // Ab Version 11: gefühlt beim Fahren und woraus es berechnet wurde (fehlend = null)
+    const opt = (k, gueltig, text) => { const v = f[k] ?? null; if (v !== null && !gueltig(v)) fehler(wn + ": " + k + " muss " + text + " oder null sein."); return v; };
+    const winkel = v => istEndlich(v) && v >= 0 && v <= 360;
+    const beimFahren = opt("beimFahren", istEndlich, "eine Zahl (°C)");
+    const luftfeuchte = opt("luftfeuchte", v => istEndlich(v) && v >= 0 && v <= 100, "eine Zahl von 0 bis 100");
+    const windRichtung = opt("windRichtung", winkel, "eine Richtung von 0 bis 360 (Grad)");
+    const geschwindigkeit = opt("geschwindigkeit", v => istEndlich(v) && v >= GESCHWINDIGKEIT_MIN && v <= GESCHWINDIGKEIT_MAX,
+      "eine Zahl von " + GESCHWINDIGKEIT_MIN + " bis " + GESCHWINDIGKEIT_MAX + " (km/h)");
+    const grundlage = opt("grundlage", v => GRUNDLAGEN.includes(v), "„fahrt“ oder „gefuehlt“");
+    const empfohlenAm = opt("empfohlenAm", v => typeof v === "string" && !isNaN(Date.parse(v)), "ein Zeitpunkt (ISO 8601)");
+    const anteil = v => istEndlich(v) && v >= 0 && v <= 1;
+    let windAnteil = opt("windAnteil", v => istObjekt(v) && ["gegen", "seite", "ruecken"].every(k => anteil(v[k])) && Math.abs(v.gegen + v.seite + v.ruecken - 1) <= 0.02,
+      "ein Objekt { gegen, seite, ruecken } mit Anteilen von 0 bis 1 (zusammen 1)");
+    if (windAnteil) windAnteil = { gegen: windAnteil.gegen, seite: windAnteil.seite, ruecken: windAnteil.ruecken };
+    let teilstrecken = opt("teilstrecken", Array.isArray, "eine Liste");
+    if (teilstrecken) teilstrecken = teilstrecken.map((t, j) => {
+      const wt = wn + ", Teilstrecke " + (j + 1);
+      if (!istObjekt(t)) fehler(wt + ": ist kein Objekt.");
+      const pr = (k, gueltig, text) => { if (!gueltig(t[k])) fehler(wt + ": " + k + " muss " + text + " sein."); return t[k]; };
+      const ab0 = v => istEndlich(v) && v >= 0;
+      const richtung = t.richtung ?? null;
+      if (richtung !== null && !winkel(richtung)) fehler(wt + ": richtung muss eine Richtung von 0 bis 360 (Grad) oder null sein.");
+      return { laenge: pr("laenge", ab0, "eine Zahl ≥ 0 (km)"), kurs: pr("kurs", winkel, "eine Richtung von 0 bis 360 (Grad)"),
+        zaehlt: pr("zaehlt", v => typeof v === "boolean", "true oder false"), wind: pr("wind", ab0, "eine Zahl ≥ 0 (km/h)"), richtung,
+        luftstrom: pr("luftstrom", ab0, "eine Zahl ≥ 0 (km/h)"), beimFahren: pr("beimFahren", istEndlich, "eine Zahl (°C)") };
+    });
     return { temperatur: zahl("temperatur"), gefuehlt: zahl("gefuehlt"), niederschlag: zahl("niederschlag", 0), regenWahrscheinlichkeit: w,
-      wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, empfehlung, regenkleidung, rueckmeldung: rm };
+      wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, empfehlung, regenkleidung, rueckmeldung: rm,
+      beimFahren, luftfeuchte, windRichtung, windAnteil, teilstrecken, geschwindigkeit, grundlage, empfohlenAm };
   };
   return { quelle: ew.quelle, stand: ew.stand, hin: fahrt(ew.hin, "hin"), rueck: fahrt(ew.rueck, "rueck") };
 }

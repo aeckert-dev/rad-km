@@ -18,7 +18,7 @@ const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 const APP_VERSION = "5c";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 10;
+const DATEN_VERSION = 11;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;
@@ -46,6 +46,20 @@ const ZWIEBEL_BEREICHE = ["oberkoerper", "beine", "fuesse"];
 const VORLAUF_MIN = 1, VORLAUF_MAX = 240;
 // Höchstens so viele Wegpunkte zwischen Wohn- und Arbeitsort
 const MAX_WEGPUNKTE = 3;
+// Grundlage der Kleidungsstufe (ab Version 11): "fahrt" = gefühlt beim Fahren
+// (mit Fahrtwind, Windrichtung und Windstärke), "gefuehlt" = gefühlte
+// Temperatur von Open-Meteo (für einen stehenden Menschen)
+const GRUNDLAGEN = ["fahrt", "gefuehlt"];
+// Arten der Einträge im Änderungsprotokoll der Kleidung (ab Version 11)
+const PROTOKOLL_ARTEN = ["stufe", "grundlage", "regen"];
+// Fahrgeschwindigkeit (km/h) für „gefühlt beim Fahren“: erlaubter Bereich und
+// Annahme, wenn es keine Vorlage mit Arbeitsweg gibt
+const GESCHWINDIGKEIT_MIN = 5, GESCHWINDIGKEIT_MAX = 40, GESCHWINDIGKEIT_ANNAHME = 15;
+// Wind von 10 m Höhe auf Körperhöhe (1,5 m): logarithmisches Windprofil
+// u(z)/u(10 m) = ln(z/z0) / ln(10/z0) mit z0 = 0,03 m (offenes Gelände)
+const WIND_KOERPER_FAKTOR = 0.67;
+// So rechnet Open-Meteo den 10-m-Wind für die gefühlte Temperatur auf 2 m um (FAO-56)
+const WIND_2M_FAKTOR = 0.75;
 
 /* =====================================================================
    2. HILFSFUNKTIONEN: Datum, Zahlen, Text
