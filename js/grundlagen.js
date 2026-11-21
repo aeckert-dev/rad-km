@@ -16,11 +16,13 @@ const EXPORT_SCHLUESSEL = TESTMODUS ? "radkm-test-letzter-export" : "radkm-letzt
 const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 // Die zuletzt gewählten Orte (ab 5d; nur auf dem Gerät, kein Teil der Daten und der Sicherung)
 const LETZTE_ORTE_SCHLUESSEL = TESTMODUS ? "radkm-test-letzte-orte" : "radkm-letzte-orte";
+// Verschobene Abfahrt von heute („Heute später los“, ab 5e): nur auf dem Gerät, nicht in der Sicherung
+const ABWEICHUNG_SCHLUESSEL = TESTMODUS ? "radkm-test-heute-abfahrt" : "radkm-heute-abfahrt";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "5d";
+const APP_VERSION = "5e";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 11;
+const DATEN_VERSION = 12;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;
@@ -36,8 +38,6 @@ const PRUEF_SCHLUESSEL = TESTMODUS ? "radkm-test-wartungsarten-pruefen" : "radkm
 // Ab dieser Uhrzeit weist die Übersicht schon am selben Tag auf einen fehlenden Eintrag hin
 // (Schalter "Hinweis schon am selben Tag", Standard an)
 const STANDARD_HINWEIS_HEUTE_AB = "18:00";
-// Wetter außerhalb der Fahrten: am Wohnort oder am aktuellen Standort
-const ORT_AUSSERHALB = ["wohnort", "standort"];
 // Körperbereiche der Kleidung: [Schlüssel in den Daten, Bezeichnung]
 const BEREICHE = [["kopf", "Kopf"], ["hals", "Hals"], ["haende", "Hände"], ["oberkoerper", "Oberkörper"], ["beine", "Beine"], ["fuesse", "Füße"]];
 const BEREICH_SCHLUESSEL = BEREICHE.map(b => b[0]);

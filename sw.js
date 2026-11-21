@@ -35,6 +35,7 @@ const DATEIEN = [
   "js/wartung.js",
   "js/kalender.js",
   "js/wetter.js",
+  "js/fahrtag.js",
   "js/gefuehlt.js",
   "js/orte.js",
   "js/oberflaeche.js",

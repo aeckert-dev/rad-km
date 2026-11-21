@@ -127,8 +127,13 @@ const AKTIONEN = {
   "weiterer-ort-aus": () => weitererOrtAktiv(false),
   "fahrt-bearbeiten": el => fahrtFormular(el.dataset.art),
   "fahrt-speichern": () => fahrtSpeichern(),
-  "wetter-aktualisieren": () => { wetterAktualisieren(true); standortBeiBedarf(true); },
-  "ort-ausserhalb": el => ortAusserhalbSetzen(el.dataset.wert),
+  "wetter-aktualisieren": () => wetterAktualisieren(true),
+  "wetter-wahl": el => wetterWahlSetzen(el.dataset.wert),
+  "fahrt-aufklappen": el => fahrtAufklappen(el.dataset.schluessel),
+  "spaeter-los": el => spaeterFormular(el.dataset.art),
+  "spaeter-plus": el => spaeterPlus(Number(el.dataset.min)),
+  "spaeter-uebernehmen": () => spaeterUebernehmen(),
+  "spaeter-zuruecksetzen": el => spaeterZuruecksetzen(el.dataset.art),
   "ampel-bearbeiten": () => ampelFormular(),
   "ampel-standard": () => ampelStandard(),
   "kleidung-bearbeiten": () => kleidungFormular(),
@@ -158,6 +163,7 @@ const AKTIONEN = {
   "import": () => importStarten()
 };
 const AENDERUNGEN = {
+  "spaeter-zeit": () => spaeterAktualisieren(),
   "eintrag-datum": () => eintragDatumGeaendert(),
   "eintrag-vorlage": () => eintragVorlageGeaendert(),
   "protokoll-datum": () => protokollDatumGeaendert(),
@@ -174,14 +180,16 @@ const AENDERUNGEN = {
   "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
   "kleidung-geschwindigkeit": el => geschwindigkeitGeaendert(el),
   "ampel-feld": el => ampelSpeichern(el),
-  "prognose-datum": () => prognoseAnzeigen()
+  "prognose-datum": () => prognoseAnzeigen(),
+  "spaeter-zeit": () => spaeterAktualisieren()
 };
 const EINGABEN = {
   "termin-vorlauf": () => terminVorlaufEingabe(),
   "ort-karte": () => ortKarteAktualisieren(),
   "ort-eingabe": () => ortEingabe(),
   "protokoll-km": () => protokollKmEingabe(),
-  "prognose-datum": () => prognoseAnzeigen()
+  "prognose-datum": () => prognoseAnzeigen(),
+  "spaeter-zeit": () => spaeterAktualisieren()
 };
 
 document.addEventListener("click", ev => {

@@ -57,6 +57,7 @@ function neuLaden() {
    ===================================================================== */
 laden();
 wetterSpeicherLaden();
+abweichungAufraeumen();
 zeichnen();
 ansichtVerankernStarten();
 serviceWorkerStarten();

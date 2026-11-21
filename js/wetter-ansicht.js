@@ -42,37 +42,67 @@ function bildWetter(jetzt = Date.now()) {
       '<button type="button" data-action="ort-bearbeiten" data-rolle="arbeitsort">Arbeitsort festlegen</button></div></div>' +
       '<p class="klein">Orte und Fahrzeiten findest du auch unter Einstellungen → Wetter.</p>' + wegZuEinstellungen("Orte und Strecke", "orte");
   }
+  const wahl = a.auswahl.wert, h = isoAusDate(new Date(jetzt));
   let html = wetterHinweise(a, jetzt);
-  if (!a.weitererOrt) html += rueckmeldungKarte(jetzt);
+  if (wahl !== "ort") html += rueckmeldungKarte(jetzt);
+  html += auswahlUmschalter(a.auswahl);
   const alt = a.quellen.vorhersage.aktuell ? "" : " veraltet";
-  let warnungen;
-  if (a.weitererOrt) {
-    html += '<div class="karte" style="margin-top:8px"><div><strong>📍 ' + esc(a.orte[0].ort.name) + '</strong> <span class="klein">(weiterer Ort aktiv)</span></div>' +
-      '<div class="klein">Wetter an diesem Ort, ohne Hin- und Rückfahrt.</div>' +
-      '<div class="knopfreihe"><button type="button" data-action="weiterer-ort-aus">Zurück zu Wohn- und Arbeitsort</button></div></div>';
-    a.tage.forEach(t => {
+  let warnungen = [];
+  if (wahl === "ort") {
+    // Weiterer Ort: heute und morgen, ohne Hin- und Rückfahrt
+    html += '<div class="karte" style="margin-top:8px"><div><strong>📍 ' + esc(a.ort.name) + '</strong> <span class="klein">(weiterer Ort)</span></div>' +
+      '<div class="klein">Wetter an diesem Ort für heute und morgen, ohne Hin- und Rückfahrt.</div>' +
+      '<div class="knopfreihe"><button type="button" data-action="weiterer-ort-aus">Nicht mehr zeigen</button></div></div>';
+    a.ort.tage.forEach(t => {
       html += '<h2>' + tagUeberschrift(t.datum, t.titel) + '</h2><div class="karte' + alt + '">' +
         (t.werte ? tageswerteText(t.werte) : '<span class="klein">Für diesen Tag liegt noch keine Vorhersage vor.</span>') + '</div>';
     });
-    warnungen = [...new Set([...a.tage[0].warnungen, ...a.tage[1].warnungen])];
+    warnungen = a.ort.warnungen;
+  } else if (wahl === "heute") {
+    html += fahrtagHtml(a.heute, "Heute, " + wochentag(h) + " " + kurzDatum(h), null, alt, jetzt);
+    warnungen = a.heute.warnungen;
+  } else if (a.fahrtageLeer) {
+    html += '<div class="hinweis info" style="margin-top:8px"><strong>Keine Fahrtage eingestellt</strong><br>' +
+      'Lege fest, an welchen Wochentagen du zur Arbeit fährst. Dann zeigen Übersicht und Reiter Wetter immer den nächsten Fahrtag.</div>' +
+      wegZuEinstellungen("Fahrtage festlegen", "fahrtage");
+  } else if (!a.naechster) {
+    html += '<div class="hinweis info" style="margin-top:8px">Kein Fahrtag in Sicht: Alle Fahrtage des nächsten Jahres sind als „Keine Fahrt“ eingetragen.</div>';
+  } else if (!a.naechsterTag) {
+    // Außerhalb der 8 Tage der Vorhersage
+    html += '<h2 style="margin-top:8px">' + esc(fahrtagTitel(a.naechster)) + '</h2><div class="hinweis info">🕔 ' + esc(vorhersageAbText(a.naechster)) + '</div>';
   } else {
-    if (a.jetzt) {
-      // Außerhalb der Fahrten: heute, eine Fahrt ab jetzt am Wohnort oder am aktuellen Standort
-      const j = a.jetzt;
-      html += '<h2 style="margin-top:8px">' + tagUeberschrift(j.heute.datum, "Heute") + (j.heute.fahrtag ? "" : " – kein Fahrtag") + '</h2>' +
-        '<div class="karte"><div><strong>📍 ' + esc(j.ort.text) + '</strong></div>' + ortAusserhalbUmschalter(j.wahl, j.heimTitel) + '</div>' +
-        (j.hinweis ? '<div class="hinweis warn">' + esc(j.hinweis) + '</div>' : "") +
-        fahrtKarte(j.fahrt, alt) +
-        (a.empfehlungAb ? '<div class="hinweis info">🕔 ' + esc(a.empfehlungAb) + ' (Hin- und Rückfahrt mit Ampel, Kleidung und Wind)</div>' : "");
-    } else {
-      html += '<h2 style="margin-top:8px">' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</h2>';
-      a.fahrten.forEach(f => { html += fahrtKarte(f, alt); });
-      if (a.kleidungsHinweis) html += '<div class="hinweis info">👕 ' + esc(a.kleidungsHinweis) + '</div>';
-    }
-    warnungen = a.warnungen;
+    html += fahrtagHtml(a.naechsterTag, fahrtagTitel(a.naechster), a.naechster, alt, jetzt);
+    warnungen = a.naechsterTag.warnungen;
   }
-  html += warnungenKarte(warnungen, a, jetzt);
+  html += warnungenKarte(warnungen, a, jetzt, wahl === "ort");
   return html + standKarte(a, jetzt) + wegZuEinstellungen("Orte, Fahrzeiten, Kleidung", "", "e-wetter");
+}
+
+// Ein Fahrtag im Reiter: Überschrift, ggf. „vorläufig“, Hin- und Rückfahrt, Hinweis zum Einpacken
+function fahrtagHtml(t, titel, n, alt, jetzt) {
+  let html = '<h2 style="margin-top:8px">' + esc(titel) + '</h2>';
+  if (n && n.vorlaeufig) html += '<div class="klein">' + esc(endgueltigText(n, isoAusDate(new Date(jetzt)))) + '</div>';
+  t.fahrten.forEach(f => { html += fahrtKarte(f, alt); });
+  if (t.kleidungsHinweis) html += '<div class="hinweis info">👕 ' + esc(t.kleidungsHinweis) + '</div>';
+  return html;
+}
+
+// Umschalter oben im Reiter Wetter: „Heute · Sa 21.11. | Nächster · Mo 23.11. | 📍 Ort“
+// (nur, wenn es mehr als eine Auswahl gibt; ein Tipp gilt nur im Arbeitsspeicher)
+function auswahlUmschalter(aw) {
+  if (aw.optionen.length < 2) return "";
+  return '<div class="umschalter wetter-auswahl" role="group" aria-label="Tag oder Ort">' + aw.optionen.map(o =>
+    '<button type="button" data-action="wetter-wahl" data-wert="' + o.wert + '" aria-pressed="' + (aw.wert === o.wert) + '"' + (aw.wert === o.wert ? ' class="aktiv"' : "") + '>' +
+    '<span class="auswahl-titel">' + (o.wert === "ort" ? "📍 " : "") + esc(o.titel) + '</span>' +
+    (o.datum ? '<span class="auswahl-datum">' + wochentag(o.datum) + " " + kurzDatum(o.datum) + '</span>' : "") + '</button>').join("") + '</div>';
+}
+// Auswahl im Umschalter (gilt, bis sich die Voreinstellung ändert)
+function wetterWahlSetzen(wert, jetzt = Date.now()) {
+  const a = wetterAnsicht(jetzt);
+  if (!a.auswahl || !a.auswahl.optionen.some(o => o.wert === wert)) return;
+  wetterWahl = { wert, schluessel: a.auswahl.schluessel };
+  zeichnen();
+  nachOben();
 }
 
 // Hinweise oben: Quelle nicht erreichbar, nicht aktuell, Ersatzquelle für die Warnungen
@@ -99,31 +129,144 @@ function wetterHinweise(a, jetzt) {
   return html;
 }
 
-// Umschalter "Wohnort / Aktueller Standort" für das Wetter außerhalb der Fahrten (ein Tipp speichert die Einstellung)
-function ortAusserhalbUmschalter(wahl, heimTitel = ORT_TITEL.wohnort) {
-  const knopf = (wert, text) => '<button type="button" data-action="ort-ausserhalb" data-wert="' + wert + '" aria-pressed="' + (wahl === wert) + '"' +
-    (wahl === wert ? ' class="aktiv"' : "") + '>' + text + '</button>';
-  return '<div class="umschalter" role="group" aria-label="Wetter außerhalb der Fahrten">' + knopf("wohnort", heimTitel) + knopf("standort", "Aktueller Standort") + '</div>';
+// Aufgeklappte vorbeigegangene Fahrten ("datum|art"), nur im Arbeitsspeicher
+const fahrtAufgeklappt = new Set();
+function fahrtKarte(f, alt) {
+  const b = f.bewertung, schluessel = f.datum + "|" + f.art, zeit = f.fahrt.von + '–' + f.fahrt.bis;
+  // Vorbei: eingeklappt als „vorbei ›“, ein Tipp klappt die ganze Karte auf
+  if (f.vorbei && !fahrtAufgeklappt.has(schluessel)) {
+    return '<button type="button" class="karte fahrt-vorbei veraltet" data-action="fahrt-aufklappen" data-schluessel="' + schluessel + '" aria-expanded="false">' +
+      '<strong>' + f.name + '</strong> <span class="klein">' + zeit + ' · vorbei ›</span></button>';
+  }
+  const kopf = f.vorbei
+    ? '<button type="button" class="leise fahrt-kopf" data-action="fahrt-aufklappen" data-schluessel="' + schluessel + '" aria-expanded="true">' +
+      f.name + ' <span class="klein">' + zeit + ' · vorbei ⌄</span></button>'
+    : f.name + ' <span class="klein">' + zeit + '</span>';
+  let html = '<div class="karte' + (f.vorbei ? " veraltet" : alt) + '"><h3>' + kopf + '</h3>';
+  // Verschobene Abfahrt von heute direkt unter dem Titel (nicht mit dem Abfahrtsfenster zu verwechseln)
+  if (f.heute && f.zeit.verschoben) {
+    html += '<div class="verschoben">⏰ Abfahrt heute ' + f.zeit.abfahrt + ' statt ' + f.zeit.geplant +
+      ' · <button type="button" class="link" data-action="spaeter-zuruecksetzen" data-art="' + f.art + '">zurücksetzen</button></div>';
+  }
+  if (!b) html += '<div class="klein">Für diese Zeit liegt noch keine Vorhersage vor.</div>';
+  else {
+    html += '<div class="ampelzeile">' + ampelText(b) + '</div>' +
+      '<div class="klein">' + werteText(b.werte) + '</div>' +
+      (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
+      '<div style="margin-top:6px">👕 Kleidung</div><div class="klein">' + gefuehltZeileHtml(f, b.werte.gefuehlt) + '</div>' + kleidungBereicheHtml(f.kleidung) +
+      fahrtHinweisHtml(f.kleidung) +
+      (f.wind ? windHtml(f.wind) : "") +
+      (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
+  }
+  return html + (f.heute ? heuteFahrtHtml(f) : "") + '</div>';
+}
+// Nur in den Karten von heute, unten: „Heute später los …“ bzw. „Andere Zeit …“ und
+// der Weg zum gespeicherten Wetter dieser Fahrt
+function heuteFahrtHtml(f) {
+  let html = '<div class="knopfreihe"><button type="button" data-action="spaeter-los" data-art="' + f.art + '">' +
+    (f.zeit.verschoben ? "Andere Zeit …" : "Heute später los …") + '</button></div>';
+  const e = eintragAm(f.datum), fw = e && e.wetter && e.wetter[f.art === "hinfahrt" ? "hin" : "rueck"];
+  if (fw) html += '<button type="button" class="leise weg" data-action="eintrag-ansehen" data-id="' + e.id + '">Gespeichertes Wetter dieser Fahrt ›</button>';
+  return html;
+}
+// ---------- „Heute später los …“ (B14.2) ----------
+
+// Fenster von unten: Abfahrt, Schnellwahl ab der geplanten Abfahrt (die Tasten
+// addieren nicht auf), Vorschau der Ampel. Gilt nur für heute; die Einstellungen
+// bleiben. Gespeichert wird nur auf dem Gerät (radkm-heute-abfahrt).
+let formSpaeter = null; // { art, datum, geplant, jetzt }
+function spaeterText(min) { return "+" + (min < 60 ? min + " min" : zahl1.format(min / 60) + " h"); }
+function spaeterFormular(art, jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter, h = isoAusDate(new Date(jetzt));
+  const zf = fahrtZeitfenster(art, h, w, abweichungFuer(jetzt, w)), plan = fahrtZeitfenster(art, h, w, null);
+  formSpaeter = { art, datum: h, geplant: zf.geplant, jetzt };
+  fensterOeffnen('<h2>' + FAHRT_NAME[art] + ': heute später los</h2>' +
+    '<div class="klein">Geplant: Abfahrt ' + plan.geplant + ', Fahrt ' + plan.von + '–' + plan.bis + '. Die Dauer bleibt. Gilt nur für heute; die Einstellungen bleiben.</div>' +
+    '<label for="sp-abfahrt">Abfahrt</label><input type="time" id="sp-abfahrt" value="' + (zf.abfahrt || zf.geplant) + '" data-change="spaeter-zeit" data-input="spaeter-zeit">' +
+    '<div class="schnellwahl" role="group" aria-label="Später als geplant">' + SPAETER_MINUTEN.map(m =>
+      '<button type="button" data-action="spaeter-plus" data-min="' + m + '" aria-pressed="false">' + spaeterText(m) + '</button>').join("") + '</div>' +
+    '<div id="sp-vorschau" class="sp-vorschau" aria-live="polite"></div>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="spaeter-uebernehmen">Übernehmen</button></div>', { unten: true });
+  spaeterAktualisieren();
+}
+// Schnellwahl: immer ab der geplanten Abfahrt (ein erneuter Tipp ändert nichts)
+function spaeterPlus(min) {
+  const el = document.getElementById("sp-abfahrt");
+  if (!el || !formSpaeter) return;
+  el.value = uhrzeitAus(minutenAus(formSpaeter.geplant) + min);
+  spaeterAktualisieren();
+}
+// Hervorhebung der Schnellwahl und Vorschau der Ampel für die gewählte Abfahrt
+function spaeterAktualisieren() {
+  const el = document.getElementById("sp-abfahrt"), f = formSpaeter;
+  if (!el || !f) return;
+  const neu = el.value.slice(0, 5), gueltig = istUhrzeit(neu), diff = gueltig ? minutenAus(neu) - minutenAus(f.geplant) : null;
+  document.querySelectorAll('#fensterinhalt [data-action="spaeter-plus"]').forEach(b => {
+    const an = Number(b.dataset.min) === diff;
+    b.classList.toggle("aktiv", an);
+    b.setAttribute("aria-pressed", String(an));
+  });
+  const vorschau = document.getElementById("sp-vorschau"), w = daten.einstellungen.wetter;
+  const fehler = gueltig ? abweichungPruefen(f.art, neu, f.datum, w, abweichungFuer(f.jetzt, w)) : "Bitte eine Uhrzeit eingeben, z. B. 18:30.";
+  if (fehler) { vorschau.innerHTML = '<div class="hinweis warn">' + esc(fehler) + '</div>'; return; }
+  const v = spaeterVorschau(f.art, neu, f.datum, f.jetzt);
+  vorschau.innerHTML = '<div class="klein">Vorschau ' + FAHRT_NAME[f.art] + ' ' + v.zf.von + '–' + v.zf.bis + (diff === 0 ? " (wie geplant)" : "") + '</div>' +
+    (v.bewertung ? '<div class="ampelzeile">' + ampelText(v.bewertung) + '</div>' : '<div class="klein">Für diese Zeit liegt noch keine Vorhersage vor.</div>');
+}
+// „Übernehmen“: Ampel, Kleidung, Wind, Sonne und Abfahrtsfenster rechnen dann mit
+// dem neuen Zeitfenster. Die geplante Zeit gilt wie „zurücksetzen“.
+async function spaeterUebernehmen() {
+  const f = formSpaeter, el = document.getElementById("sp-abfahrt");
+  if (!f || !el) return;
+  const w = daten.einstellungen.wetter, neu = el.value.slice(0, 5), abw = abweichungFuer(f.jetzt, w);
+  const fehler = abweichungPruefen(f.art, neu, f.datum, w, abw);
+  if (fehler) { alert(fehler); return; }
+  abw[f.art] = neu === f.geplant ? null : neu;
+  if (!abweichungSchreiben(abw)) { alert("Die Abfahrt lässt sich auf diesem Gerät nicht speichern."); return; }
+  fensterSchliessen();
+  formSpaeter = null;
+  zeichnen();
+  meldung(abw[f.art] ? FAHRT_NAME[f.art] + " heute ab " + neu + " statt " + f.geplant : FAHRT_NAME[f.art] + " wieder wie geplant");
+  await eintragWetterNachVerschiebung(f.art, f.datum, f.jetzt);
+}
+// „zurücksetzen“: zurück zur Planung (nur so)
+async function spaeterZuruecksetzen(art, jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter, abw = abweichungFuer(jetzt, w);
+  if (!abw[art]) return;
+  abw[art] = null;
+  if (!abweichungSchreiben(abw)) return;
+  zeichnen();
+  meldung(FAHRT_NAME[art] + " wieder wie geplant");
+  await eintragWetterNachVerschiebung(art, abw.datum, jetzt);
+}
+// Ist für heute schon ein Eintrag mit Wetter aus der Vorhersage gespeichert, fragt
+// die App, ob das Wetter dieser Fahrt für das neue Zeitfenster neu berechnet wird.
+// Die Rückmeldung zur Kleidung bleibt; ohne Zustimmung bleibt alles, wie es ist.
+async function eintragWetterNachVerschiebung(art, datum, jetzt = Date.now()) {
+  const e = eintragAm(datum), k = art === "hinfahrt" ? "hin" : "rueck";
+  if (!e || !mitWetter(e) || !e.wetter || e.wetter.quelle !== "vorhersage") return false;
+  const neu = wetterAusVorhersage(datum, null, jetzt), z = neu && neu[k];
+  if (!z) return false;
+  const alt = e.wetter[k];
+  if (alt && alt.von === z.von && alt.bis === z.bis && alt.abfahrt === z.abfahrt) return false;
+  if (!await frage("Für heute ist schon ein Eintrag mit Wetter gespeichert. Das gespeicherte Wetter der " + FAHRT_NAME[art] + " für die neue Zeit (" + z.von + "–" + z.bis +
+    ") neu berechnen?<br><br>Deine Rückmeldung zur Kleidung bleibt.", "Neu berechnen", "Nein")) return false;
+  mitRueckgaengig(() => {
+    const x = daten.eintraege.find(y => y.id === e.id);
+    x.wetter = Object.assign({}, x.wetter, { stand: neu.stand, [k]: Object.assign({}, z, { rueckmeldung: x.wetter[k] ? x.wetter[k].rueckmeldung : null }) });
+  }, "Gespeichertes Wetter der " + FAHRT_NAME[art] + " neu berechnet", () => {});
+  return true;
 }
 
-function fahrtKarte(f, alt) {
-  const b = f.bewertung;
-  let html = '<div class="karte' + (f.vorbei ? " veraltet" : alt) + '"><h3>' + f.name + ' <span class="klein">' + f.fahrt.von + '–' + f.fahrt.bis +
-    (f.vorbei ? " · vorbei" : "") + '</span></h3>';
-  if (!b) return html + '<div class="klein">Für diese Zeit liegt noch keine Vorhersage vor.</div></div>';
-  html += '<div class="ampelzeile">' + ampelText(b) + '</div>';
-  if (f.vorbei) return html + '</div>';
-  html += '<div class="klein">' + werteText(b.werte) + '</div>' +
-    (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
-    '<div style="margin-top:6px">👕 Kleidung</div><div class="klein">' + gefuehltZeileHtml(f, b.werte.gefuehlt) + '</div>' + kleidungBereicheHtml(f.kleidung) +
-    fahrtHinweisHtml(f.kleidung) +
-    (f.wind ? windHtml(f.wind) : "") +
-    (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
-  return html + '</div>';
+// Vorbeigegangene Fahrt auf- bzw. zuklappen
+function fahrtAufklappen(schluessel) {
+  if (fahrtAufgeklappt.has(schluessel)) fahrtAufgeklappt.delete(schluessel); else fahrtAufgeklappt.add(schluessel);
+  zeichnen();
 }
 
 // Werte für die Kleidung: „gefühlt 2 °C · beim Fahren −1 °C (Gegenwind)“; fett der
-// Wert, nach dem die Stufe gewählt ist. Ohne Fahrtrichtung (Fahrt ab jetzt) das
+// Wert, nach dem die Stufe gewählt ist. Ohne Fahrtrichtung (ohne Arbeitsort) das
 // Mittel aller Richtungen mit der Spanne: „beim Fahren ca. −1 °C (−2 °C bei
 // Gegen-, 2 °C bei Rückenwind)“. Ohne Luftfeuchte: „beim Fahren –“.
 function gefuehltZeileHtml(f, gefuehlt) {
@@ -166,16 +309,17 @@ function abfahrtHtml(ab, dauer) {
     '<div>🕒 ' + esc(ab.text) + '</div></div>';
 }
 
-function warnungenKarte(liste, a, jetzt) {
+// "nurOrt": Warnungen des weiteren Orts (heute und morgen), sonst die der Strecke am angezeigten Tag
+function warnungenKarte(liste, a, jetzt, nurOrt = false) {
   const q = a.quellen.warnungen;
   let html = '<h2>Amtliche Warnungen</h2><div class="karte' + (q.aktuell ? "" : " veraltet") + '">';
   if (!q.vorhanden) return html + '<div class="klein">Zurzeit nicht verfügbar.</div></div>';
   const gebiete = q.gebiete || [];
-  if (!liste.length) html += '<div>Keine amtlichen Warnungen' + (a.weitererOrt ? " für heute und morgen" : "") + '.</div>';
+  if (!liste.length) html += '<div>Keine amtlichen Warnungen' + (nurOrt ? " für heute und morgen" : "") + '.</div>';
   liste.forEach(wn => {
     html += '<div class="warnung stufe-' + wn.stufe + '"><div><strong>' + esc(wn.ereignis) + '</strong> <span class="klein">Stufe ' + wn.stufe +
       (wn.art === "gesundheit" ? " · nur zur Info" : "") + '</span></div>' +
-      '<div class="klein">' + esc(zeitraumText(wn, jetzt)) + (a.orte.length > 1 && !a.jetzt ? " · " + wn.orte.join(", ") : "") + '</div>' +
+      '<div class="klein">' + esc(zeitraumText(wn, jetzt)) + (a.orte.length > 1 && !nurOrt ? " · " + wn.orte.join(", ") : "") + '</div>' +
       (wn.text ? '<div class="klein">' + esc(wn.text) + '</div>' : "") + '</div>';
   });
   gebiete.filter(x => x.abgedeckt === false).forEach(x => {
@@ -199,43 +343,53 @@ function standKarte(a, jetzt) {
     (w.quelle === "brightsky" ? ", zurzeit über Bright Sky" : "") + '.</p>';
 }
 
-// Kachel auf der Übersicht: Ampeln der nächsten Fahrten; Antippen öffnet den Reiter Wetter
+// Kachel auf der Übersicht: der nächste Fahrtag knapp in einer Zeile, z. B.
+// „Mo 23.11. (vorläufig) · Hin ● grün · Rück ● gelb“, darunter der wichtigste
+// Grund; ist der weitere Ort aktiv, darunter eine Zeile zu ihm. Die Kachel wechselt
+// direkt nach dem Ende der Fahrt zum nächsten Fahrtag. Antippen öffnet den Reiter Wetter.
 function wetterKachel(jetzt) {
-  let a, inhalt;
+  let a, inhalt = "";
   try { a = wetterAnsicht(jetzt); }
   catch (e) { return '<button type="button" class="karte wetter-kachel" data-action="tab" data-tab="wetter"><strong>🌦️ Wetter</strong> <span class="klein">kann nicht angezeigt werden</span></button>'; }
-  if (a.leer) {
-    inhalt = '<div><strong>🌦️ Wetter</strong></div><div class="klein">Wohn- und Arbeitsort festlegen, dann zeigt die App hier die Ampel für deine Fahrten.</div>';
-  } else if (a.weitererOrt) {
-    const t = a.tage[0];
-    inhalt = '<div><strong>🌦️ ' + esc(a.orte[0].ort.name) + ', heute</strong></div><div class="klein">' + (t.werte ? tageswerteText(t.werte) : "noch keine Vorhersage") + '</div>';
-  } else if (a.jetzt) {
-    // Außerhalb der Fahrten: nur Ort und Ampel für eine Fahrt ab jetzt, keine weiteren Werte
-    const j = a.jetzt, b = j.fahrt.bewertung;
-    inhalt = '<div><strong>🌦️ Jetzt · ' + esc(j.ort.text) + '</strong></div>' +
-      '<div>' + (b ? ampelText(b) : '<span class="klein">' + (a.laeuft ? "Wird geladen …" : "Noch keine Vorhersage") + '</span>') + '</div>' +
-      (j.kurz ? '<div class="klein status-orange">📍 ' + esc(j.kurz) + '</div>' : "") +
-      (a.empfehlungAb ? '<div class="klein">🕔 ' + esc(a.empfehlungAb) + '</div>' : "");
+  const laden = '<div class="klein">' + (a.laeuft ? "Wird geladen …" : "Noch keine Vorhersage") + '</div>';
+  if (a.leer || !a.orte.length) {
+    if (a.leer || !a.ort) inhalt = '<div><strong>🌦️ Wetter</strong></div><div class="klein">Wohn- und Arbeitsort festlegen, dann zeigt die App hier die Ampel für deine Fahrten.</div>';
+  } else if (a.fahrtageLeer) {
+    inhalt = '<div><strong>🌦️ Wetter</strong></div><div class="klein">Keine Fahrtage eingestellt – unter Einstellungen → Fahrtage festlegen.</div>';
+  } else if (!a.naechster) {
+    inhalt = '<div><strong>🌦️ Wetter</strong></div><div class="klein">Kein Fahrtag in Sicht.</div>';
+  } else if (!a.naechsterTag) {
+    inhalt = '<div><strong>🌦️ ' + esc(fahrtagKurz(a.naechster)) + '</strong></div><div class="klein">' + esc(vorhersageAbText(a.naechster)) + '</div>';
   } else {
-    const offen = a.fahrten.filter(f => !f.vorbei);
-    inhalt = '<div><strong>🌦️ ' + tagUeberschrift(a.tag.datum, a.tag.titel) + '</strong></div><div class="kachel-ampeln">' +
-      offen.map(f => '<span>' + (f.art === "hinfahrt" ? "Hin" : "Rück") + ' ' + (f.bewertung ? ampelHtml(f.bewertung.farbe) + FARBWORT[f.bewertung.farbe] : "–") + '</span>').join("") + '</div>';
+    const offen = a.naechsterTag.fahrten.filter(f => !f.vorbei);
+    inhalt = '<div class="kachel-zeile"><strong>🌦️ ' + esc(fahrtagKurz(a.naechster)) + '</strong>' +
+      offen.map(f => ' · <span class="kachel-ampel">' + (f.art === "hinfahrt" ? "Hin" : "Rück") + ' ' + (f.bewertung ? ampelHtml(f.bewertung.farbe) + FARBWORT[f.bewertung.farbe] : "–") + '</span>').join("") + '</div>';
     const problem = offen.filter(f => f.bewertung && f.bewertung.farbe !== "gruen").sort((x, y) => (y.bewertung.farbe === "rot") - (x.bewertung.farbe === "rot"))[0];
     if (problem) inhalt += '<div class="klein">' + problem.name + ' ' + FARBWORT[problem.bewertung.farbe] + ': ' + esc(grundText(problem.bewertung.gruende[0])) + '</div>';
-    if (!offen.some(f => f.bewertung)) inhalt += '<div class="klein">' + (a.laeuft ? "Wird geladen …" : "Noch keine Vorhersage") + '</div>';
+    if (!offen.some(f => f.bewertung)) inhalt += laden;
+  }
+  if (a.ort) {
+    // Weiterer Ort: eine Zeile für heute
+    const t = a.ort.tage[0];
+    inhalt += '<div class="klein">📍 ' + esc(a.ort.name) + ' heute: ' + (t.werte ? esc(tageswerteKurz(t.werte)) : a.laeuft ? "wird geladen …" : "noch keine Vorhersage") + '</div>';
   }
   if (!a.leer) {
-    const v = a.quellen.vorhersage;
+    const q = a.quellenStrecke || a.quellenOrt, v = q.vorhersage;
     if (v.vorhanden && !v.aktuell) inhalt += '<div class="klein status-orange">Nicht aktuell – Stand: ' + standText(v.stand, jetzt) + '</div>';
-    if (a.quellen.warnungen.fehler) inhalt += '<div class="klein status-orange">Amtliche Warnungen nicht erreichbar</div>';
+    if (q.warnungen.fehler) inhalt += '<div class="klein status-orange">Amtliche Warnungen nicht erreichbar</div>';
   }
   return '<button type="button" class="karte wetter-kachel" data-action="tab" data-tab="wetter">' + inhalt + '</button>';
+}
+// "2 bis 7 °C · Regen 30 %" (Tageswerte knapp, für die Kachel)
+function tageswerteKurz(t) {
+  return gradText(t.tmin) + " bis " + gradText(t.tmax) + " · Regen " + (t.regenWahrscheinlichkeit === null ? zahl1.format(t.niederschlag) + " mm" : t.regenWahrscheinlichkeit + " %") +
+    (t.gewitter ? " · Gewitter möglich" : "");
 }
 
 // ---------- Wetter in den Einstellungen: Orte und Fahrzeiten ----------
 
-// Einstellungen → Wetter: Zeilen auf der Hauptseite (Orte, „Außerhalb der
-// Fahrten“, Kleidung und Ampel-Grenzen als Unterseiten, Fahrzeiten als Fenster)
+// Einstellungen → Wetter: Zeilen auf der Hauptseite (Orte, Kleidung und
+// Ampel-Grenzen als Unterseiten, Fahrzeiten als Fenster)
 function wetterEinstellungen() {
   const w = daten.einstellungen.wetter;
   const fahrtZeile = (art, titel) => {
@@ -250,11 +404,10 @@ function wetterEinstellungen() {
     w.weitererOrt && w.weitererOrt.aktiv ? "weiterer Ort aktiv" : ""].filter(Boolean).join(" · ");
   return '<h2 id="e-wetter">Wetter</h2><div class="liste">' +
     seitenZeile("orte", "Orte und Strecke", orte) +
-    seitenZeile("ausserhalb", "Wetter außerhalb der Fahrten", w.ortAusserhalb === "standort" ? "Aktueller Standort" : ORT_TITEL.wohnort) +
     fahrtZeile("hinfahrt", "Hinfahrt") + fahrtZeile("rueckfahrt", "Rückfahrt") +
     regelZeile("kleidung-bearbeiten", "Kleidung", kleidungKurztext(w.kleidung)) +
     regelZeile("ampel-bearbeiten", "Ampel-Grenzen", ampelKurztext(w.ampel)) + '</div>' +
-    '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Hin- und Rückfahrt eines Fahrtags zeigt der Reiter Wetter ab dem Ende der Rückfahrt am Vortag.</p>';
+    '<p class="klein">Ampel, Kleidung und Wind gelten für die Fahrzeit. Übersicht und Reiter Wetter zeigen immer den nächsten Fahrtag; bis zum Ende der Rückfahrt am Vortag als „vorläufig“.</p>';
 }
 
 // Einstellungen → Orte und Strecke: Wohn- und Arbeitsort, Wegpunkte, Teilstrecken, weiterer Ort
@@ -286,19 +439,10 @@ function wetterOrteSeite() {
     'sobald Wohn- und Arbeitsort festgelegt sind.</div>' + teilstreckenHtml +
     '<div class="liste" style="margin-top:12px">' + ortZeile("weitererOrt") + '</div>' +
     (w.weitererOrt ? '<label class="haken"><input type="checkbox" data-change="weiterer-ort-aktiv"' + (w.weitererOrt.aktiv ? " checked" : "") + '>' +
-      '<span>Weiteren Ort zeigen (aktiv)<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter dort, ohne Hin- und Rückfahrt.</span></span></label>' : "") +
+      '<span>Weiteren Ort zeigen (aktiv)<br><span class="klein">Der Reiter Wetter zeigt das Wetter dort dann als weitere Auswahl (heute und morgen, ohne Hin- und Rückfahrt), die Übersicht in einer Zeile.</span></span></label>' : "") +
     '<p class="klein">Koordinaten (auch die der Wegpunkte) werden mit 4 Nachkommastellen gespeichert (ca. 10 m); an Open-Meteo (Vorhersage, Rückblick) und an den Deutschen Wetterdienst bzw. Bright Sky (Warnungen) ' +
     'gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
     'Für die Ortssuche geht nur der eingegebene Name an Open-Meteo.</p>';
-}
-
-// Einstellungen → Wetter außerhalb der Fahrten: Wohnort oder aktueller Standort
-function wetterAusserhalbSeite() {
-  const w = daten.einstellungen.wetter;
-  return ortAusserhalbUmschalter(w.ortAusserhalb) +
-    '<div class="feldhinweis">Zu allen Zeiten ohne Hin- und Rückfahrt zeigen Übersicht und Reiter Wetter die Ampel für eine Fahrt ab jetzt (Dauer wie die Hinfahrt): ' +
-    'am Wohnort oder am aktuellen Standort des iPhones. Der Standort wird nur bestimmt, während diese Ansicht angezeigt wird; seine Koordinaten gehen auf 3 Nachkommastellen ' +
-    'gerundet an Open-Meteo und den Deutschen Wetterdienst und werden nicht gespeichert. Ohne Freigabe, Ortung oder Netz gilt der Wohnort.</div>';
 }
 
 function regelZeile(aktion, titel, text) {
@@ -574,26 +718,12 @@ function teilstreckeWind(i, an) {
   t[i] = an;
   if (speichern()) { zeichnen(); meldung(an ? "Teilstrecke zählt für den Wind" : "Teilstrecke zählt nicht für den Wind"); }
 }
-// Wetter außerhalb der Fahrten: Wohnort oder aktueller Standort (Reiter Wetter und
-// Einstellungen). Im Reiter Wetter und auf der Übersicht wird der Standort sofort
-// bestimmt (auch erneut, wenn er schon gewählt ist, z. B. nach einer Ablehnung).
-function ortAusserhalbSetzen(wahl) {
-  const w = daten.einstellungen.wetter;
-  if (!ORT_AUSSERHALB.includes(wahl)) return Promise.resolve();
-  if (w.ortAusserhalb !== wahl) {
-    w.ortAusserhalb = wahl;
-    if (!speichern()) return Promise.resolve();
-    meldung(wahl === "standort" ? "Wetter außerhalb der Fahrten: aktueller Standort" : "Wetter außerhalb der Fahrten: Wohnort");
-  }
-  zeichnen();
-  return wahl === "standort" ? standortBeiBedarf(true) : Promise.resolve();
-}
 // Weiterer Ort an/aus (Einstellungen und Reiter Wetter)
 function weitererOrtAktiv(aktiv) {
   const o = daten.einstellungen.wetter.weitererOrt;
   if (!o) return;
   o.aktiv = aktiv;
-  if (speichern()) { zeichnen(); meldung(aktiv ? "Weiterer Ort aktiv" : "Wieder Wohn- und Arbeitsort"); wetterBeiBedarf(); }
+  if (speichern()) { zeichnen(); meldung(aktiv ? "Weiterer Ort aktiv" : "Weiterer Ort ausgeblendet"); wetterBeiBedarf(); }
 }
 
 // Fahrzeit (Hin- oder Rückfahrt): Zeitraum, übliche Abfahrt, Dauer
@@ -989,16 +1119,21 @@ function fahrtKleidungText(fw) {
   return fw.empfehlung && empfehlungText(fw.empfehlung) ? empfehlungText(fw.empfehlung) : stufeText(fw.kleidung);
 }
 // Fahrten von heute und den zwei Tagen davor, die vorbei sind und noch keine
-// Rückmeldung haben (nur, wenn die Rückmeldung eingeschaltet ist)
+// Rückmeldung haben (nur, wenn die Rückmeldung eingeschaltet ist). Vorbei ist eine
+// Fahrt am Ende ihres gespeicherten Zeitfensters (ab 5e), heute am Ende des
+// tatsächlichen (ggf. verschobenen), sonst am Ende der Fahrzeit aus den Einstellungen.
 function offeneRueckmeldungen(jetzt) {
   if (!rueckmeldungAn()) return [];
-  const h = isoAusDate(new Date(jetzt)), w = daten.einstellungen.wetter;
+  const h = isoAusDate(new Date(jetzt)), w = daten.einstellungen.wetter, abw = abweichungFuer(jetzt, w);
   const liste = [];
   daten.eintraege.filter(e => e.wetter && e.datum <= h && e.datum >= plusTage(h, -2))
     .sort((a, b) => b.datum.localeCompare(a.datum)).forEach(e => {
-      [["hin", "Hinfahrt", w.hinfahrt], ["rueck", "Rückfahrt", w.rueckfahrt]].forEach(([art, name, f]) => {
+      [["hin", "hinfahrt"], ["rueck", "rueckfahrt"]].forEach(([art, fahrt]) => {
         const fw = e.wetter[art];
-        if (fw && fw.kleidung && !fw.rueckmeldung && zeitpunktAm(e.datum, minutenAus(f.bis)) <= jetzt) liste.push({ e, art, name, fw, h });
+        if (!fw || !fw.kleidung || fw.rueckmeldung) return;
+        const heutig = fahrtZeitfenster(fahrt, e.datum, w, abw);
+        const ende = e.datum === h && heutig.verschoben ? heutig.bisMs : fw.bis ? zeitpunktAm(e.datum, minutenAus(fw.bis)) : heutig.bisMs;
+        if (ende <= jetzt) liste.push({ e, art, name: FAHRT_NAME[fahrt], fw, h });
       });
     });
   return liste.slice(0, 2);

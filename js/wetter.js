@@ -1,4 +1,4 @@
-// Rad-km · Wetter (Logik): Abruf, Zwischenspeicher, Standort, Ampel, Kleidung, Wind, Abfahrt, Wetter je Eintrag, Rückblick
+// Rad-km · Wetter (Logik): Abruf, Zwischenspeicher, Ampel, Kleidung, Wind, Abfahrt, Wetter je Eintrag, Rückblick
 "use strict";
 
 /* =====================================================================
@@ -41,13 +41,6 @@ const GEFRIEREND_CODES = [56, 57, 66, 67];
 const NASS_STUNDEN = 6;
 // Darunter (km/h) gilt der Wind als schwach
 const WIND_SCHWACH = 10;
-// Spontane Runde außerhalb der Fahrten: Abfahrten von jetzt bis so viele Minuten später
-const JETZT_ABFAHRT_MIN = 60;
-// Aktueller Standort: eine Ortung darf so alt sein; neu abgerufen wird das Wetter
-// erst, wenn sich der Standort um mehr als so viele km geändert hat (oder es zu alt ist)
-const STANDORT_ALTER_MS = 5 * MINUTE_MS;
-const STANDORT_NEU_KM = 1;
-const STANDORT_ZEITLIMIT_MS = 15000;
 const WARNSTUFEN = { minor: 1, moderate: 2, severe: 3, extreme: 4 };
 const FARBWORT = { gruen: "grün", gelb: "gelb", rot: "rot" };
 const ORT_TITEL = { wohnort: "Wohnort", arbeitsort: "Arbeitsort", weitererOrt: "Weiterer Ort" };
@@ -55,10 +48,12 @@ const QUELLEN_NAME = { dwd: "Deutscher Wetterdienst", brightsky: "Bright Sky (Er
 
 // ---------- Orte und Adressen ----------
 
-// Orte, für die das Wetter geladen wird: der weitere Ort, wenn er aktiv ist, sonst die Strecke
+// Orte, für die das Wetter geladen wird: die Strecke und (ab 5e zusätzlich) der
+// weitere Ort, wenn er aktiv ist – in einer Abfrage, als letzter Ort
 function wetterOrte(w = daten.einstellungen.wetter) {
-  if (w.weitererOrt && w.weitererOrt.aktiv) return [{ rolle: "weitererOrt", titel: ORT_TITEL.weitererOrt, ort: w.weitererOrt }];
-  return streckenOrte(w);
+  const orte = streckenOrte(w);
+  if (w.weitererOrt && w.weitererOrt.aktiv) orte.push({ rolle: "weitererOrt", titel: ORT_TITEL.weitererOrt, ort: w.weitererOrt });
+  return orte;
 }
 // Orte der Fahrten zur Arbeit: Wohnort, Wegpunkte, Arbeitsort. Wegpunkte zählen
 // nur, wenn Wohn- und Arbeitsort festgelegt sind.
@@ -248,8 +243,7 @@ function wetterSpeicherSchreiben() {
 }
 
 // Amtliche Warnungen aller Orte: vom DWD, bei einem Fehler von Bright Sky.
-// "gebiete" merkt sich je Ort, ob er im Warngebiet liegt (für den aktuellen
-// Standort ein eigener, nicht gespeicherter Speicher).
+// "gebiete" merkt sich je Ort, ob er im Warngebiet liegt.
 async function warnungenLaden(orte, gebiete = wetter.gebiete) {
   try {
     return { quelle: "dwd", orte: await Promise.all(orte.map(o => dwdWarnungenOrt(o, gebiete))) };
@@ -319,83 +313,8 @@ function wetterNeuZeichnen() {
 }
 // Beim Start, beim Wechsel in Übersicht oder Wetter und beim Zurückkehren in die App
 // (im Testmodus nicht: die Tests rufen wetterAktualisieren selbst auf). Den Standort
-// nur, wenn die Ansicht "Jetzt" mit dem aktuellen Standort gerade angezeigt wird.
-function wetterBeiBedarf() { if (!TESTMODUS) { wetterAktualisieren(); standortBeiBedarf(); } }
-
-// ---------- Aktueller Standort (Wetter außerhalb der Fahrten) ----------
-
-// Nur im Arbeitsspeicher: weder in den Daten noch im Zwischenspeicher. Die
-// Koordinaten werden sofort auf 3 Nachkommastellen gerundet (so gehen sie an
-// Open-Meteo und den DWD). "abgelehnt": keine Freigabe – dann fragt die App in
-// dieser Sitzung erst beim Umschalten oder bei "Aktualisieren" wieder.
-const standort = {
-  ort: null, zeit: 0, ortung: false, fehler: null, abgelehnt: false,
-  vorhersage: null, warnungen: null, gebiete: {}, laeuft: false, fehlerVorhersage: null, fehlerWarnungen: null
-};
-// Ist gerade die Ansicht "Jetzt" dran (außerhalb der Fahrten, kein weiterer Ort aktiv)?
-function jetztZustand(jetzt = Date.now(), w = daten.einstellungen.wetter) {
-  const orte = wetterOrte(w);
-  return orte.length > 0 && orte[0].rolle !== "weitererOrt" && !wetterTag(jetzt, w).fahrtag;
-}
-// … und wird sie mit dem aktuellen Standort in der Übersicht oder im Reiter Wetter angezeigt?
-function jetztMitStandortSichtbar(jetzt = Date.now()) {
-  return (aktiverTab === "uebersicht" || aktiverTab === "wetter") && daten.einstellungen.wetter.ortAusserhalb === "standort" && jetztZustand(jetzt);
-}
-function standortBeiBedarf(erzwingen = false, jetzt = Date.now()) {
-  return jetztMitStandortSichtbar(jetzt) ? standortBestimmen(erzwingen) : Promise.resolve();
-}
-// Standort über die Geolocation-API bestimmen (das iPhone fragt beim ersten Mal nach
-// der Freigabe) und das Wetter dort laden. Das Promise ist nach Ortung und Laden erfüllt.
-function standortBestimmen(erzwingen = false, jetzt = null) {
-  const zeit = () => jetzt ?? Date.now();
-  if (standort.ortung || (standort.abgelehnt && !erzwingen)) return Promise.resolve();
-  if (!erzwingen && standort.ort && !standort.fehler && zeit() - standort.zeit < STANDORT_ALTER_MS) return standortWetterLaden(false, zeit());
-  const geo = navigator.geolocation;
-  if (!geo) { Object.assign(standort, { fehler: "auf diesem Gerät nicht verfügbar", abgelehnt: false }); wetterNeuZeichnen(); return Promise.resolve(); }
-  standort.ortung = true;
-  wetterNeuZeichnen();
-  return new Promise(fertig => {
-    geo.getCurrentPosition(pos => {
-      const neu = { lat: koordinateSenden(pos.coords.latitude), lon: koordinateSenden(pos.coords.longitude) };
-      // Kaum bewegt: dieselbe Stelle, kein neuer Abruf nötig
-      if (!standort.ort || entfernungKm(standort.ort, neu) > STANDORT_NEU_KM) {
-        Object.assign(standort, { ort: neu, vorhersage: null, warnungen: null, fehlerVorhersage: null, fehlerWarnungen: null });
-      }
-      Object.assign(standort, { ortung: false, fehler: null, abgelehnt: false, zeit: zeit() });
-      standortWetterLaden(erzwingen, zeit()).then(fertig, fertig);
-    }, err => {
-      const code = err && err.code;
-      Object.assign(standort, { ortung: false, fehler: code === 1 ? "nicht freigegeben" : code === 3 ? "Zeitüberschreitung" : "nicht bestimmbar", abgelehnt: code === 1 });
-      wetterNeuZeichnen();
-      fertig();
-    }, { enableHighAccuracy: false, timeout: STANDORT_ZEITLIMIT_MS, maximumAge: STANDORT_ALTER_MS });
-  });
-}
-// Vorhersage und Warnungen am Standort (ein Ort), neu, wenn sie fehlen, zu alt
-// sind oder der letzte Versuch fehlschlug. Der Ortsname kommt aus der Gemeinde des DWD.
-async function standortWetterLaden(erzwingen = false, jetzt = Date.now()) {
-  const o = standort.ort;
-  if (!o || standort.laeuft) return;
-  const schluessel = ortSchluessel(o);
-  const faellig = (teil, fehler, ms) => erzwingen || !!fehler || !teil || teil.schluessel !== schluessel || !(jetzt - teil.stand < ms);
-  const vorhersage = faellig(standort.vorhersage, standort.fehlerVorhersage, VORHERSAGE_NEU_MS);
-  const warnungen = faellig(standort.warnungen, standort.fehlerWarnungen, WARNUNGEN_NEU_MS);
-  if (!vorhersage && !warnungen) { wetterNeuZeichnen(); return; }
-  standort.laeuft = true;
-  wetterNeuZeichnen();
-  await Promise.all([
-    vorhersage && jsonAbrufen(vorhersageUrl([o])).then(a => {
-      standort.vorhersage = { schluessel, stand: jetzt, orte: vorhersageLesen(a, 1) };
-      standort.fehlerVorhersage = null;
-    }).catch(e => { standort.fehlerVorhersage = e.message; }),
-    warnungen && warnungenLaden([o], standort.gebiete).then(w => {
-      standort.warnungen = Object.assign({ schluessel, stand: jetzt }, w);
-      standort.fehlerWarnungen = null;
-    }).catch(e => { standort.fehlerWarnungen = e.message; })
-  ]);
-  standort.laeuft = false;
-  wetterNeuZeichnen();
-}
+// des iPhones fragt das Wetter seit 5e nie ab.
+function wetterBeiBedarf() { if (!TESTMODUS) wetterAktualisieren(); }
 
 // ---------- Zeiten ----------
 
@@ -411,28 +330,6 @@ function standText(ms, jetzt) {
   const datum = isoAusDate(new Date(ms)), h = isoAusDate(new Date(jetzt));
   const tag = datum === h ? "" : datum === plusTage(h, -1) ? "gestern, " : wochentag(datum) + " " + kurzDatum(datum) + ", ";
   return tag + uhrzeit(ms) + " Uhr";
-}
-
-// Angezeigter Tag: heute bis zum Ende der Rückfahrt (Standard 17 Uhr), danach
-// morgen. Hin- und Rückfahrt gibt es nur, wenn dieser Tag ein Fahrtag ist, also
-// für einen Fahrtag erst ab dem Ende der Rückfahrt am Vortag. Sonst nennt
-// "naechster" den nächsten Fahrtag und "empfehlungAb" den Vortag, ab dem es sie gibt.
-function wetterTag(jetzt, w = daten.einstellungen.wetter, fahrtage = daten.einstellungen.fahrtage) {
-  const d = new Date(jetzt), h = isoAusDate(d);
-  const datum = d.getHours() * 60 + d.getMinutes() >= minutenAus(w.rueckfahrt.bis) ? plusTage(h, 1) : h;
-  const fahrtag = fahrtage.includes(isoWochentag(datum));
-  let naechster = null;
-  if (!fahrtag && fahrtage.length) {
-    naechster = plusTage(datum, 1);
-    while (!fahrtage.includes(isoWochentag(naechster))) naechster = plusTage(naechster, 1);
-  }
-  return { datum, heute: datum === h, fahrtag, titel: tagTitel(datum, h), naechster, empfehlungAb: naechster && plusTage(naechster, -1) };
-}
-// "Empfehlung für Mo 02.11. ab So 17:00" bzw. "… ab heute 17:00"
-function empfehlungAbText(tag, h, w = daten.einstellungen.wetter) {
-  if (!tag.naechster) return null;
-  return "Empfehlung für " + wochentag(tag.naechster) + " " + kurzDatum(tag.naechster) + " ab " +
-    (tag.empfehlungAb === h ? "heute" : wochentag(tag.empfehlungAb)) + " " + w.rueckfahrt.bis;
 }
 
 // ---------- Werte eines Zeitraums ----------
@@ -757,13 +654,11 @@ function dunkelText(s, von, bis) {
   return teile.length ? " · " + teile.join(", ") : "";
 }
 // Zeile zur Sonne einer Fahrt: Hinfahrt mit Sonnenaufgang, Rückfahrt mit
-// Sonnenuntergang, "Jetzt" mit dem nächsten Ereignis des Tages, jeweils mit
-// Hinweis, wenn die Fahrt ganz oder teilweise im Dunkeln liegt. null ohne Daten.
-function sonnenZeile(art, s, von, bis, jetzt = null) {
+// Sonnenuntergang, jeweils mit Hinweis, wenn die Fahrt ganz oder teilweise im
+// Dunkeln liegt. null ohne Daten.
+function sonnenZeile(art, s, von, bis) {
   if (!s) return null;
-  if (art === "jetzt" && jetzt !== null && jetzt >= s.untergang) return "🌙 Dunkel seit " + uhrzeit(s.untergang) + " (Sonnenuntergang)";
-  const aufgang = art === "hinfahrt" || (art === "jetzt" && jetzt !== null && jetzt < s.aufgang);
-  return (aufgang ? "🌅 Sonnenaufgang " + uhrzeit(s.aufgang) : "🌇 Sonnenuntergang " + uhrzeit(s.untergang)) + dunkelText(s, von, bis);
+  return (art === "hinfahrt" ? "🌅 Sonnenaufgang " + uhrzeit(s.aufgang) : "🌇 Sonnenuntergang " + uhrzeit(s.untergang)) + dunkelText(s, von, bis);
 }
 
 // ---------- Bestes Abfahrtsfenster ----------
@@ -779,14 +674,7 @@ function abfahrtKosten(b) {
 function abfahrtsfenster(orteDaten, warnungen, datum, f, g, jetzt = null) {
   const von = minutenAus(f.von), bis = minutenAus(f.bis), ab = ueblicheAbfahrt(f);
   return abfahrtenPruefen(orteDaten, warnungen, datum, g, { erste: von - 30, letzte: bis + 30 - f.dauer, fahrVon: von, fahrBis: bis, dauer: f.dauer,
-    ueblich: ab === null ? null : minutenAus(ab), ueblichJetzt: false, jetzt });
-}
-// Spontane Runde: Abfahrten von der laufenden Viertelstunde ("jetzt", Minuten
-// nach Mitternacht am Tag "datum") bis eine Stunde später, verglichen mit "jetzt",
-// z. B. "Abfahrt 18:30 statt jetzt: trocken, Regen nur bis 18:30"
-function jetztAbfahrtsfenster(orteDaten, warnungen, datum, vonMin, dauer, g) {
-  return abfahrtenPruefen(orteDaten, warnungen, datum, g, { erste: vonMin, letzte: vonMin + JETZT_ABFAHRT_MIN, fahrVon: vonMin, fahrBis: vonMin + dauer, dauer,
-    ueblich: vonMin, ueblichJetzt: true, jetzt: null });
+    ueblich: ab === null ? null : minutenAus(ab), jetzt });
 }
 // Abfahrten "erste" … "letzte" (Minuten nach Mitternacht am Tag "datum") mit der
 // Dauer "dauer"; "fahrVon"/"fahrBis" ist die eigentliche Fahrzeit, "ueblich" die
@@ -826,10 +714,9 @@ function abfahrtenPruefen(orteDaten, warnungen, datum, g, r) {
       const stoerung = meiden.find(x => x.von < ueblich.minuten + r.dauer && x.bis > ueblich.minuten);
       const nachher = stoerung && stoerung.grund ? (stoerung.von >= ende ? ", " + stoerung.grund.text + " erst ab " + uhrzeitAus(stoerung.von)
         : stoerung.bis <= beste.minuten ? ", " + stoerung.grund.text + " nur bis " + uhrzeitAus(stoerung.bis) : "") : "";
-      text = "Abfahrt " + uhrzeitAus(beste.minuten) + " statt " + (r.ueblichJetzt ? "jetzt" : uhrzeitAus(ueblich.minuten)) + ": " + zustand(beste) + nachher;
+      text = "Abfahrt " + uhrzeitAus(beste.minuten) + " statt " + uhrzeitAus(ueblich.minuten) + ": " + zustand(beste) + nachher;
     } else if (ueblich.bewertung.farbe !== "gruen") {
-      text = r.ueblichJetzt ? "Keine bessere Abfahrt bis " + uhrzeitAus(kandidaten[kandidaten.length - 1].minuten) + "."
-        : "Keine bessere Abfahrt zwischen " + uhrzeitAus(kandidaten[0].minuten) + " und " + uhrzeitAus(kandidaten[kandidaten.length - 1].minuten) + ".";
+      text = "Keine bessere Abfahrt zwischen " + uhrzeitAus(kandidaten[0].minuten) + " und " + uhrzeitAus(kandidaten[kandidaten.length - 1].minuten) + ".";
     }
   } else {
     text = "Beste Abfahrt " + uhrzeitAus(beste.minuten) + ": " + zustand(beste) +
@@ -862,14 +749,15 @@ function tagesAnsicht(orteDaten, warnungen, datum, h) {
   const von = zeitpunktAm(datum, 0), bis = zeitpunktAm(plusTage(datum, 1), 0);
   return { datum, titel: tagTitel(datum, h), werte: orteDaten ? tagesWerte(orteDaten, von, bis) : null, warnungen: warnungen.filter(wn => warnungImZeitraum(wn, von, bis)) };
 }
-// "sonnenOrt": Nummer des Orts für Sonnenauf- bzw. -untergang (Hinfahrt Wohnort, Rückfahrt Arbeitsort)
-function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w, sonnenOrt = 0) {
-  const f = w[art];
-  const von = zeitpunktAm(tag.datum, minutenAus(f.von)), bis = zeitpunktAm(tag.datum, minutenAus(f.bis));
-  const a = { art, name, fahrt: f, von, bis, vorbei: tag.heute && jetzt >= bis, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null,
-    beimFahren: null, grundlage: null };
+// Eine Fahrt (Hin- oder Rückfahrt) am Tag "datum" im Zeitfenster "zf" (siehe
+// fahrtZeitfenster, ggf. mit verschobener Abfahrt). "sonnenOrt": Nummer des Orts
+// für Sonnenauf- bzw. -untergang (Hinfahrt Wohnort, Rückfahrt Arbeitsort).
+function fahrtAnsicht(art, strecken, datum, heuteIst, zf, orteDaten, warnungen, jetzt, w, sonnenOrt = 0) {
+  const f = fahrzeitAus(zf), von = zf.vonMs, bis = zf.bisMs;
+  const a = { art, name: FAHRT_NAME[art], fahrt: f, zeit: zf, datum, heute: heuteIst, von, bis, vorbei: heuteIst && jetzt >= bis,
+    bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null, beimFahren: null, grundlage: null };
   if (!orteDaten) return a;
-  a.sonne = sonnenZeile(art, sonneAm(orteDaten[sonnenOrt], tag.datum), von, bis);
+  a.sonne = sonnenZeile(art, sonneAm(orteDaten[sonnenOrt], datum), von, bis);
   a.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
   if (!a.bewertung) return a;
   // Kleidung nach „gefühlt beim Fahren“ (oder, je nach Einstellung, nach der gefühlten Temperatur von Open-Meteo)
@@ -881,127 +769,89 @@ function fahrtAnsicht(art, name, strecken, tag, orteDaten, warnungen, jetzt, w, 
   const wv = a.bewertung.werte;
   a.wind = windAllgemein(wv.windProben, wv.boeen);
   if (a.wind && strecken) a.wind.teile = windJeTeilstrecke(wv.windJeOrt, strecken, art === "rueckfahrt");
-  if (!a.vorbei) a.abfahrt = abfahrtsfenster(orteDaten, warnungen, tag.datum, f, w.ampel, tag.heute ? jetzt : null);
+  // Abfahrtsfenster um das (ggf. verschobene) Zeitfenster; heute nur kommende Abfahrten
+  if (!a.vorbei) a.abfahrt = abfahrtsfenster(orteDaten, warnungen, datum, f, w.ampel, heuteIst ? jetzt : null);
   return a;
 }
-// Ansicht für den Zeitpunkt "jetzt" aus den Einstellungen und dem Zwischenspeicher
-function wetterAnsicht(jetzt = Date.now()) {
-  const w = daten.einstellungen.wetter;
-  const orte = wetterOrte(w);
-  const a = { orte, leer: !orte.length, laeuft: wetterStatus.laeuft };
-  if (a.leer) return a;
-  const schluessel = orte.map(x => ortSchluessel(x.ort)).join(";");
-  const passend = teil => teil && teil.schluessel === schluessel && Array.isArray(teil.orte) && teil.orte.length === orte.length ? teil : null;
-  const v = passend(wetter.vorhersage), wa = passend(wetter.warnungen);
-  a.quellen = {
-    vorhersage: quellenStand(v, wetterStatus.fehlerVorhersage, jetzt),
-    warnungen: Object.assign(quellenStand(wa, wetterStatus.fehlerWarnungen, jetzt), wa ? {
-      quelle: wa.quelle, dwdFehler: wa.dwdFehler || null,
-      gebiete: wa.orte.map((o, i) => ({ rolle: orte[i].rolle, titel: orte[i].titel, name: orte[i].ort.name, abgedeckt: o.abgedeckt, gebiet: o.gebiet }))
-    } : {})
-  };
-  const orteDaten = v ? v.orte : null;
-  const warnungen = wa ? warnungenZusammen(wa, orte) : [];
-  const h = isoAusDate(new Date(jetzt));
-  a.weitererOrt = orte[0].rolle === "weitererOrt";
-  if (a.weitererOrt) {
-    a.tage = [h, plusTage(h, 1)].map(datum => tagesAnsicht(orteDaten, warnungen, datum, h));
-    return a;
-  }
-  a.tag = wetterTag(jetzt, w);
-  const tagWarnungen = tagesAnsicht(null, warnungen, a.tag.datum, h).warnungen;
-  a.warnungen = tagWarnungen;
-  if (!a.tag.fahrtag) {
-    // Außerhalb der Fahrten (vom Ende der Rückfahrt am Vortag bis zum Ende der
-    // Rückfahrt am Fahrtag gibt es Hin- und Rückfahrt): eine Fahrt ab jetzt
-    a.jetzt = jetztAnsicht(a, w, v, wa, jetzt, h);
-    a.empfehlungAb = empfehlungAbText(a.tag, h, w);
-    return a;
-  }
-  // Wind je Teilstrecke; ohne Strecke (z. B. nur Wohnort) nur mit Himmelsrichtung
+// Hin- und Rückfahrt eines Fahrtags mit den Warnungen des Tages (heute nur die,
+// die noch gelten) und dem Hinweis, was für die Rückfahrt einzupacken ist
+function fahrtagAnsicht(datum, h, orte, orteDaten, alleWarnungen, jetzt, w, abw) {
   const strecken = teilstrecken(w);
+  // Wind je Teilstrecke; ohne Strecke (z. B. nur Wohnort) nur mit Himmelsrichtung
   const mitStrecke = strecken.some(t => t.laenge > 0) ? strecken : null;
   // Sonne: Hinfahrt am Wohnort, Rückfahrt am Arbeitsort (ohne den jeweiligen Ort der erste bzw. letzte)
   const ortNr = rolle => Math.max(0, orte.findIndex(x => x.rolle === rolle));
   const arbeit = orte.findIndex(x => x.rolle === "arbeitsort");
-  a.fahrten = [
-    fahrtAnsicht("hinfahrt", "Hinfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w, ortNr("wohnort")),
-    fahrtAnsicht("rueckfahrt", "Rückfahrt", mitStrecke, a.tag, orteDaten, warnungen, jetzt, w, arbeit < 0 ? orte.length - 1 : arbeit)
-  ];
-  const [hin, rueck] = a.fahrten;
-  a.kleidungsHinweis = !hin.vorbei ? kleidungsHinweis(hin.kleidung, rueck.kleidung) : null;
+  const heuteIst = datum === h;
+  const t = { datum, heute: heuteIst, abweichung: heuteIst ? abw : null };
+  t.fahrten = FAHRTARTEN.map(art => fahrtAnsicht(art, mitStrecke, datum, heuteIst, fahrtZeitfenster(art, datum, w, abw), orteDaten, alleWarnungen, jetzt, w,
+    art === "hinfahrt" ? ortNr("wohnort") : arbeit < 0 ? orte.length - 1 : arbeit));
+  const [hin, rueck] = t.fahrten;
+  t.kleidungsHinweis = !hin.vorbei ? kleidungsHinweis(hin.kleidung, rueck.kleidung) : null;
+  t.warnungen = tagesAnsicht(null, alleWarnungen, datum, h).warnungen.filter(wn => !heuteIst || wn.ende === null || wn.ende > jetzt);
+  return t;
+}
+// Ansicht für den Zeitpunkt "jetzt" aus den Einstellungen und dem Zwischenspeicher:
+// der nächste Fahrtag ("naechster", immer; die Kachel zeigt ihn), heute nach dem
+// Ende der Fahrt ("heute"), der weitere Ort ("ort", wenn er aktiv ist) und die
+// Auswahl im Umschalter des Reiters
+function wetterAnsicht(jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter;
+  const alle = wetterOrte(w), orte = streckenOrte(w), n0 = orte.length;
+  const a = { orte, leer: !alle.length, laeuft: wetterStatus.laeuft };
+  if (a.leer) return a;
+  const schluessel = alle.map(x => ortSchluessel(x.ort)).join(";");
+  const passend = teil => teil && teil.schluessel === schluessel && Array.isArray(teil.orte) && teil.orte.length === alle.length ? teil : null;
+  const v = passend(wetter.vorhersage), wa = passend(wetter.warnungen);
+  const gebiete = wa ? wa.orte.map((o, i) => ({ rolle: alle[i].rolle, titel: alle[i].titel, name: alle[i].ort.name, abgedeckt: o.abgedeckt, gebiet: o.gebiet })) : null;
+  // Quellen; die Warngebiete je nach Auswahl nur der Strecke bzw. nur des weiteren Orts
+  const quellen = gebieteVon => ({
+    vorhersage: quellenStand(v, wetterStatus.fehlerVorhersage, jetzt),
+    warnungen: Object.assign(quellenStand(wa, wetterStatus.fehlerWarnungen, jetzt), wa ? { quelle: wa.quelle, dwdFehler: wa.dwdFehler || null, gebiete: gebieteVon(gebiete) } : {})
+  });
+  const h = isoAusDate(new Date(jetzt));
+  const abw = abweichungFuer(jetzt, w);
+  if (n0) {
+    const orteDaten = v ? v.orte.slice(0, n0) : null;
+    const warnungen = wa ? warnungenZusammen({ orte: wa.orte.slice(0, n0) }, orte) : [];
+    a.fahrtageLeer = !daten.einstellungen.fahrtage.length;
+    a.naechster = naechsterFahrtag(jetzt, w, daten.einstellungen.fahrtage, abw);
+    if (a.naechster && a.naechster.inVorhersage) a.naechsterTag = fahrtagAnsicht(a.naechster.datum, h, orte, orteDaten, warnungen, jetzt, w, abw);
+    a.quellenStrecke = quellen(g => g && g.slice(0, n0));
+  }
+  if (w.weitererOrt && w.weitererOrt.aktiv) {
+    const ortDaten = v ? [v.orte[n0]] : null;
+    const ortWarnungen = wa ? warnungenZusammen({ orte: [wa.orte[n0]] }, [alle[n0]]) : [];
+    const tage = [h, plusTage(h, 1)].map(datum => tagesAnsicht(ortDaten, ortWarnungen, datum, h));
+    a.ort = { name: w.weitererOrt.name, tage, warnungen: [...new Set([...tage[0].warnungen, ...tage[1].warnungen])] };
+    a.quellenOrt = quellen(g => g && g.slice(n0));
+  }
+  a.auswahl = wetterAuswahl(jetzt, a.naechster || null, w, abw, n0 > 0);
+  if (a.auswahl.optionen.some(o => o.wert === "heute")) {
+    a.heute = fahrtagAnsicht(h, h, orte, v ? v.orte.slice(0, n0) : null, wa ? warnungenZusammen({ orte: wa.orte.slice(0, n0) }, orte) : [], jetzt, w, abw);
+  }
+  a.quellen = a.auswahl.wert === "ort" ? a.quellenOrt : a.quellenStrecke;
+  // Der angezeigte Fahrtag (nach der Auswahl; beim weiteren Ort der nächste) mit seinen Fahrten und Warnungen
+  a.tag = (a.auswahl.wert === "heute" ? a.heute : a.naechsterTag) || null;
+  a.fahrten = a.tag ? a.tag.fahrten : [];
+  a.warnungen = a.tag ? a.tag.warnungen : [];
+  a.kleidungsHinweis = a.tag ? a.tag.kleidungsHinweis : null;
   return a;
 }
 
-// Wetter außerhalb der Fahrten ("Jetzt"): eine Fahrt ab der laufenden Viertelstunde
-// mit der Dauer der Hinfahrt, am Wohnort oder am aktuellen Standort (Einstellung
-// "ortAusserhalb"). Ohne Freigabe, Ortung oder Wetter am Standort gilt der Wohnort
-// (ohne Wohnort der erste Ort der Strecke), mit kurzem Hinweis. Die amtlichen
-// Warnungen gelten für den angezeigten Ort, von jetzt bis zum Ende des Tages (bei
-// einer Fahrt über Mitternacht bis zu deren Ende). Setzt a.quellen und a.warnungen.
-function jetztAnsicht(a, w, v, wa, jetzt, h) {
-  const heim = a.orte[0], s = standort;
-  const j = { wahl: w.ortAusserhalb, heimTitel: heim.titel, standort: false, hinweis: null, kurz: null,
-    heute: { datum: h, fahrtag: daten.einstellungen.fahrtage.includes(isoWochentag(h)) } };
-  const sk = s.ort && ortSchluessel(s.ort);
-  const sv = s.vorhersage && s.vorhersage.schluessel === sk ? s.vorhersage : null;
-  const sw = s.warnungen && s.warnungen.schluessel === sk ? s.warnungen : null;
-  let orteDaten, teil;
-  if (w.ortAusserhalb === "standort" && sv && !s.fehler && !s.fehlerVorhersage) {
-    // Ortsname aus der Gemeinde des DWD (Warnzellen-Abfrage); außerhalb Deutschlands oder unbekannt: "Aktueller Standort"
-    const g = sw ? sw.orte[0] : null, gemeinde = g && g.abgedeckt !== false && g.gebiet ? g.gebiet : null;
-    Object.assign(j, { standort: true, ort: { titel: "aktueller Standort", text: gemeinde ? gemeinde + " (aktueller Standort)" : "Aktueller Standort" } });
-    orteDaten = sv.orte;
-    teil = sw;
-    a.quellen = {
-      vorhersage: quellenStand(sv, s.fehlerVorhersage, jetzt),
-      warnungen: Object.assign(quellenStand(sw, s.fehlerWarnungen, jetzt), sw ? {
-        quelle: sw.quelle, dwdFehler: sw.dwdFehler || null, gebiete: [{ rolle: "standort", titel: "aktueller Standort", name: "den aktuellen Standort", abgedeckt: g.abgedeckt, gebiet: g.gebiet }]
-      } : {})
-    };
-  } else {
-    j.ort = { titel: heim.titel, text: heim.ort.name + " (" + heim.titel + ")" };
-    orteDaten = v ? [v.orte[0]] : null;
-    teil = wa;
-    const q = a.quellen.warnungen;
-    if (q.gebiete) a.quellen.warnungen = Object.assign({}, q, { gebiete: q.gebiete.slice(0, 1) });
-    if (w.ortAusserhalb === "standort") {
-      const am = " – angezeigt wird das Wetter am " + heim.titel + ".", bisDahin = " – bis dahin das Wetter am " + heim.titel + ".";
-      const [kurz, lang] = s.ortung ? ["Standort wird bestimmt …", "Standort wird bestimmt …" + bisDahin]
-        : s.fehler ? (s.abgelehnt ? ["Standort nicht freigegeben", "Standort nicht freigegeben" + am] : ["Standort nicht verfügbar", "Standort nicht verfügbar (" + s.fehler + ")" + am])
-        : s.fehlerVorhersage ? ["Wetter am Standort nicht erreichbar", "Wetter am Standort nicht erreichbar (" + s.fehlerVorhersage + ")" + am]
-        : s.laeuft ? ["Wetter am Standort wird geladen …", "Wetter am Standort wird geladen …" + bisDahin]
-        : ["Standort noch nicht bestimmt", "Standort noch nicht bestimmt" + am];
-      Object.assign(j, { kurz, hinweis: lang });
-    }
-  }
-  a.laeuft = wetterStatus.laeuft || (w.ortAusserhalb === "standort" && (s.laeuft || s.ortung));
-  // Nur Warnungen, die noch gelten (die Fahrt beginnt mit der laufenden Viertelstunde)
-  const warnungen = teil ? warnungenZusammen({ orte: [teil.orte[0]] }, [{ titel: j.ort.titel }]).filter(wn => wn.ende === null || wn.ende > jetzt) : [];
-  // Fahrt ab der laufenden Viertelstunde (Minuten nach Mitternacht, Ortszeit), Dauer wie die Hinfahrt
-  const d = new Date(jetzt), dauer = w.hinfahrt.dauer;
-  const vonMin = d.getHours() * 60 + d.getMinutes() - d.getMinutes() % 15;
-  const von = zeitpunktAm(h, vonMin), bis = zeitpunktAm(h, vonMin + dauer);
-  const f = { art: "jetzt", name: "Jetzt", fahrt: { von: uhrzeit(von), bis: uhrzeit(bis), dauer }, von, bis, vorbei: false, bewertung: null, kleidung: null, wind: null, abfahrt: null, sonne: null,
-    beimFahren: null, grundlage: null };
-  if (orteDaten) {
-    f.sonne = sonnenZeile("jetzt", sonneAm(orteDaten[0], h), von, bis, jetzt);
-    f.bewertung = fahrtBewerten(orteDaten, warnungen, von, bis, w.ampel);
-    if (f.bewertung) {
-      // Ohne Fahrtrichtung: „beim Fahren“ als Mittel über alle Richtungen, mit der Spanne von Gegen- bis Rückenwind
-      f.beimFahren = fahrtGefuehlt(orteDaten, null, von, bis, fahrgeschwindigkeit("hinfahrt", w).kmh);
-      const sg = stufenGrundlage(f.bewertung.werte.gefuehlt, f.beimFahren, w.kleidung);
-      f.grundlage = sg.grundlage;
-      f.kleidung = kleidungFuer(sg.wert, f.bewertung.werte.regenWahrscheinlichkeit, w.kleidung);
-      // Die Fahrtrichtung ist unbekannt: nur die erste Zeile (Wind mit Himmelsrichtung und Böen)
-      f.wind = windAllgemein(f.bewertung.werte.windProben, f.bewertung.werte.boeen);
-      f.abfahrt = jetztAbfahrtsfenster(orteDaten, warnungen, h, vonMin, dauer, w.ampel);
-    }
-  }
-  j.fahrt = f;
-  const listeBis = Math.max(zeitpunktAm(plusTage(h, 1), 0), zeitpunktAm(h, vonMin + JETZT_ABFAHRT_MIN + dauer));
-  a.warnungen = warnungen.filter(wn => warnungImZeitraum(wn, jetzt, listeBis));
-  return j;
+// Vorhersage und Warnungen der Strecke aus dem Zwischenspeicher (orteDaten null ohne passende Vorhersage)
+function streckeWetter(w = daten.einstellungen.wetter) {
+  const alle = wetterOrte(w), orte = streckenOrte(w), n0 = orte.length;
+  const schluessel = alle.map(x => ortSchluessel(x.ort)).join(";");
+  const passend = teil => teil && teil.schluessel === schluessel && Array.isArray(teil.orte) && teil.orte.length === alle.length ? teil : null;
+  const v = passend(wetter.vorhersage), wa = passend(wetter.warnungen);
+  return { orte, orteDaten: v && n0 ? v.orte.slice(0, n0) : null, warnungen: wa && n0 ? warnungenZusammen({ orte: wa.orte.slice(0, n0) }, orte) : [] };
+}
+// Vorschau „Heute später los“: Zeitfenster und Ampel der Fahrt "art" am Tag "datum" mit der Abfahrt "neu"
+function spaeterVorschau(art, neu, datum, jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter, abw = Object.assign({}, abweichungFuer(jetzt, w), { datum, [art]: neu });
+  const zf = fahrtZeitfenster(art, datum, w, abw), s = streckeWetter(w);
+  return { zf, bewertung: s.orteDaten ? fahrtBewerten(s.orteDaten, s.warnungen, zf.vonMs, zf.bisMs, w.ampel) : null };
 }
 
 // ---------- Wetter je Eintrag (nur Arbeitsweg) ----------
@@ -1017,13 +867,17 @@ function arbeitswegOrte(w = daten.einstellungen.wetter) { return streckenOrte(w)
 // Gegen-, Seiten- und Rückenwind, den Werten je Teilstrecke und der
 // Fahrgeschwindigkeit, die Grundlage der Stufe und wann sie empfohlen wurde
 // ("berechnet", ms).
-function fahrtenWetter(orteDaten, datum, quelle, stand, berechnet = Date.now()) {
+// Ab 5e mit dem tatsächlichen Zeitfenster: "zeiten" je Fahrt (z. B. das bei einem
+// Eintrag gespeicherte), sonst die Einstellungen mit der verschobenen Abfahrt von
+// heute („Heute später los“, gilt nur, wenn "datum" heute ist).
+function fahrtenWetter(orteDaten, datum, quelle, stand, berechnet = Date.now(), zeiten = null) {
   const w = daten.einstellungen.wetter;
   const r1 = x => Math.round(x * 10) / 10;
   const strecken = teilstrecken(w);
   const mitStrecke = strecken.some(t => t.laenge > 0) ? strecken : null;
+  const abw = abweichungFuer(berechnet, w);
   const fahrt = art => {
-    const f = w[art], von = zeitpunktAm(datum, minutenAus(f.von)), bis = zeitpunktAm(datum, minutenAus(f.bis));
+    const zf = (zeiten && zeiten[art]) || fahrtZeitfenster(art, datum, w, abw), von = zf.vonMs, bis = zf.bisMs;
     const b = fahrtBewerten(orteDaten, [], von, bis, w.ampel);
     if (!b) return null;
     const v = b.werte;
@@ -1033,16 +887,35 @@ function fahrtenWetter(orteDaten, datum, quelle, stand, berechnet = Date.now()) 
     const kl = kleidungFuer(sg.wert, v.regenWahrscheinlichkeit, w.kleidung);
     return Object.assign({ temperatur: r1(v.temperatur), gefuehlt: r1(v.gefuehlt), niederschlag: v.niederschlag, regenWahrscheinlichkeit: v.regenWahrscheinlichkeit,
       wind: r1(wind), boeen: r1(v.boeen), ampel: b.farbe, kleidung: kl.stufe.id, empfehlung: Object.assign({}, kl.bereiche), regenkleidung: kl.mitRegen, rueckmeldung: null },
-      fahrtGefuehltSpeichern(g), { grundlage: sg.grundlage, empfohlenAm: new Date(berechnet).toISOString() });
+      fahrtGefuehltSpeichern(g), { grundlage: sg.grundlage, empfohlenAm: new Date(berechnet).toISOString() },
+      // Ab 5e: Zeitfenster, für das das Wetter berechnet wurde, die tatsächliche und ggf. die geplante Abfahrt
+      { von: zf.von, bis: zf.bis, abfahrt: zf.abfahrt, geplanteAbfahrt: zf.geplanteAbfahrt });
   };
   const hin = fahrt("hinfahrt"), rueck = fahrt("rueckfahrt");
   return hin || rueck ? { quelle, stand: new Date(stand).toISOString(), hin, rueck } : null;
 }
-// Wetter für den Tag "datum" aus der zuletzt geladenen Vorhersage (nur, wenn sie zu Wohn- und Arbeitsort gehört)
-function wetterAusVorhersage(datum) {
+// Wetter für den Tag "datum" aus der zuletzt geladenen Vorhersage (nur, wenn sie zu
+// Wohn- und Arbeitsort gehört). Ist der weitere Ort aktiv, steht er als letzter Ort
+// in derselben Abfrage; für den Eintrag zählen nur die Orte der Strecke.
+function wetterAusVorhersage(datum, zeiten = null, jetzt = Date.now()) {
   const orte = arbeitswegOrte(), v = wetter.vorhersage;
-  if (!orte.length || !v || v.schluessel !== orte.map(ortSchluessel).join(";") || !Array.isArray(v.orte) || v.orte.length !== orte.length) return null;
-  try { return fahrtenWetter(v.orte, datum, "vorhersage", v.stand); } catch (e) { return null; }
+  if (!orte.length || !v || !Array.isArray(v.orte) || typeof v.schluessel !== "string") return null;
+  const k = v.schluessel.split(";"), sk = orte.map(ortSchluessel);
+  if (k.length !== v.orte.length || (k.length !== sk.length && k.length !== sk.length + 1) || sk.some((x, i) => k[i] !== x)) return null;
+  try { return fahrtenWetter(v.orte.slice(0, sk.length), datum, "vorhersage", v.stand, jetzt, zeiten); } catch (e) { return null; }
+}
+// Gespeichertes Zeitfenster einer Fahrt (ab 5e) im Format von fahrtZeitfenster; null vor 5e
+function gespeichertesZeitfenster(art, datum, fw) {
+  if (!fw || !fw.von || !fw.bis) return null;
+  const vonMin = minutenAus(fw.von), bisMin = minutenAus(fw.bis);
+  return { art, vonMin, bisMin, von: fw.von, bis: fw.bis, dauer: bisMin - vonMin, geplant: fw.geplanteAbfahrt || fw.abfahrt || fw.von,
+    abfahrt: fw.abfahrt ?? null, geplanteAbfahrt: fw.geplanteAbfahrt ?? null, verschoben: !!fw.geplanteAbfahrt,
+    vonMs: zeitpunktAm(datum, vonMin), bisMs: zeitpunktAm(datum, bisMin) };
+}
+// Die gespeicherten Zeitfenster eines Eintrags (für „Wetter nachtragen“); ohne Wetter null
+function gespeicherteZeiten(e) {
+  const ew = e.wetter;
+  return ew ? { hinfahrt: gespeichertesZeitfenster("hinfahrt", e.datum, ew.hin), rueckfahrt: gespeichertesZeitfenster("rueckfahrt", e.datum, ew.rueck) } : null;
 }
 // Beim Speichern eines Eintrags: Arbeitsweg bekommt das Wetter (falls noch keins
 // gespeichert ist und die Vorhersage den Tag abdeckt), alle anderen keins

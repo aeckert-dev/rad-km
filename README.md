@@ -8,9 +8,10 @@ ist für das iPhone optimiert.
 - Wetter für den Arbeitsweg: Ampel, Kleidung je Körperbereich, amtliche Warnungen
   des DWD, beste Abfahrtszeit, Sonnenauf- bzw. -untergang mit Hinweis auf
   Dunkelheit und Wind je Hin- und Rückfahrt (mit Himmelsrichtung und Böen, je
-  Teilstrecke als farbiger Pfeil relativ zur Fahrtrichtung), ab dem Vorabend für
-  den nächsten Fahrtag; zu allen übrigen Zeiten die Ampel für eine spontane Runde
-  ab jetzt, am Wohnort oder am aktuellen Standort
+  Teilstrecke als farbiger Pfeil relativ zur Fahrtrichtung), immer für den
+  **nächsten Fahrtag** (bis zum Vortag 17:00 als „vorläufig“); nach der Fahrt
+  bleibt „Heute“ bis Mitternacht abrufbar, und mit „Heute später los …“ rechnet
+  die App für eine spätere Abfahrt
 - Bis zu 3 Wegpunkte: Wind je Teilstrecke, Temperatur, Regen und Warnungen auch
   unterwegs; Orte mit 4 Nachkommastellen (ca. 10 m), auf Wunsch in Apple Karten
   gezeigt; Ortssuche mit Vorschlägen beim Tippen, Koordinaten und Links aus
@@ -77,6 +78,12 @@ Das bedeutet:
   Orts) liegen unter `radkm-letzte-orte`. Sie gehören nicht zu deinen Daten und
   nicht zur Sicherung; die Orte selbst stehen in den Einstellungen und damit in
   der Sicherung.
+- Eine verschobene Abfahrt von heute („Heute später los …“, seit 5e) liegt unter
+  `radkm-heute-abfahrt`, z. B. `{ "datum": "2026-11-23", "hinfahrt": null,
+  "rueckfahrt": "18:30" }`. Sie gilt nur an diesem Tag, gehört nicht zu deinen
+  Daten und nicht zur Sicherung und wird beim ersten Start an einem anderen Tag
+  gelöscht. Was bleiben soll, steht im Eintrag (Zeitfenster und Abfahrt beim
+  gespeicherten Wetter).
 
 ### Was geht beim Wetter ins Netz?
 
@@ -85,8 +92,8 @@ festgelegt hast:
 
 | Dienst | Wofür | Was gesendet wird |
 |---|---|---|
-| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes, mit Sonnenauf- und -untergang (in derselben Abfrage); ab 5d auch Luftfeuchte und Globalstrahlung für „gefühlt beim Fahren“ (dieselbe Abfrage, keine weiteren Daten) | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort und den Wegpunkten bzw. des weiteren Orts; ist „aktueller Standort“ gewählt, außerhalb der Fahrten auch die des Standorts |
-| [Deutscher Wetterdienst](https://www.dwd.de/) (GeoServer `maps.dwd.de`) | amtliche Warnungen für die Gemeinde jedes Orts (auch der Wegpunkte und des aktuellen Standorts); der Name der Gemeinde ist zugleich der Name des Standorts. Ab 5d auch der Namensvorschlag im Formular eines Orts, wenn du Koordinaten einfügst oder den Standort übernimmst | dieselben gerundeten Koordinaten |
+| [Open-Meteo](https://open-meteo.com/) (`api.open-meteo.com`) | Vorhersage, Modell ICON des Deutschen Wetterdienstes, mit Sonnenauf- und -untergang (in derselben Abfrage); ab 5d auch Luftfeuchte und Globalstrahlung für „gefühlt beim Fahren“ (dieselbe Abfrage, keine weiteren Daten) | die auf 3 Nachkommastellen gerundeten Koordinaten (ca. 100 m) von Wohn- und Arbeitsort und den Wegpunkten; ist der weitere Ort aktiv, seit 5e zusätzlich (in derselben Abfrage) auch seine |
+| [Deutscher Wetterdienst](https://www.dwd.de/) (GeoServer `maps.dwd.de`) | amtliche Warnungen für die Gemeinde jedes Orts (auch der Wegpunkte und des aktiven weiteren Orts). Ab 5d auch der Namensvorschlag im Formular eines Orts, wenn du Koordinaten einfügst oder den Standort übernimmst | dieselben gerundeten Koordinaten |
 | [Bright Sky](https://brightsky.dev/) (`api.brightsky.dev`) | nur wenn der DWD nicht erreichbar ist: dieselben amtlichen Warnungen des DWD | dieselben gerundeten Koordinaten |
 | Ortssuche von Open-Meteo (`geocoding-api.open-meteo.com`) | Ort beim Festlegen suchen; ab 5d schon beim Tippen (ab 3 Zeichen, 400 ms nach der letzten Eingabe; ohne Treffer ein zweites Mal mit der anderen Schreibweise der Umlaute) | nur der eingegebene Text (Name oder PLZ) |
 | Rückblick von Open-Meteo (`historical-forecast-api.open-meteo.com`) | nur nach „Wetter nachtragen …“ und deiner Bestätigung: das Wetter vergangener Fahrten zur Arbeit (ab 5d mit Luftfeuchte und Globalstrahlung, auch zum Ergänzen der Werte „beim Fahren“) | die gerundeten Koordinaten von Wohn- und Arbeitsort und den Wegpunkten und der Zeitraum (Datum von–bis) |
@@ -96,13 +103,12 @@ festgelegt hast:
   der Ortssuche, vom aktuellen Standort im Formular, von Hand eingegeben oder aus
   einer importierten Datei) rundet die App sofort. An die Wetterdienste gehen sie
   nur auf 3 Nachkommastellen gerundet.
-- **Aktueller Standort** (nur wenn „Wetter außerhalb der Fahrten: aktueller
-  Standort“ gewählt ist): Die App fragt den Standort des iPhones nur ab, während
-  die Ansicht „Jetzt“ auf der Übersicht oder im Reiter Wetter angezeigt wird. Die
-  Koordinaten rundet sie sofort auf 3 Nachkommastellen; sie, das Wetter dort und
-  der Name der Gemeinde bleiben nur im Arbeitsspeicher und werden weder in den
-  Daten noch im Wetter-Zwischenspeicher gespeichert. Einen Dienst für Ortsnamen
-  gibt es nicht.
+- **Standort des iPhones:** Für das Wetter fragt die App den Standort seit 5e
+  **nie** ab (die Ansicht „Jetzt“ und die Einstellung „Wetter außerhalb der
+  Fahrten“ sind entfallen). Nur im Formular eines Orts fragt **📍 Aktueller
+  Standort** auf deinen Tipp einmal den Standort ab, um ihn als Ort zu
+  übernehmen; dafür geht nichts ins Netz außer dem Namensvorschlag des DWD (siehe
+  oben).
 - **Koordinaten und Kartenlinks**, die du ins Suchfeld einfügst, liest die App
   selbst; dafür geht nichts ins Netz. Kurzlinks (`maps.apple/p/…`,
   `maps.app.goo.gl/…`) liest sie deshalb nicht.
@@ -154,8 +160,7 @@ Auf dem iPhone:
 - **Wetter ohne Netz:** Der Reiter Wetter und die Kachel auf der Übersicht
   zeigen die zuletzt geladenen Daten mit Zeitstempel, z. B. „Angezeigt wird der
   letzte Stand von 20:15 Uhr – nicht aktuell“, und nehmen Ampeln und Werte
-  sichtbar zurück. Das Wetter am aktuellen Standort wird nicht gespeichert; ohne
-  Netz zeigt die Ansicht „Jetzt“ deshalb den Wohnort mit Hinweis.
+  sichtbar zurück.
 
 ## Bedienung
 
@@ -167,7 +172,7 @@ brauchst; Verlauf und Einstellungen kommen weiter unten bzw. auf eigene Seiten.
 | Reiter | Inhalt (von oben nach unten) |
 |---|---|
 | 🚲 **Übersicht** | Hinweise (z. B. „Datensicherung fällig“), Wetter-Kachel mit der Ampel, **Heute erfassen** mit den Fahrtagen ohne Eintrag, Kilometerstand mit nächster Wartung und offenen Mängeln, Summen, Jahr (Jahresziel, Prognose), Einträge dieser Woche, Datensicherung in einer Zeile |
-| 🌦️ **Wetter** | Ampel, Kleidung, Wind und Abfahrtszeit für Hin- und Rückfahrt bzw. „Jetzt“, amtliche Warnungen; unten der Weg zu den Wetter-Einstellungen |
+| 🌦️ **Wetter** | nach der Fahrt der Umschalter „Heute \| Nächster“ (mit aktivem weiterem Ort dazu der Ort); Ampel, Kleidung, Wind und Abfahrtszeit für Hin- und Rückfahrt des nächsten Fahrtags, „Heute später los …“, amtliche Warnungen; unten der Weg zu den Wetter-Einstellungen |
 | 🔧 **Wartung** | oben „+ Mangel“, „+ Reparatur“, „+ Eigenleistung“; darunter umschaltbar **Aktuell** (Mängel ohne Auftrag, offene Aufträge, Aufgaben) und **Verlauf** (erledigte Aufträge und Mängel) |
 | 📊 **Fahrten** (bis 5a.1 „Statistik“) | umschaltbar **Einträge** (alle Einträge, zusammengefasst) und **Statistik** (Diagramm, Kennzahlen, Jahresziele, Wetter auf dem Arbeitsweg) |
 | ⚙️ **Einstellungen** | Hauptseite mit Abschnitten; die Zeilen mit „›“ öffnen eine eigene Seite (zurück mit „‹ Einstellungen“ oder erneutem Antippen des Reiters) |
@@ -185,7 +190,7 @@ Die Hauptseite der Einstellungen:
 - **Fahrten:** Vorlagen → Seite; Fahrtage und Hinweis → Seite; Weg zu den
   Jahreszielen (Fahrten → Statistik)
 - **Wetter:** Orte und Strecke → Seite (Wohn- und Arbeitsort, Wegpunkte,
-  Teilstrecken, weiterer Ort); Wetter außerhalb der Fahrten → Seite; Kleidung
+  Teilstrecken, weiterer Ort); Kleidung
   → Seite (Stufe und Regenzusatz je eine weitere Seite mit „‹ Kleidung“);
   Ampel-Grenzen → Seite (seit 5c); Hinfahrt und Rückfahrt öffnen ihr Formular
 - **Wartung:** Wartungsarten → Seite
@@ -250,21 +255,23 @@ Datensicherung. So sind Ampel und Erfassen auch auf einem kleinen iPhone
 
 - **Kilometerstand** = Start-Kilometerstand + alle Einträge ab dem Startdatum.
   Antippen der Karte öffnet den Reiter Wartung.
-- **Wetter-Kachel:** die Ampeln der nächsten Hin- und Rückfahrt (desselben
-  Tages wie im Reiter Wetter; nach der Hinfahrt nur noch die Rückfahrt) und der
-  wichtigste Grund, z. B. „Rückfahrt rot: Gewitter ab 16:45“. Antippen öffnet
-  den Reiter Wetter. Gibt es gerade keine Hin- und Rückfahrt (siehe „Wetter“),
-  steht dort kurz „Jetzt · Musterdorf (Wohnort)“ bzw. „Jetzt · Stadt Beispielbad
-  (aktueller Standort)“, darunter nur die Ampel für eine Fahrt ab jetzt mit
-  kurzer Begründung, z. B. „gelb: 70 % Regen ab 10:30“, und „Empfehlung für Mo
-  02.11. ab So 17:00“. Ist der Standort gewählt, aber nicht verfügbar, steht der
-  Grund klein darunter (z. B. „Standort nicht freigegeben“).
+- **Wetter-Kachel** (seit 5e): immer der **nächste Fahrtag** knapp in einer
+  Zeile, z. B. „🌦️ Mo 23.11. (vorläufig) · Hin ● grün · Rück ● gelb“ bzw.
+  „Heute, Mo 23.11. · …“ und „Morgen, Mo 23.11. · …“ (nach der Hinfahrt nur noch
+  die Rückfahrt), darunter der wichtigste Grund, z. B. „Rückfahrt gelb: Böen 45
+  km/h ab 16:15“. Direkt nach dem Ende der (ggf. verschobenen) Rückfahrt zeigt
+  sie den folgenden Fahrtag. Ist der weitere Ort aktiv, steht darunter eine
+  Zeile zu ihm, z. B. „📍 Ferienort heute: 2 bis 7 °C · Regen 30 %“. Ohne
+  Fahrtage steht dort ein Hinweis. Antippen öffnet den Reiter Wetter.
 - **Fahrtage ohne Eintrag:** Fehlt für einen deiner üblichen Fahrtage (siehe
   „Einstellungen“) der letzten 14 Tage (bis gestern, ab dem Startdatum) ein
   Eintrag, erscheint z. B. „2 Fahrtage ohne Eintrag“ und darunter je Tag eine
   Zeile, z. B. „Di 20.10.“ und „Fr 23.10.“. Der heutige Fahrtag kommt ab 18:00
   dazu (Zeile „heute“), solange der Schalter „Hinweis schon am selben Tag“ an
-  ist; Schalter und Uhrzeit stehen unter Einstellungen → Fahrtage und Hinweis. Jeder Tag
+  ist; Schalter und Uhrzeit stehen unter Einstellungen → Fahrtage und Hinweis.
+  Ist die Abfahrt heute verschoben („Heute später los …“, seit 5e), kommt der
+  Hinweis frühestens nach dem Ende der verschobenen Fahrt (zur späteren der
+  beiden Uhrzeiten; eingestellt 17:00, Rückfahrt bis 19:30 → ab 19:30). Jeder Tag
   steht nur einmal da. Je Tag gibt es zwei Schaltflächen:
   - **Nachtragen** öffnet die Erfassung für diesen Tag.
   - **Keine Fahrt** legt mit einem Tipper einen Eintrag mit 0 km an (mit
@@ -399,8 +406,11 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     Koordinaten ist er gesperrt. Es gibt keine eingebettete Karte; erst das
     Antippen schickt Koordinaten und Name an Apple.
   - **Weiterer Ort „aktiv“:** Dann zeigt der Reiter das Wetter dort für heute
-    und morgen, ohne Hin- und Rückfahrt. Ausschalten mit dem Schalter in den
-    Einstellungen oder mit „Zurück zu Wohn- und Arbeitsort“ im Reiter.
+    und morgen, ohne Hin- und Rückfahrt – seit 5e als weitere Auswahl im
+    Umschalter (z. B. „Heute | Nächster | 📍 Ferienort“); voreingestellt bleibt
+    der Fahrtag. Die Übersicht zeigt darunter eine Zeile zum Ort. Das Wetter dort
+    wird mit dem der Strecke in einer Abfrage geladen. Ausschalten mit dem
+    Schalter in den Einstellungen oder mit „Nicht mehr zeigen“ im Reiter.
 - **Wegpunkte** (Einstellungen → Orte und Strecke, zwischen Wohn- und Arbeitsort): bis zu
   3 Punkte auf deinem Weg, in Fahrtrichtung der Hinfahrt. **+ Wegpunkt** öffnet
   dasselbe Formular wie bei den Orten (Suche, Einfügen, Standort oder Koordinaten mit 4
@@ -427,52 +437,78 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     übliche Abfahrt; die Uhrzeit bleibt für das nächste Einschalten. (Das
     Uhrzeitfeld lässt sich auf dem iPhone nicht leeren; ein „Zurücksetzen“ ändert
     die Uhrzeit nicht.)
-- **Welcher Tag:** Bis zum Ende der Rückfahrt (Standard 17:00) zählt der
-  heutige Tag, danach der morgige. Hin- und Rückfahrt mit Ampel, Kleidung und
-  Wind gibt es nur, wenn dieser Tag ein Fahrtag ist (siehe „Fahrtage“), für
-  einen Fahrtag also vom Ende der Rückfahrt am Vortag bis zum Ende der
-  Rückfahrt am Fahrtag. Nach dem Ende der Hinfahrt ist sie als „vorbei“
-  zurückgenommen.
-- **Zu allen übrigen Zeiten: „Jetzt“** (spontane Runde). Statt Hin- und
-  Rückfahrt zeigt der Reiter das Wetter für eine Fahrt ab jetzt:
-  - Überschrift mit dem heutigen Tag, z. B. **„Heute, Sa 31.10. – kein
-    Fahrtag“**; „– kein Fahrtag“ nur, wenn heute keiner ist (Fr 18:00: „Heute,
-    Fr 30.10.“).
-  - Darunter der Ort, z. B. **„📍 Musterdorf (Wohnort)“** bzw. **„📍 Stadt
-    Beispielbad (aktueller Standort)“**, mit dem Umschalter **Wohnort /
-    Aktueller Standort** (ein Tipp speichert die Einstellung, siehe unten).
-  - Die Karte **„Jetzt“**, z. B. „Jetzt 10:00–11:00“: Die Fahrt beginnt mit der
-    laufenden Viertelstunde (10:07 → 10:00) und dauert so lange wie die
-    Hinfahrt (Standard 60 Minuten). Sie zeigt wie eine Fahrt am Fahrtag Ampel mit
-    Begründung, Werte (Temperatur, gefühlt, Regen), Kleidung nach dem
-    Zwiebelprinzip, die erste Zeile zum Wind mit Himmelsrichtung und Böen (z. B.
-    „🧭 Wind 20 km/h aus West, Böen bis 35 km/h“; Zeilen je Teilstrecke gibt es
-    nicht, da die Richtung der Fahrt unbekannt ist) und, wenn nötig, das beste
-    Abfahrtsfenster.
-  - Darunter der Hinweis, ab wann es die Empfehlung gibt, z. B. **„Empfehlung
-    für Mo 02.11. ab So 17:00“** (am Vortag selbst „ab heute 17:00“), dann die
-    amtlichen Warnungen, Stand, „Aktualisieren“ und die Quellen.
-  - Beispiel mit den Fahrtagen Mo, Di, Fr: Freitag bis 17:00 die Fahrten am
-    Freitag; von Freitag 17:00 bis Sonntag 17:00 „Jetzt“; ab Sonntag 17:00 Hin-
-    und Rückfahrt am Montag.
-- **Wetter außerhalb der Fahrten** (Einstellungen → Wetter außerhalb der Fahrten, auch im Reiter per
-  Tipp): **Wohnort** (Standard) oder **aktueller Standort**.
-  - Der Standort wird über die Ortung des iPhones bestimmt (es fragt beim ersten
-    Mal nach der Erlaubnis) – nur, während die Ansicht „Jetzt“ auf der Übersicht
-    oder im Reiter Wetter angezeigt wird: beim Start, beim Wechsel in diese
-    Reiter, beim Zurückkehren in die App, beim Umschalten und mit
-    „Aktualisieren“. Eine Ortung darf bis zu 5 Minuten alt sein; neu geladen wird
-    das Wetter, wenn sich der Standort um mehr als 1 km geändert hat oder die
-    Daten zu alt sind.
-  - Der Name kommt aus der Gemeinde des DWD (Warnzellen-Abfrage), z. B. „Stadt
-    Beispielbad (aktueller Standort)“; außerhalb Deutschlands steht „Aktueller
-    Standort“.
-  - Ohne Freigabe, Ortung oder Netz zeigt die App den Wohnort mit kurzem Hinweis,
-    z. B. „Standort nicht freigegeben – angezeigt wird das Wetter am Wohnort.“
-    Nach einer Ablehnung fragt sie erst beim Umschalten oder mit „Aktualisieren“
-    wieder.
-  - Koordinaten und Name des Standorts werden nicht gespeichert (siehe „Was geht
-    beim Wetter ins Netz?“).
+- **Nächster Fahrtag** (seit 5e statt der Ansicht „Jetzt“): Übersicht und Reiter
+  Wetter zeigen immer den nächsten Fahrtag (siehe „Fahrtage“): heute bis zum Ende
+  der (ggf. verschobenen) Rückfahrt, danach den folgenden. Beispiel mit den
+  Fahrtagen Mo, Di, Fr: Freitag bis 17:00 der Freitag, ab Freitag 17:00 schon
+  der Montag.
+  - **Überschrift:** „Heute, Mo 23.11.“, „Morgen, Mo 23.11.“ bzw. mit Vorlauf
+    „Mo 23.11. · in 3 Tagen · vorläufig“.
+  - **Vorläufig** bis zum Ende der Rückfahrt am Vortag (Einstellung, Standard
+    17:00; wie bisher die Grenze, ab der es die Empfehlung gab), z. B.
+    „Morgen, Mo 23.11. · vorläufig“ am Sonntag um 16:59, ab 17:00 ohne Zusatz.
+    Darunter: „Vorläufige Empfehlung: Die Vorhersage für mehrere Tage im Voraus
+    ist unsicherer. Endgültig ab So 22.11., 17:00.“ Die Karten sind trotzdem
+    vollständig (Ampel mit Begründung, Werte, Kleidung, Wind mit Pfeilen, Sonne,
+    Abfahrtsfenster, Warnungen).
+  - **Keine Fahrt:** Ein Tag mit einem Eintrag „Keine Fahrt“ (0 km) zählt nicht
+    als Fahrtag; trägst du heute „Keine Fahrt“ ein, zeigt die App gleich den
+    folgenden.
+  - **Außerhalb der Vorhersage:** Die Vorhersage reicht 8 Tage (heute bis heute
+    + 7). Liegt der nächste Fahrtag später (z. B. weil der nächste als „Keine
+    Fahrt“ eingetragen ist), steht dort „Die Vorhersage für Di 10.11. gibt es ab
+    Di 03.11.“ Mit wöchentlichen Fahrtagen kommt das sonst nicht vor; deckt der
+    Zwischenspeicher (ohne Netz) den Tag nicht ab, steht in den Karten „Für diese
+    Zeit liegt noch keine Vorhersage vor.“
+  - **Ohne Fahrtage:** „Keine Fahrtage eingestellt“ mit **Fahrtage festlegen ›**
+    (Einstellungen → Fahrtage).
+  - Eine vorbeigegangene Fahrt steht eingeklappt als **„Hinfahrt 06:00–07:00 ·
+    vorbei ›“**; ein Tipp klappt die vollständige Karte auf (oben „vorbei ⌄“
+    klappt sie wieder ein). Das merkt sich die App nur bis zum nächsten Start.
+- **Umschalter „Heute | Nächster“** (seit 5e, oben im Reiter Wetter): An einem
+  Fahrtag nach dem Ende der Rückfahrt z. B. „Heute · Sa 21.11. | Nächster · Mo
+  23.11.“, mit aktivem weiterem Ort dazu „📍 Ferienort“ (sonst erscheint er
+  nicht). Vor dem Ende der Fahrt gibt es „Heute“ nur als nächsten Fahrtag (bei
+  aktivem weiterem Ort „Heute · Mo 23.11. | 📍 Ferienort“).
+  - **Voreinstellung** „Heute“ bis 2 Stunden nach dem Ende der Rückfahrt,
+    danach „Nächster“. „Heute“ bleibt per Tipp bis 24:00 erreichbar, mit
+    vollständiger Karte (die Fahrten eingeklappt, die Warnungen, die noch
+    gelten).
+  - Ein Tipp gilt, bis sich die Voreinstellung ändert (2 Stunden nach der
+    Rückfahrt, um 00:00) oder die App neu startet.
+  - Die Übersicht wechselt direkt nach dem Ende der Fahrt zum nächsten Fahrtag.
+- **Heute später los …** (seit 5e): Knopf in den Karten von Hin- und Rückfahrt
+  von heute, solange die Fahrt nicht vorbei ist, und in der aufgeklappten Karte
+  auch danach (falls du doch später fährst).
+  - Es öffnet sich ein Fenster von unten mit dem Feld **Abfahrt** und der
+    Schnellwahl **+30 min, +1 h, +1,5 h, +2 h**. Die Tasten rechnen immer von der
+    geplanten Abfahrt aus (übliche Abfahrt, ohne sie der Beginn des Zeitraums)
+    und addieren nicht auf: Zweimal „+1 h“ bleibt 17:00 bei geplant 16:00. Die
+    gewählte Taste ist hervorgehoben. Die Uhrzeit lässt sich auch von Hand
+    wählen (auch früher). Darunter die **Vorschau** der Ampel für die neue Zeit.
+  - Die Dauer bleibt: Der Zeitraum verschiebt sich um denselben Betrag
+    (16:00–17:00, Abfahrt 18:30 statt 16:00 → 18:30–19:30). Die Fahrt muss vor
+    Mitternacht enden, und die Hinfahrt muss vor der (ggf. verschobenen)
+    Rückfahrt enden; sonst steht ein Hinweis da.
+  - **Übernehmen:** Ampel, Kleidung („gefühlt beim Fahren“), Wind, Sonne und
+    Abfahrtsfenster rechnen für das neue Zeitfenster. In der Karte steht unter
+    dem Titel **„⏰ Abfahrt heute 18:30 statt 16:00 · zurücksetzen“**, unten
+    **„Andere Zeit …“**. Zurück zur Planung geht es nur über „zurücksetzen“.
+  - Das verschobene Ende gilt überall, wo das Ende der Fahrt zählt: Übersicht,
+    nächster Fahrtag, Umschalter, 2-Stunden-Regel, „Wie war die Kleidung?“ und
+    der Hinweis auf einen fehlenden Eintrag.
+  - Gilt nur für heute; die Einstellungen bleiben. Gespeichert wird die
+    Verschiebung nur auf dem Gerät (`radkm-heute-abfahrt`, nicht in der
+    Sicherung); am nächsten Tag verfällt sie.
+  - Beim Speichern des Eintrags wird das Wetter für das tatsächliche Zeitfenster
+    gespeichert, mit der tatsächlichen und der geplanten Abfahrt. Ist der
+    Eintrag schon gespeichert, fragt die App nach dem Übernehmen (und nach
+    „zurücksetzen“), ob das gespeicherte Wetter dieser Fahrt für die neue Zeit
+    neu berechnet werden soll; deine Rückmeldung zur Kleidung bleibt (mit
+    „Rückgängig“). Ohne Zustimmung bleibt der Eintrag, wie er ist.
+- **Gespeichertes Wetter dieser Fahrt ›** (seit 5e): steht in den Karten von
+  heute, sobald der Eintrag von heute mit Wetter gespeichert ist, und öffnet ihn
+  mit seinem Wetter.
 - **Je Fahrt:** Ampel mit kurzer Begründung, die Werte (niedrigste Temperatur
   und gefühlte Temperatur, Regenwahrscheinlichkeit und Niederschlag),
   Sonnenauf- bzw. -untergang, Kleidung, Wind mit Böen und, wenn nötig, das
@@ -585,9 +621,10 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Die **Windlage** in Klammern stammt aus diesem Schritt: Gegenwind (bis
     67,5° von vorn), Seitenwind, Rückenwind (ab 112,5°), „wechselnd“ (keine
     Lage über die Hälfte der Länge) oder „kaum Wind“ (unter 10 km/h).
-  - **„Jetzt“** (die Richtung ist unbekannt): das Mittel über alle Richtungen
-    für die Stufe, dazu die Spanne, z. B. „beim Fahren ca. −1 °C (−2 °C bei
-    Gegen-, 2 °C bei Rückenwind)“. Der weitere Ort zeigt keine Kleidung.
+  - **Ohne Fahrtrichtung** (nur ein Ort, z. B. ohne Arbeitsort): das Mittel über
+    alle Richtungen für die Stufe, dazu die Spanne, z. B. „beim Fahren ca. −1 °C
+    (−2 °C bei Gegen-, 2 °C bei Rückenwind)“. Der weitere Ort zeigt keine
+    Kleidung.
   - Beispiel: 5 °C, 80 % Luftfeuchte, 15 km/h Wind, 17 km/h, keine Sonne:
     gefühlt (Open-Meteo) 1 °C, beim Fahren −2,1 °C bei Gegenwind, −0,7 °C bei
     Seitenwind, 1,8 °C bei Rückenwind.
@@ -640,7 +677,9 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   **passte** und **zu kalt** – im Reiter Wetter für die vorbeigegangenen
   Fahrten von heute und den zwei Tagen davor (höchstens zwei auf einmal) und in
   der Detailansicht jedes Eintrags mit gespeichertem Wetter. Sie bezieht sich
-  auf die tatsächlich empfohlene Kleidung (mit Zwiebelprinzip).
+  auf die tatsächlich empfohlene Kleidung (mit Zwiebelprinzip). Vorbei ist eine
+  Fahrt am Ende ihres gespeicherten Zeitfensters (nach „Heute später los …“ also
+  später).
   - Die Rückmeldung wird je Fahrt gespeichert (mit „Rückgängig“) und
     **verschiebt keine Grenzen**. Eine geänderte Rückmeldung ersetzt die
     vorige. Die App ändert nie selbst etwas an den Stufen.
@@ -682,7 +721,11 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   Stufe gewählt wurde und wann. Die Detailansicht des Eintrags zeigt das
   Wetter (z. B. „beim Fahren −1 °C (Gegenwind) bei 17 km/h · Stufe nach „beim
   Fahren““), die Kleidung in einer Zeile und „Wie war die Kleidung?“. Sind
-  Wegpunkte festgelegt, zählen deren Werte mit.
+  Wegpunkte festgelegt, zählen deren Werte mit. Seit 5e gilt das tatsächliche
+  Zeitfenster (nach „Heute später los …“ das verschobene), und der Eintrag
+  speichert es mit der Abfahrt; die Detailansicht zeigt z. B. „Rückfahrt
+  18:30–19:30 · Abfahrt 18:30 statt 16:00“. Ist der weitere Ort aktiv, zählen
+  nur die Orte der Strecke.
   - Beim Ändern eines Eintrags bleibt das Wetter bei gleichem Datum; bei
     neuem Datum holt die App es neu aus der Vorhersage, ohne Arbeitsweg
     entfällt es.
@@ -703,9 +746,9 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   das schon Geholte übernommen und die Meldung sagt es.
 - **Amtliche Warnungen:** alle Warnungen des DWD für den angezeigten Tag mit
   Stufe (1 Wetterwarnung bis 4 extremes Unwetter), Zeitraum, betroffenen Orten
-  (auch Wegpunkten, z. B. „Wohnort, Wegpunkt 1“) und Text. In der Ansicht „Jetzt“
-  nur die für den angezeigten Ort (Wohnort bzw. aktueller Standort), von jetzt
-  bis zum Ende des Tages (bei einer Fahrt über Mitternacht bis zu deren Ende). Dieselbe Warnung an
+  (auch Wegpunkten, z. B. „Wohnort, Wegpunkt 1“) und Text; bei „Heute“ nach der
+  Fahrt nur die, die noch gelten, beim weiteren Ort die für heute und morgen
+  dort. Dieselbe Warnung an
   mehreren Orten steht nur einmal da. Darunter steht, woher sie gerade kommen („Quelle: Deutscher
   Wetterdienst“ bzw. „Bright Sky (Ersatz, Daten des DWD)“), das Warngebiet
   (Gemeinde) und der Stand. Liegt ein Ort außerhalb Deutschlands, steht das
@@ -719,14 +762,13 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Ohne übliche Abfahrt: „Beste Abfahrt 15:45: trocken · meiden: 16:45–17:30
     (Gewitter)“.
   - Am selben Tag zählen nur Abfahrten, die noch kommen.
-  - In der Ansicht „Jetzt“: Abfahrten von jetzt bis eine Stunde später, z. B.
-    „Abfahrt 11:00 statt jetzt: trocken, 70 % Regen nur bis 11:00“ oder „Keine
-    bessere Abfahrt bis 11:00.“
-- **Wind:** In jeder Fahrt-Karte (Hin- und Rückfahrt, „Jetzt“) steht zuerst
+  - Nach „Heute später los …“ gilt das Fenster um die neue Zeit, z. B.
+    „Abfahrt 18:15 statt 18:30“.
+- **Wind:** In jeder Fahrt-Karte (Hin- und Rückfahrt) steht zuerst
   eine Zeile mit dem mittleren Wind der Fahrzeit, der Himmelsrichtung, aus der er
   kommt, und den Böen (Höchstwert), z. B. **„🧭 Wind 15 km/h aus Südwest, Böen
   bis 36 km/h“**. Sie gilt für alle Orte der Strecke (Wohnort, Wegpunkte,
-  Arbeitsort), in der Ansicht „Jetzt“ für den angezeigten Ort.
+  Arbeitsort).
   - **Je Teilstrecke** steht am Fahrtag darunter (nicht eingerückt) eine Zeile
     mit dem Namen der Teilstrecke, z. B. „Musterdorf → Ecke“, und dahinter nur
     ein **farbiger Pfeil** (seit 5c, vorher Text). Die Pfeile stehen
@@ -755,8 +797,8 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     Grenze zählt zum Abschnitt weiter vorn (dem ungünstigeren), z. B. 22,5° als
     Gegenwind.
   - Teilstrecken, die nicht für den Wind zählen, werden nicht erwähnt. Zählt
-    keine, ohne Arbeitsort und in der Ansicht „Jetzt“ (Richtung der Fahrt
-    unbekannt) steht nur die erste Zeile.
+    keine oder fehlt der Arbeitsort (Richtung der Fahrt unbekannt), steht nur
+    die erste Zeile.
   - Die Rückfahrt zeigt die Teilstrecken in umgekehrter Reihenfolge und
     Richtung (die Pfeile also gedreht).
   - **Schwacher Wind** (unter 10 km/h): erste Zeile mit dem Zusatz
@@ -790,9 +832,7 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - „🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel“ bzw. „· Fahrt im Dunkeln“.
   - Geprüft wird immer gegen Auf- und Untergang, auch bei ungewöhnlichen
     Fahrzeiten. Es zählen Sonnenauf- und -untergang, keine Dämmerung.
-  - „Jetzt“: das nächste Ereignis des Tages am angezeigten Ort – vor
-    Sonnenaufgang der Aufgang, tagsüber der Untergang, danach „🌙 Dunkel seit
-    16:42 (Sonnenuntergang)“.
+  - Nach „Heute später los …“ für das neue Zeitfenster.
   - Die Zeiten kommen mit der Vorhersage von Open-Meteo (Tageswerte
     `sunrise`/`sunset`) und liegen im Zwischenspeicher, also auch ohne Netz.
     Ein Zwischenspeicher aus 5b hat sie noch nicht; dann fehlt die Zeile bis
@@ -1261,12 +1301,12 @@ prüfen“ vergleicht sie mit dem Inhalt der Datei.
 |---|---|---|---|
 | `wohnort` | Ort oder `null` | nein | Wohnort; Beginn der Hinfahrt |
 | `arbeitsort` | Ort oder `null` | nein | Arbeitsort; aus Wohnort, Wegpunkten und Arbeitsort ergeben sich die Teilstrecken für den Wind |
-| `weitererOrt` | Ort mit `aktiv` oder `null` | nein | z. B. Urlaub; `aktiv: true` = der Reiter Wetter zeigt das Wetter dort, ohne Hin- und Rückfahrt |
+| `weitererOrt` | Ort mit `aktiv` oder `null` | nein | z. B. Urlaub; `aktiv: true` = der Reiter Wetter zeigt das Wetter dort als weitere Auswahl (heute und morgen, ohne Hin- und Rückfahrt), die Übersicht in einer Zeile |
 | `wegpunkte` | Liste von Orten | nein | Ab Version 6: höchstens 3 Wegpunkte in Fahrtrichtung der Hinfahrt (Wohnort → Arbeitsort); Standard `[]`. Sie zählen nur, wenn Wohn- und Arbeitsort festgelegt sind |
 | `windTeilstrecken` | Liste von `true`/`false` | nein | Ab Version 6: je Teilstrecke (Wohnort → Wegpunkt 1 → … → Arbeitsort, also eine mehr als Wegpunkte), ob sie für den Wind zählt; Standard `[true]`. Fehlt das Feld, zählen alle |
-| `ortAusserhalb` | `"wohnort"` oder `"standort"` | nein | Ab Version 7: Wetter außerhalb der Fahrten (Ansicht „Jetzt“) am Wohnort oder am aktuellen Standort; Standard `"wohnort"`. Der Standort selbst wird nie gespeichert |
-| `hinfahrt` | Fahrzeit | nein | Standard `{ "von": "06:00", "bis": "07:00", "abfahrtAn": true, "abfahrt": "06:00", "dauer": 60 }`; `dauer` gilt auch für die Fahrt ab jetzt außerhalb der Fahrten |
-| `rueckfahrt` | Fahrzeit | nein | Standard `{ "von": "16:00", "bis": "17:00", "abfahrtAn": true, "abfahrt": "16:00", "dauer": 60 }`; nach `bis` zählt für den Reiter Wetter der nächste Tag |
+| `ortAusserhalb` | – | – | Nur Version 7 bis 11: Wetter außerhalb der Fahrten (Ansicht „Jetzt“) am Wohnort oder am aktuellen Standort. Ab Version 12 entfallen; die Umwandlung entfernt das Feld (eine ältere Datei mit beliebigem Wert lässt sich weiter importieren) |
+| `hinfahrt` | Fahrzeit | nein | Standard `{ "von": "06:00", "bis": "07:00", "abfahrtAn": true, "abfahrt": "06:00", "dauer": 60 }` |
+| `rueckfahrt` | Fahrzeit | nein | Standard `{ "von": "16:00", "bis": "17:00", "abfahrtAn": true, "abfahrt": "16:00", "dauer": 60 }`; nach `bis` (ggf. verschoben) zeigt der Reiter Wetter den nächsten Fahrtag; `bis` am Vortag ist zugleich die Grenze für „vorläufig“ |
 | `geschwindigkeit` | Zahl 5–40 oder `null` | nein | Ab Version 11: eigene Fahrgeschwindigkeit in km/h für „gefühlt beim Fahren“; `null` (Standard) = automatisch aus der ersten Vorlage mit Arbeitsweg (je Richtung die Hälfte) und der `dauer` der Fahrt, ohne solche Vorlage 15 km/h |
 | `ampel` | Objekt | nein | Grenzen der Ampel (siehe unten) |
 | `kleidung` | Objekt | nein | Kleidungsregeln (siehe unten) |
@@ -1391,7 +1431,7 @@ Werte sind die ungünstigsten an Wohnort, Wegpunkten und Arbeitsort.
 |---|---|---|
 | `quelle` | `"vorhersage"` oder `"rueckblick"` | aus der Vorhersage übernommen bzw. nachträglich für einen vergangenen Tag geholt |
 | `stand` | Text | Zeitpunkt der Daten (ISO 8601) |
-| `hin`, `rueck` | Objekt oder `null` | je Fahrt: `temperatur` (niedrigste, °C), `gefuehlt` (niedrigste gefühlte, °C), `niederschlag` (Summe, mm, ≥ 0), `regenWahrscheinlichkeit` (höchste, 0–100 oder `null`), `wind` (Mittel, km/h), `boeen` (höchste, km/h), `ampel` (`"gruen"`, `"gelb"`, `"rot"`), `kleidung` (`id` der empfohlenen Kleidungsstufe oder `null`), `empfehlung` (ab Version 6: die tatsächlich empfohlene Kleidung je Bereich wie bei `bereiche` einer Stufe, mit Zwiebelprinzip, oder `null`), `regenkleidung` (ab Version 6: `true`, wenn ein Regenzusatz galt; fehlt das Feld, gilt `false`), `rueckmeldung` (`"zu-warm"`, `"passte"`, `"zu-kalt"` oder `null`; wird je Stufe ausgewertet); ab Version 11 dazu die Werte „beim Fahren“ (siehe unten) |
+| `hin`, `rueck` | Objekt oder `null` | je Fahrt: `temperatur` (niedrigste, °C), `gefuehlt` (niedrigste gefühlte, °C), `niederschlag` (Summe, mm, ≥ 0), `regenWahrscheinlichkeit` (höchste, 0–100 oder `null`), `wind` (Mittel, km/h), `boeen` (höchste, km/h), `ampel` (`"gruen"`, `"gelb"`, `"rot"`), `kleidung` (`id` der empfohlenen Kleidungsstufe oder `null`), `empfehlung` (ab Version 6: die tatsächlich empfohlene Kleidung je Bereich wie bei `bereiche` einer Stufe, mit Zwiebelprinzip, oder `null`), `regenkleidung` (ab Version 6: `true`, wenn ein Regenzusatz galt; fehlt das Feld, gilt `false`), `rueckmeldung` (`"zu-warm"`, `"passte"`, `"zu-kalt"` oder `null`; wird je Stufe ausgewertet); ab Version 11 dazu die Werte „beim Fahren“, ab Version 12 Zeitfenster und Abfahrt (siehe unten) |
 
 **Werte „beim Fahren“ je Fahrt** (ab Version 11; jedes Feld darf fehlen oder
 `null` sein, z. B. bei Wetter von vor 5d):
@@ -1409,6 +1449,19 @@ Werte sind die ungünstigsten an Wohnort, Wegpunkten und Arbeitsort.
 
 „Wetter nachtragen“ ergänzt bei Rückblick-Wetter von vor 5d nur `beimFahren`
 bis `geschwindigkeit`; `grundlage` und `empfohlenAm` bleiben.
+
+**Zeitfenster und Abfahrt je Fahrt** (ab Version 12; jedes Feld darf fehlen
+oder `null` sein, z. B. bei Wetter von vor 5e – dann galt die Fahrzeit aus den
+damaligen Einstellungen):
+
+| Feld | Typ | Bedeutung |
+|---|---|---|
+| `von`, `bis` | Uhrzeit `"HH:MM"` | Zeitfenster, für das das Wetter berechnet wurde (nach „Heute später los …“ das verschobene); nur beide oder keins, `von` vor `bis` |
+| `abfahrt` | Uhrzeit | tatsächliche Abfahrt; `null` ohne übliche Abfahrt und ohne Verschiebung |
+| `geplanteAbfahrt` | Uhrzeit | nur nach „Heute später los …“: die geplante Abfahrt (übliche Abfahrt, ohne sie der Beginn der Fahrzeit); sonst `null`. Nur zusammen mit `abfahrt` |
+
+„Wetter nachtragen“ rechnet mit dem gespeicherten Zeitfenster; ohne es (vor 5e)
+mit der Fahrzeit aus den Einstellungen.
 
 ### `wartungsarten[]`
 
@@ -1490,8 +1543,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ```json
 {
-  "version": 11,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5d", "eintraege": 4,
+  "version": 12,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5e", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1506,7 +1559,6 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
       "weitererOrt": { "name": "Ferienort", "lat": 54.0, "lon": 9.0, "aktiv": false },
       "wegpunkte": [{ "name": "Brücke", "lat": 51.0305, "lon": 10.0705 }, { "name": "Ortsmitte", "lat": 51.06, "lon": 10.13 }],
       "windTeilstrecken": [true, false, true],
-      "ortAusserhalb": "standort",
       "hinfahrt": { "von": "06:00", "bis": "07:00", "abfahrtAn": true, "abfahrt": "06:00", "dauer": 60 },
       "rueckfahrt": { "von": "16:00", "bis": "17:00", "abfahrtAn": false, "abfahrt": "16:00", "dauer": 60 },
       "geschwindigkeit": null,
@@ -1560,14 +1612,16 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
                    { "laenge": 2.1, "kurs": 54, "zaehlt": true, "wind": 12, "richtung": 250, "luftstrom": 11.2, "beimFahren": -5.4 },
                    { "laenge": 2.5, "kurs": 80, "zaehlt": false, "wind": 12, "richtung": 251, "luftstrom": 10, "beimFahren": -4.9 },
                    { "laenge": 1.6, "kurs": 250, "zaehlt": true, "wind": 13, "richtung": 249, "luftstrom": 18.7, "beimFahren": -7.6 }],
-                 "geschwindigkeit": 10, "grundlage": "fahrt", "empfohlenAm": "2025-01-20T04:50:12.000Z" },
+                 "geschwindigkeit": 10, "grundlage": "fahrt", "empfohlenAm": "2025-01-20T04:50:12.000Z",
+                 "von": "06:00", "bis": "07:00", "abfahrt": "06:00", "geplanteAbfahrt": null },
         "rueck": { "temperatur": 9, "gefuehlt": 8.5, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18,
                    "boeen": 42, "ampel": "gelb", "kleidung": "stufe4",
                    "empfehlung": { "kopf": "leichte Mütze", "hals": "", "haende": "Übergangshandschuhe",
                      "oberkoerper": "T-Shirt, leichter Pullover, Regenjacke", "beine": "Hose, Regenhose", "fuesse": "Socken, Gamaschen" },
                    "regenkleidung": true, "rueckmeldung": "zu-kalt",
                    "beimFahren": null, "luftfeuchte": null, "windRichtung": null, "windAnteil": null, "teilstrecken": null,
-                   "geschwindigkeit": null, "grundlage": "gefuehlt", "empfohlenAm": null } } },
+                   "geschwindigkeit": null, "grundlage": "gefuehlt", "empfohlenAm": null,
+                   "von": "17:30", "bis": "18:30", "abfahrt": "17:30", "geplanteAbfahrt": "16:00" } } },
     { "datum": "2025-01-21", "km": 12.5, "notiz": "Umweg" }
   ],
   "wartungsarten": [
@@ -1734,8 +1788,17 @@ damit nichts verloren geht.
   der gefühlten Temperatur von Open-Meteo gewählt; ohne Stufe `null`) und
   `empfohlenAm: null`. Bisherige Rückmeldungen zählen damit als „vor 5d“. Die
   umgewandelten Daten werden beim nächsten Speichern als Version 11 abgelegt.
-- Daten aus Version 1 bis 9 werden in einem Schritt über die Zwischenversionen
-  auf Version 11 gebracht.
+- **Version 11 → 12** (Release 5e): Die Ansicht „Jetzt“ und die Einstellung
+  „Wetter außerhalb der Fahrten“ entfallen; die Umwandlung entfernt deshalb
+  `ortAusserhalb` aus `einstellungen.wetter` (auch eine ältere Datei mit einem
+  unbekannten Wert lässt sich so importieren). Jede gespeicherte Fahrt bekommt
+  `von`, `bis`, `abfahrt` und `geplanteAbfahrt` als `null` (Wetter von vor 5e,
+  berechnet nach den damaligen Fahrzeiten). Alles andere bleibt unverändert
+  (Einträge mit Wetter, Werten „beim Fahren“, Empfehlung und Rückmeldung,
+  Kleidung mit Protokoll, Orte, weiterer Ort, Aufträge …). Die umgewandelten
+  Daten werden beim nächsten Speichern als Version 12 abgelegt.
+- Daten aus Version 1 bis 10 werden in einem Schritt über die
+  Zwischenversionen auf Version 12 gebracht.
 
 **App-Versionen:** Die Zahl `version` oben gilt für die Daten. Die App selbst
 zählt ab Release 5c so: fortlaufende Buchstaben für jedes Release (5c, 5d …)
@@ -1761,12 +1824,22 @@ mini rund 650 statt 610 pt hoch) und die Ortssuche mit Vorschlägen beim
 Tippen, eingefügten Koordinaten und Kartenlinks, Namensvorschlag und den
 zuletzt gewählten Orten (Formular als Unterseite).
 
+**Release 5e** (Datenversion 12): Übersicht und Reiter Wetter drehen sich um
+die Fahrtage – immer der nächste Fahrtag (bis zum Vortag 17:00 „vorläufig“, mit
+Vorlauf), nach der Fahrt der Umschalter „Heute | Nächster“ (mit aktivem
+weiterem Ort als dritte Auswahl), vorbeigegangene Fahrten eingeklappt, „Heute
+später los …“ mit Schnellwahl, Vorschau und Neuberechnung für das verschobene
+Zeitfenster (nur auf dem Gerät gespeichert), Eintragswetter für das
+tatsächliche Zeitfenster und der Weg „Gespeichertes Wetter dieser Fahrt ›“.
+Die Ansicht „Jetzt“, die Einstellung „Wetter außerhalb der Fahrten“ und die
+Standortabfrage für das Wetter sind entfallen.
+
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1 bis 10 auf Version 11 (`tests/daten-v1.json`
-  bis `tests/daten-v10.json`, erfundene Werte; auch dass geänderte
+- die Umwandlung von Version 1 bis 11 auf Version 12 (`tests/daten-v1.json`
+  bis `tests/daten-v11.json`, erfundene Werte; auch dass geänderte
   Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
   werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
@@ -1970,7 +2043,40 @@ zuletzt gewählten Orten (Formular als Unterseite).
   3 Zeichen erst 400 ms nach der letzten Eingabe, Abbruch der älteren
   Abfrage, PLZ, der zweite Versuch mit Umlaut, ohne Netz, die zuletzt
   gewählten Orte (höchstens 5, ohne Doppelte, nicht in Daten und Sicherung,
-  „Liste leeren“).
+  „Liste leeren“),
+- Release 5e, Datenversion 12: die Umwandlung 11 → 12 mit
+  `tests/daten-v11.json` beim Laden und beim Import (`ortAusserhalb` entfällt,
+  auch mit einem unbekannten Wert; alles andere unverändert; Zeitfenster und
+  Abfahrt je Fahrt leer), die Kette aus allen älteren Testdateien, „Sicherung
+  prüfen“ identisch, Export → Import und die Prüfung der neuen Felder,
+- Release 5e, nächster Fahrtag (B13): heute bis zum Ende der Rückfahrt, danach
+  der folgende (Fr 16:59/17:00, Wochenende, Zeitumstellung, 23:59/00:00),
+  „vorläufig“ am Vortag 16:59/17:00 (auch mit anderem Ende der Rückfahrt),
+  Vorlauf „in 3 Tagen“, vollständige Karte, Kachel in einer Zeile, nur dienstags
+  (7 Tage, noch in der Vorhersage), außerhalb der Vorhersage mit Datum,
+  „Keine Fahrt“ heute und an einem kommenden Fahrtag, ohne Fahrtage mit Link,
+- Release 5e, Umschalter (B14.1): erst nach dem Ende der Rückfahrt, „Heute“ bis
+  2 h danach (18:59/19:00) voreingestellt, bis 23:59 erreichbar, ab 00:00 nicht
+  mehr, ein Tipp bis zum Wechsel der Voreinstellung, Wochenende, weiterer Ort
+  aktiv/inaktiv (Beschriftung, Ansicht, Zeile auf der Übersicht, Eintragswetter
+  nur aus der Strecke), „vorbei ›“ auf- und zuklappen, Warnungen bei „Heute“,
+- Release 5e, „Heute später los …“ (B14.2): Fenster von unten, Schnellwahl ab
+  der geplanten Abfahrt ohne Aufaddieren (erneuter Tipp, Hervorhebung), Uhrzeit
+  von Hand, Vorschau, Grenzen (Ende vor Mitternacht, 22:59; Hinfahrt vor der
+  Rückfahrt), „Abbrechen“, „Übernehmen“ nur im Hilfsspeicher, Neuberechnung von
+  Ampel, Kleidung, Wind, Sonne und Abfahrtsfenster, Ende über die geplante
+  Endzeit hinaus (19:29/19:30, 21:29/21:30), Hinweis „Fahrtag ohne Eintrag“
+  erst nach dem verschobenen Ende (ohne Verschiebung wie bisher), Eintragswetter
+  mit Zeitfenster und Abfahrt, „Wie war die Kleidung?“, „Wetter nachtragen“ mit
+  dem gespeicherten Zeitfenster, Rückfrage bei gespeichertem Eintrag (Nein /
+  Neu berechnen, Rückmeldung bleibt, „Rückgängig“), „zurücksetzen“, der Knopf
+  nach der Fahrt, Verfall am nächsten Tag und beim Start,
+- Release 5e, Link (B14.3): „Gespeichertes Wetter dieser Fahrt ›“ nur mit
+  gespeichertem Eintrag von heute; er öffnet den Eintrag mit Zeitfenster und
+  Abfahrt.
+
+Die Tests zur Ansicht „Jetzt“ und zum aktuellen Standort für das Wetter (oben
+unter 4d, 4e, 5c und 5d genannt) sind mit 5e entfallen.
 
 Die Seite lädt die App unsichtbar mit eigenem Speicherplatz; echte Daten werden
 nicht berührt.
@@ -2016,9 +2122,12 @@ CSS geändert, vor „Neu laden“ der bisherige und danach der neue Satz
 vollständig, eine auf dem Server fehlende Datei (kein halber Satz), der
 Übergang von 5a.1 (eine Datei) auf die aufgeteilte App (5a.1 holt der Test
 mit Git aus dem Commit `52cd779`; ohne Git wird dieser Teil übersprungen),
-geänderter Service Worker, Wetter beim Start und ohne Netz, die Ansicht
-„Jetzt“ am aktuellen Standort mit und ohne Netz (die Wetterdienste antworten
-dabei mit den Aufzeichnungen aus `tests/`, der Standort ist vorgegeben). Dabei prüft
+geänderter Service Worker, Wetter beim Start und ohne Netz, seit 5e der nächste
+Fahrtag mit einer Datei aus 5d („aktueller Standort“ gewählt, heute kein
+Fahrtag) mit und ohne Netz, ohne jede Standortabfrage (die Erlaubnis ist
+erteilt, jede Abfrage würde gezählt), die verschobene Abfahrt nach „Neu laden“
+und das Löschen einer Verschiebung von gestern beim Start (die Wetterdienste
+antworten dabei mit den Aufzeichnungen aus `tests/`). Dabei prüft
 er jedes Mal, dass die Daten im `localStorage` unverändert bleiben, und lässt
 die Testseite unter dem aktiven Service Worker laufen. Er arbeitet mit einer Kopie der App und einem
 eigenen Webserver, der sich wie GitHub Pages verhält. Aufruf (benötigt
@@ -2048,10 +2157,11 @@ fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
 | `js/wartung.js` | Werkstatt (Berechnung): Fälligkeit (Zeitfenster, Intervall), offene Aufträge, berechnete Standard-Zuordnung, Vorschläge |
 | `js/kalender.js` | Kalenderdatei (`.ics`) zum Termin eines geplanten Auftrags (Zeiten in UTC aus Europe/Berlin, Vorlaufzeit), Stand im Kalender (`imKalender`) |
 | `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten (für Einstellungen → Wartungsarten): Aufträge, Termin mit Vorlaufzeit, „In Kalender übernehmen“ (Karte, Fenster, Hinweis auf veralteten Eintrag), Erledigt eintragen, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm nach der Umwandlung auf Version 8 |
-| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky, Zwischenspeicher, aktueller Standort, Ampel, Glätte, Kleidung (Grundlage der Stufe), Wind (Pfeilrichtung und -farbe), Sonnenauf- und -untergang, bestes Abfahrtsfenster, Ansicht „Jetzt“, Wetter je Eintrag, Rückblick (auch Ergänzen der Werte „beim Fahren“) |
+| `js/wetter.js` | Wetter (Logik): Abruf von Open-Meteo, DWD und Bright Sky (Strecke und aktiver weiterer Ort in einer Abfrage), Zwischenspeicher, Ampel, Glätte, Kleidung (Grundlage der Stufe), Wind (Pfeilrichtung und -farbe), Sonnenauf- und -untergang, bestes Abfahrtsfenster, Ansicht für Reiter und Kachel (nächster Fahrtag, heute, weiterer Ort), Vorschau „Heute später los“, Wetter je Eintrag mit Zeitfenster, Rückblick (auch Ergänzen der Werte „beim Fahren“) |
+| `js/fahrtag.js` | Fahrtag (seit 5e): nächster Fahrtag („vorläufig“, Vorlauf, außerhalb der Vorhersage, „Keine Fahrt“), Auswahl im Reiter Wetter (Heute \| Nächster \| Ort, 2-Stunden-Regel), verschobene Abfahrt „Heute später los“ (Zeitfenster, Grenzen, Hilfsspeicher `radkm-heute-abfahrt`, Ende der Fahrt) |
 | `js/gefuehlt.js` | Gefühlt beim Fahren: Formel wie Open-Meteo, Luftstrom am Körper, Wind auf Körperhöhe, Fahrgeschwindigkeit, Rechnung je Fahrt (Teilstrecken, kältester Schritt, ohne Richtung), Windlage, Plausibilität |
 | `js/orte.js` | Ortseingabe: Koordinaten und Kartenlinks lesen, Ortssuche beim Tippen (Verzögerung, Abbruch, Umlaute), zuletzt gewählte Orte, Namensvorschlag über die Gemeinde des DWD |
-| `js/wetter-ansicht.js` | Reiter Wetter und Kachel (mit Windpfeilen, Sonnenzeile und „gefühlt · beim Fahren“), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ mit dem Formular eines Orts, „Außerhalb der Fahrten“, „Kleidung“ mit Umschalter, Fahrgeschwindigkeit, Plausibilität im Testmodus, Stufe, Regenzusatz und „Änderungen“, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt, Änderungsprotokoll, Zählung ab der letzten Änderung und Hinweise |
+| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappte vorbeigegangene Fahrten, „Heute später los …“ als Fenster von unten, Weg zum gespeicherten Wetter) und Kachel (mit Windpfeilen, Sonnenzeile und „gefühlt · beim Fahren“), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ mit dem Formular eines Orts, „Kleidung“ mit Umschalter, Fahrgeschwindigkeit, Plausibilität im Testmodus, Stufe, Regenzusatz und „Änderungen“, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt, Änderungsprotokoll, Zählung ab der letzten Änderung und Hinweise |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (für Fahrten → Einträge), Eintragsformular, Kilometerstand für ein Datum |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Datensicherung: Export, Prüfung vor dem Teilen, Vergleich mit einer Sicherung, Import |

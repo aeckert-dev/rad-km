@@ -283,7 +283,9 @@ function eintragWetterHtml(e) {
     const rueckmeldung = !f.kleidung ? ""
       : rueckmeldungAn() ? '<div class="klein">Wie war die Kleidung?</div>' + rueckmeldungKnoepfe(e, art, f, true)
       : f.rueckmeldung ? '<div class="klein">Rückmeldung: ' + RUECKMELDUNG_TEXT[f.rueckmeldung] + '</div>' : "";
-    return '<div class="eintrag-wetter"><div><strong>' + name + '</strong> ' + ampelHtml(f.ampel) + FARBWORT[f.ampel] + '</div>' +
+    // Ab 5e: Zeitfenster und tatsächliche Abfahrt („Abfahrt 18:30 statt 16:00“ nach „Heute später los“)
+    const zeit = f.von ? ' <span class="klein">' + f.von + '–' + f.bis + (f.geplanteAbfahrt ? ' · Abfahrt ' + f.abfahrt + ' statt ' + f.geplanteAbfahrt : '') + '</span>' : "";
+    return '<div class="eintrag-wetter"><div><strong>' + name + '</strong>' + zeit + ' ' + ampelHtml(f.ampel) + FARBWORT[f.ampel] + '</div>' +
       '<div class="klein">' + gradText(f.temperatur) + ' (gefühlt ' + gradText(f.gefuehlt) + ') · Regen ' +
       (f.regenWahrscheinlichkeit === null ? "" : f.regenWahrscheinlichkeit + ' %, ') + zahl1.format(f.niederschlag) + ' mm · Wind ' + kmhText(f.wind) + ' · Böen ' + kmhText(f.boeen) + '</div>' +
       (f.beimFahren === null ? "" : '<div class="klein">beim Fahren ' + gradText(f.beimFahren) + (windLageGespeichert(f) ? " (" + windLageGespeichert(f) + ")" : "") +
