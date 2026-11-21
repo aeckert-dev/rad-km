@@ -143,6 +143,11 @@ function fahrtKarte(f, alt) {
       f.name + ' <span class="klein">' + zeit + ' · vorbei ⌄</span></button>'
     : f.name + ' <span class="klein">' + zeit + '</span>';
   let html = '<div class="karte' + (f.vorbei ? " veraltet" : alt) + '"><h3>' + kopf + '</h3>';
+  // Verschobene Abfahrt von heute direkt unter dem Titel (nicht mit dem Abfahrtsfenster zu verwechseln)
+  if (f.heute && f.zeit.verschoben) {
+    html += '<div class="verschoben">⏰ Abfahrt heute ' + f.zeit.abfahrt + ' statt ' + f.zeit.geplant +
+      ' · <button type="button" class="link" data-action="spaeter-zuruecksetzen" data-art="' + f.art + '">zurücksetzen</button></div>';
+  }
   if (!b) html += '<div class="klein">Für diese Zeit liegt noch keine Vorhersage vor.</div>';
   else {
     html += '<div class="ampelzeile">' + ampelText(b) + '</div>' +
@@ -155,14 +160,11 @@ function fahrtKarte(f, alt) {
   }
   return html + (f.heute ? heuteFahrtHtml(f) : "") + '</div>';
 }
-// Nur in den Karten von heute: verschobene Abfahrt bzw. „Heute später los …“ und
+// Nur in den Karten von heute, unten: „Heute später los …“ bzw. „Andere Zeit …“ und
 // der Weg zum gespeicherten Wetter dieser Fahrt
 function heuteFahrtHtml(f) {
-  const z = f.zeit;
-  let html = z.verschoben
-    ? '<div class="verschoben">🕒 Abfahrt heute ' + z.abfahrt + ' statt ' + z.geplant + ' · <button type="button" class="link" data-action="spaeter-zuruecksetzen" data-art="' + f.art + '">zurücksetzen</button></div>' +
-      '<div class="knopfreihe"><button type="button" data-action="spaeter-los" data-art="' + f.art + '">Andere Zeit …</button></div>'
-    : '<div class="knopfreihe"><button type="button" data-action="spaeter-los" data-art="' + f.art + '">Heute später los …</button></div>';
+  let html = '<div class="knopfreihe"><button type="button" data-action="spaeter-los" data-art="' + f.art + '">' +
+    (f.zeit.verschoben ? "Andere Zeit …" : "Heute später los …") + '</button></div>';
   const e = eintragAm(f.datum), fw = e && e.wetter && e.wetter[f.art === "hinfahrt" ? "hin" : "rueck"];
   if (fw) html += '<button type="button" class="leise weg" data-action="eintrag-ansehen" data-id="' + e.id + '">Gespeichertes Wetter dieser Fahrt ›</button>';
   return html;

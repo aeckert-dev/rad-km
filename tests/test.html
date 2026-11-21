@@ -5443,8 +5443,9 @@ async function start() {
         r75.abfahrt && r75.abfahrt.ueblich.minuten],
       ["18:30", "19:30", "grün: trocken", true, true, "🌇 Sonnenuntergang 16:49 · Fahrt im Dunkeln", "18:00", 18 * 60 + 30]);
     seite = ohneTags(karteVon(T75, "Rückfahrt").innerHTML);
-    wahr("Karte: „Abfahrt heute 18:30 statt 16:00 · zurücksetzen“ und „Andere Zeit …“", seite.startsWith("Rückfahrt 18:30–19:30 grün: trocken") &&
-      seite.includes("🕒 Abfahrt heute 18:30 statt 16:00 · zurücksetzen Andere Zeit …") && !seite.includes("Heute später los"), seite);
+    wahr("Karte: unter dem Titel „⏰ Abfahrt heute 18:30 statt 16:00 · zurücksetzen“, unten „Andere Zeit …“",
+      seite.startsWith("Rückfahrt 18:30–19:30 ⏰ Abfahrt heute 18:30 statt 16:00 · zurücksetzen grün: trocken") &&
+      seite.endsWith("Andere Zeit …") && !seite.includes("Heute später los"), seite);
     w.spaeterFormular("rueckfahrt", T75);
     gleich("„Andere Zeit …“: das Fenster beginnt mit 18:30, Schnellwahl weiter ab 16:00", [sp(), (tippeSp(30), sp())], ["18:30", "16:30"]);
     w.fensterSchliessen();
