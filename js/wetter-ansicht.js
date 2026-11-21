@@ -115,10 +115,23 @@ function fahrtKarte(f, alt) {
   if (f.vorbei) return html + '</div>';
   html += '<div class="klein">' + werteText(b.werte) + '</div>' +
     (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
-    '<div style="margin-top:6px">👕 Kleidung <span class="klein">(gefühlt ' + gradText(b.werte.gefuehlt) + ')</span></div>' + kleidungBereicheHtml(f.kleidung) +
+    '<div style="margin-top:6px">👕 Kleidung</div><div class="klein">' + gefuehltZeileHtml(f, b.werte.gefuehlt) + '</div>' + kleidungBereicheHtml(f.kleidung) +
+    fahrtHinweisHtml(f.kleidung) +
     (f.wind ? windHtml(f.wind) : "") +
     (f.abfahrt && f.abfahrt.zeigen ? abfahrtHtml(f.abfahrt, f.fahrt.dauer) : "");
   return html + '</div>';
+}
+
+// Werte für die Kleidung: „gefühlt 2 °C · beim Fahren −1 °C (Gegenwind)“; fett der
+// Wert, nach dem die Stufe gewählt ist. Ohne Fahrtrichtung (Fahrt ab jetzt) das
+// Mittel aller Richtungen mit der Spanne: „beim Fahren ca. −1 °C (−2 °C bei
+// Gegen-, 2 °C bei Rückenwind)“. Ohne Luftfeuchte: „beim Fahren –“.
+function gefuehltZeileHtml(f, gefuehlt) {
+  const g = f.beimFahren, fett = (an, text) => an ? "<strong>" + text + "</strong>" : text;
+  const fahren = !g ? "beim Fahren –"
+    : g.ohneRichtung ? fett(f.grundlage === "fahrt", "beim Fahren ca. " + gradText(g.beimFahren)) + " (" + gradText(g.gegen) + " bei Gegen-, " + gradText(g.ruecken) + " bei Rückenwind)"
+    : fett(f.grundlage === "fahrt", "beim Fahren " + gradText(g.beimFahren)) + (g.lage ? " (" + g.lage + ")" : "");
+  return fett(f.grundlage === "gefuehlt" && !!g, "gefühlt " + gradText(gefuehlt)) + " · " + fahren;
 }
 
 // Wind: erste Zeile mit Himmelsrichtung und Böen (nur Text), darunter je
@@ -294,7 +307,8 @@ function regelZeile(aktion, titel, text) {
 }
 function kleidungKurztext(k) {
   const std = standardKleidung();
-  return k.stufen.length + " Stufen · Regenzusatz " + (k.regen.length ? "ab " + k.regen.map(r => r.ab + " %").join(" / ") : "keiner") +
+  return k.stufen.length + " Stufen nach " + (k.grundlage === "fahrt" ? "„beim Fahren“" : "„gefühlt“") +
+    " · Regenzusatz " + (k.regen.length ? "ab " + k.regen.map(r => r.ab + " %").join(" / ") : "keiner") +
     " · Rückmeldung " + (k.rueckmeldung ? "an" : "aus") + (gleicherInhalt([k.stufen, k.regen], [std.stufen, std.regen]) ? " · Standard" : "");
 }
 function ampelKurztext(g) {
@@ -302,44 +316,66 @@ function ampelKurztext(g) {
     " mm/h · Regen ab " + zahlFeld(g.gelbRegenWahrscheinlichkeit) + " %" + (gleicherInhalt(g, standardAmpel()) ? " · Standard" : "");
 }
 
-// Zustand des Ort-Formulars; die Koordinaten stehen in den Feldern "Breite" und "Länge"
-let formOrt = null; // { rolle, index (nur Wegpunkt; null = neu), treffer }
+// Zustand des Ort-Formulars (Unterseite „ort“, ab 5d statt eines Fensters); die
+// Koordinaten stehen in den Feldern "Breite" und "Länge"
+let formOrt = null; // { rolle, index (nur Wegpunkt; null = neu), treffer, titel, vorschlag }
 
 // Ort des Formulars: Wohnort, Arbeitsort, weiterer Ort oder ein Wegpunkt
 function ortVon(rolle, index) {
   const w = daten.einstellungen.wetter;
   return rolle === "wegpunkt" ? (index === null ? null : w.wegpunkte[index] || null) : w[rolle];
 }
-function ortFormular(rolle, index = null) {
+function ortTitel(v) {
+  return !v ? "Ort" : v.rolle === "wegpunkt" ? (v.index === null ? "Neuer Wegpunkt" : wegpunktTitel(v.index)) : ORT_TITEL[v.rolle];
+}
+function ortFormular(rolle, index = null) { unterseiteZeigen("ort", { rolle, index }); }
+// Formular als Unterseite (‹ Orte und Strecke): Suche „Ort oder PLZ“ mit Vorschlägen
+// beim Tippen, Koordinaten oder Kartenlinks einfügen, zuletzt gewählte Orte,
+// aktueller Standort, Koordinaten direkt, Name (mit Vorschlag), Apple Karten
+function ortSeite(v) {
+  const { rolle, index } = v;
   const o = ortVon(rolle, index);
-  const titel = rolle === "wegpunkt" ? (index === null ? "Neuer Wegpunkt" : wegpunktTitel(index)) : ORT_TITEL[rolle];
-  formOrt = { rolle, index, treffer: [], titel };
-  fensterOeffnen(
-    '<h2>' + titel + '</h2>' +
+  formOrt = { rolle, index, treffer: [], titel: ortTitel(v), vorschlag: null };
+  const lat = o ? koordinateFeld(o.lat) : "", lon = o ? koordinateFeld(o.lon) : "";
+  return (
     (rolle === "wegpunkt" ? '<p class="klein" style="margin-top:0">Ein Punkt auf deinem Weg zwischen Wohn- und Arbeitsort. Ein neuer Wegpunkt kommt ans Ende, direkt vor den Arbeitsort; ' +
-      'die Reihenfolge änderst du in den Einstellungen mit ▲/▼.</p>' : "") +
-    '<label for="o-suche">Ort suchen</label>' +
-    '<div class="suchzeile"><input type="search" id="o-suche" enterkeyhint="search" autocomplete="off" placeholder="Name des Orts" data-enter="ort-suchen">' +
-    '<button type="button" data-action="ort-suchen">Suchen</button></div>' +
+      'die Reihenfolge änderst du unter „Orte und Strecke“ mit ▲/▼.</p>' : "") +
+    '<label for="o-suche">Ort oder PLZ</label>' +
+    '<input type="search" id="o-suche" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="z. B. Musterdorf oder 12345" ' +
+      'data-input="ort-eingabe" data-enter="ort-suchen">' +
+    '<div class="feldhinweis">Anfang des Namens genügt (Umlaute und Groß/klein egal, PLZ möglich). Vorschläge erscheinen ab ' + ORTSSUCHE_MIN + ' Buchstaben. ' +
+      'Du kannst auch Koordinaten oder einen Link aus Apple Karten oder Google Maps einfügen; die liest die App selbst, ohne Netz.</div>' +
     '<div id="o-treffer"></div>' +
+    '<div id="o-letzte">' + letzteOrteHtml() + '</div>' +
     '<div class="knopfreihe"><button type="button" class="voll" data-action="ort-standort">📍 Aktueller Standort</button></div>' +
     '<label for="o-lat">Koordinaten (Breite und Länge in Grad)</label>' +
     // Ohne Zifferntastatur: auf dem iPhone fehlt dort das Minus (Süd und West)
-    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" data-input="ort-karte" value="' + (o ? koordinateFeld(o.lat) : "") + '">' +
-    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" data-input="ort-karte" value="' + (o ? koordinateFeld(o.lon) : "") + '"></div>' +
-    '<div class="feldhinweis" id="o-gewaehlt">Aus der Suche, vom Standort oder direkt eingeben (Komma oder Punkt, Süd und West mit Minus).</div>' +
+    '<div class="suchzeile"><input type="text" id="o-lat" autocomplete="off" placeholder="Breite, z. B. 51,1234" aria-label="Breite" data-input="ort-karte" value="' + lat + '">' +
+    '<input type="text" id="o-lon" autocomplete="off" placeholder="Länge, z. B. 10,4567" aria-label="Länge" data-input="ort-karte" value="' + lon + '"></div>' +
+    '<div class="feldhinweis" id="o-gewaehlt">Aus der Suche, vom Standort, eingefügt oder direkt eingeben (Komma oder Punkt, Süd und West mit Minus).</div>' +
     // Öffnet Apple Karten mit den Werten in den Feldern (auch vor dem Speichern); vorher geht nichts an Apple
-    '<div class="knopfreihe"><a class="knopf voll" id="o-karte" target="_blank" rel="noopener noreferrer">🗺️ In Karten zeigen</a></div>' +
+    '<div class="knopfreihe"><a class="knopf voll" id="o-karte" target="_blank" rel="noopener noreferrer"' +
+      (o ? ' href="' + esc(kartenUrl(o)) + '"' : ' aria-disabled="true"') + '>🗺️ In Karten zeigen</a></div>' +
     '<label for="o-name">Name (zur Anzeige)</label><input type="text" id="o-name" data-input="ort-karte" value="' + esc(o ? o.name : "") + '">' +
+    '<div id="o-namenvorschlag"></div>' +
     (rolle === "weitererOrt" ? '<label class="haken"><input type="checkbox" id="o-aktiv"' + (o && o.aktiv ? " checked" : "") + '>' +
       '<span>Aktiv<br><span class="klein">Der Reiter Wetter zeigt dann das Wetter an diesem Ort (ohne Hin- und Rückfahrt).</span></span></label>' : "") +
     '<div class="feldhinweis">Gespeichert werden die Koordinaten mit 4 Nachkommastellen (ca. 10 m); an die Wetterdienste gehen sie nur auf 3 Nachkommastellen gerundet (ca. 100 m). ' +
-    'Für die Suche geht nur der eingegebene Name an Open-Meteo. „In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple.</div>' +
-    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    'Für die Suche geht nur der eingegebene Text an Open-Meteo, schon beim Tippen. Für den Namensvorschlag gehen die gerundeten Koordinaten an den Deutschen Wetterdienst. ' +
+    '„In Karten zeigen“ öffnet Apple Karten an dieser Stelle; erst dann gehen Koordinaten und Name an Apple.</div>' +
+    '<div class="knopfreihe"><button type="button" data-action="einstellungen-seite" data-seite="orte">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="ort-speichern">Speichern</button></div>' +
     (o ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="ort-entfernen">' + (rolle === "wegpunkt" ? "Wegpunkt entfernen" : "Ort entfernen") + '</button></div>' : "")
   );
-  ortKarteAktualisieren();
+}
+// Die zuletzt gewählten Orte zum Antippen (nur auf dem Gerät)
+function letzteOrteHtml() {
+  const l = letzteOrte();
+  if (!l.length) return "";
+  return '<div class="klein" style="margin-top:8px">Zuletzt gewählt</div><div class="liste">' + l.map((o, i) =>
+    '<div class="zeile"><button type="button" class="inhalt" data-action="ort-letzter" data-i="' + i + '"><div class="text"><div>' + esc(o.name) + '</div>' +
+    '<div class="klein">' + koordinatenText(o) + '</div></div></button></div>').join("") + '</div>' +
+    '<button type="button" class="leise weg" data-action="ort-letzte-leeren">Liste leeren</button>';
 }
 // "In Karten zeigen" folgt den Feldern; ohne gültige Koordinaten ist der Knopf gesperrt.
 // Ohne Namen trägt die Markierung die Bezeichnung des Orts (z. B. "Wohnort").
@@ -359,6 +395,13 @@ function ortGewaehltAnzeigen(text) {
   const el = document.getElementById("o-gewaehlt");
   if (el) el.textContent = text;
 }
+function ortTrefferAnzeigen(html) {
+  const el = document.getElementById("o-treffer");
+  if (el) el.innerHTML = html;
+  const letzte = document.getElementById("o-letzte");
+  // Die zuletzt gewählten Orte nur bei leerem Suchfeld
+  if (letzte) letzte.hidden = !!(document.getElementById("o-suche") || {}).value;
+}
 // Koordinaten in die Felder übernehmen (auf 4 Nachkommastellen gerundet)
 function ortKoordinatenSetzen(lat, lon, text) {
   document.getElementById("o-lat").value = koordinateFeld(lat);
@@ -366,32 +409,101 @@ function ortKoordinatenSetzen(lat, lon, text) {
   ortGewaehltAnzeigen(text);
   ortKarteAktualisieren();
 }
+const KEIN_TREFFER = "Kein Ort gefunden. Tipps: kürzer eingeben (der Anfang des Namens genügt, z. B. nur „Muster“), die Postleitzahl versuchen " +
+  "oder Koordinaten bzw. einen Link einfügen – in Apple Karten eine Stelle lange drücken und bei der Markierung die Koordinaten kopieren.";
+const OHNE_NETZ = "Ohne Netz keine Ortssuche. Koordinaten oder einen Kartenlink einfügen geht auch ohne Netz.";
+function trefferHtml(erg) {
+  if (erg.fehler) return '<div class="feldhinweis warn">' + (erg.fehler === "keine Verbindung" ? OHNE_NETZ : "Ortssuche nicht möglich (" + esc(erg.fehler) + ").") + '</div>';
+  if (!formOrt) return "";
+  formOrt.treffer = erg.treffer;
+  const plz = /^\d/.test(erg.text);
+  return erg.treffer.length
+    ? '<div class="liste" style="margin-top:8px">' + erg.treffer.map((t, i) => '<div class="zeile"><button type="button" class="inhalt" data-action="ort-waehlen" data-i="' + i + '">' +
+        '<div class="text"><div>' + esc(t.name) + '</div><div class="klein">' + esc((plz && t.plz ? t.plz + " · " : "") + t.zusatz) + '</div></div></button></div>').join("") + '</div>'
+    : '<div class="feldhinweis warn">' + KEIN_TREFFER + '</div>';
+}
+// Eingabe im Suchfeld: Koordinaten und Kartenlinks sofort (ohne Netz), sonst Vorschläge ab 3 Zeichen
+function ortEingabe() {
+  const el = document.getElementById("o-suche");
+  if (!el || !formOrt) return;
+  const text = el.value.trim();
+  if (ortEingefuegt(text)) return;
+  ortssucheAbbrechen();
+  if (text.length < ORTSSUCHE_MIN) { ortTrefferAnzeigen(""); return; }
+  if (ohneNetz()) { ortTrefferAnzeigen('<div class="feldhinweis warn">' + OHNE_NETZ + '</div>'); return; }
+  ortTrefferAnzeigen('<div class="feldhinweis">Suche …</div>');
+  ortssucheVormerken(text, erg => { if (formOrt && document.getElementById("o-treffer")) ortTrefferAnzeigen(trefferHtml(erg)); });
+}
+// Koordinaten oder Kartenlink im Suchfeld übernehmen; true, wenn es welche waren (auch ein Kurzlink)
+function ortEingefuegt(text) {
+  const c = ortAusText(text);
+  if (!c) return false;
+  ortssucheAbbrechen();
+  if (c.kurzlink) {
+    ortTrefferAnzeigen('<div class="feldhinweis warn">Kurzlinks (maps.apple/p/…, maps.app.goo.gl/…) lassen sich ohne Netz nicht lesen. Bitte in der Karten-App ' +
+      '„Koordinaten kopieren“ bzw. den vollständigen Link verwenden.</div>');
+    return true;
+  }
+  ortTrefferAnzeigen("");
+  ortKoordinatenSetzen(c.lat, c.lon, "Erkannt (" + c.quelle + "): " + koordinatenText({ lat: c.lat, lon: c.lon }) + ".");
+  ortNamenVorschlagen(c, c.name);
+  return true;
+}
+// Name vorschlagen (zum Antippen, nie automatisch): aus dem Kartenlink, sonst mit
+// Netz die Gemeinde des DWD an diesen Koordinaten
+async function ortNamenVorschlagen(o, ausLink = null) {
+  const ziel = () => document.getElementById("o-namenvorschlag");
+  if (!ziel() || !formOrt) return;
+  const zeigen = name => {
+    formOrt.vorschlag = name;
+    ziel().innerHTML = name ? '<button type="button" class="leise weg" data-action="ort-name-uebernehmen">Name übernehmen: ' + esc(name) + '</button>' : "";
+  };
+  zeigen(ausLink);
+  if (ausLink || ohneNetz()) return;
+  const schluessel = koordinateFeld(o.lat) + "/" + koordinateFeld(o.lon);
+  let name = null;
+  try { name = await gemeindeName(o); } catch (e) { return; }
+  // Formular inzwischen verlassen oder andere Koordinaten
+  if (!ziel() || !formOrt || wert("o-lat") + "/" + wert("o-lon") !== schluessel) return;
+  zeigen(name);
+}
+function ortNameUebernehmen() {
+  if (!formOrt || !formOrt.vorschlag) return;
+  document.getElementById("o-name").value = formOrt.vorschlag;
+  document.getElementById("o-namenvorschlag").innerHTML = "";
+  ortKarteAktualisieren();
+}
+// Eingabetaste: sofort suchen (ab 2 Zeichen; Koordinaten und Links ohne Netz)
 async function ortSuchen() {
   const text = wert("o-suche").trim();
-  const ziel = document.getElementById("o-treffer");
-  if (text.length < 2) { ziel.innerHTML = '<div class="feldhinweis warn">Bitte mindestens 2 Buchstaben eingeben.</div>'; return; }
-  ziel.innerHTML = '<div class="feldhinweis">Suche …</div>';
-  let treffer;
-  try {
-    treffer = ortsTrefferLesen(await jsonAbrufen(ortssucheUrl(text)));
-  } catch (e) {
-    if (document.getElementById("o-treffer")) ziel.innerHTML = '<div class="feldhinweis warn">Ortssuche nicht möglich (' + esc(e.message) + ').</div>';
-    return;
-  }
-  // Fenster inzwischen geschlossen oder ein anderes geöffnet
-  if (!formOrt || !document.getElementById("o-treffer")) return;
-  formOrt.treffer = treffer;
-  ziel.innerHTML = treffer.length
-    ? '<div class="liste" style="margin-top:8px">' + treffer.map((t, i) => '<div class="zeile"><button type="button" class="inhalt" data-action="ort-waehlen" data-i="' + i + '">' +
-        '<div class="text"><div>' + esc(t.name) + '</div><div class="klein">' + esc(t.zusatz) + '</div></div></button></div>').join("") + '</div>'
-    : '<div class="feldhinweis warn">Kein Ort gefunden.</div>';
+  if (ortEingefuegt(text)) return;
+  ortssucheAbbrechen();
+  if (text.length < 2) { ortTrefferAnzeigen('<div class="feldhinweis warn">Bitte mindestens 2 Buchstaben eingeben.</div>'); return; }
+  ortTrefferAnzeigen('<div class="feldhinweis">Suche …</div>');
+  let erg;
+  try { erg = await ortssucheAusfuehren(text); } catch (e) { erg = { fehler: e.message }; }
+  // Neuere Suche begonnen, Formular inzwischen verlassen
+  if (!erg || !formOrt || !document.getElementById("o-treffer")) return;
+  ortTrefferAnzeigen(trefferHtml(erg));
 }
 function ortWaehlen(i) {
-  const t = formOrt.treffer[i];
+  const t = formOrt && formOrt.treffer[i];
   if (!t) return;
   document.getElementById("o-name").value = t.name;
-  document.getElementById("o-treffer").innerHTML = "";
+  ortTrefferAnzeigen("");
   ortKoordinatenSetzen(t.lat, t.lon, "Übernommen aus der Suche: " + t.name + (t.zusatz ? ", " + t.zusatz : "") + ".");
+}
+function ortLetzterWaehlen(i) {
+  const o = letzteOrte()[i];
+  if (!o || !formOrt) return;
+  document.getElementById("o-name").value = o.name;
+  ortKoordinatenSetzen(o.lat, o.lon, "Übernommen aus „Zuletzt gewählt“: " + o.name + ".");
+}
+function ortLetzteLeeren() {
+  letzteOrteLeeren();
+  const el = document.getElementById("o-letzte");
+  if (el) el.innerHTML = "";
+  meldung("Liste „Zuletzt gewählt“ geleert");
 }
 function ortStandort() {
   if (!navigator.geolocation) { ortGewaehltAnzeigen("Der Standort ist auf diesem Gerät nicht verfügbar."); return; }
@@ -401,14 +513,22 @@ function ortStandort() {
     const name = document.getElementById("o-name");
     if (!name.value.trim()) name.value = "Aktueller Standort";
     ortKoordinatenSetzen(pos.coords.latitude, pos.coords.longitude, "Übernommen vom aktuellen Standort (auf 4 Nachkommastellen gerundet).");
+    ortNamenVorschlagen({ lat: koordinateSpeichern(pos.coords.latitude), lon: koordinateSpeichern(pos.coords.longitude) });
   }, err => {
     ortGewaehltAnzeigen("Standort nicht verfügbar" + (err && err.code === 1 ? " (Zugriff nicht erlaubt)." : "."));
   }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
 }
+// Nach dem Speichern oder Entfernen zurück zu „Orte und Strecke“
+function ortFertig(text) {
+  ortssucheAbbrechen();
+  unterseiteZeigen("orte");
+  meldung(text);
+  wetterBeiBedarf();
+}
 function ortSpeichern() {
   const name = wert("o-name").trim();
   const lat = zahlLesen(wert("o-lat")), lon = zahlLesen(wert("o-lon"));
-  if (lat === null || lon === null) { alert("Bitte einen Ort suchen und auswählen, den aktuellen Standort verwenden oder Breite und Länge eingeben, z. B. 51,1234 und 10,4567."); return; }
+  if (lat === null || lon === null) { alert("Bitte einen Ort suchen und auswählen, Koordinaten oder einen Kartenlink einfügen, den aktuellen Standort verwenden oder Breite und Länge eingeben, z. B. 51,1234 und 10,4567."); return; }
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { alert("Die Breite muss zwischen −90 und 90 liegen, die Länge zwischen −180 und 180."); return; }
   if (!name) { alert("Bitte einen Namen für den Ort eingeben."); return; }
   const ort = { name, lat: koordinateSpeichern(lat), lon: koordinateSpeichern(lon) };
@@ -425,7 +545,7 @@ function ortSpeichern() {
     if (formOrt.rolle === "weitererOrt") ort.aktiv = document.getElementById("o-aktiv").checked;
     w[formOrt.rolle] = ort;
   }
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung(formOrt.rolle === "wegpunkt" ? "Wegpunkt gespeichert" : "Ort gespeichert"); wetterBeiBedarf(); }
+  if (speichern()) { letzteOrteMerken(ort); ortFertig(formOrt.rolle === "wegpunkt" ? "Wegpunkt gespeichert" : "Ort gespeichert"); }
 }
 async function ortEntfernen() {
   const { rolle, index } = formOrt;
@@ -438,7 +558,7 @@ async function ortEntfernen() {
     w.wegpunkte.splice(index, 1);
     w.windTeilstrecken.splice(index, 2, w.windTeilstrecken[index] || w.windTeilstrecken[index + 1]);
   } else w[rolle] = null;
-  if (speichern()) { fensterSchliessen(); zeichnen(); meldung(rolle === "wegpunkt" ? "Wegpunkt entfernt" : "Ort entfernt"); wetterBeiBedarf(); }
+  if (speichern()) ortFertig(rolle === "wegpunkt" ? "Wegpunkt entfernt" : "Ort entfernt");
 }
 // Reihenfolge der Wegpunkte; die Schalter der Teilstrecken bleiben an ihrer Stelle
 function wegpunktVerschieben(i, richtung) {
@@ -597,19 +717,27 @@ function bereicheLesen(praefix) {
 // Regenzusatz hat eine eigene Unterseite („‹ Kleidung“) mit „Speichern“.
 function kleidungFormular() { unterseiteZeigen("kleidung"); }
 function kleidungSeite() {
-  const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten();
+  const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten(), seit = rueckmeldungenSeitAenderung();
+  const hinweise = k.stufen.map((st, i) => ({ i, h: kleidungHinweis(st.id, seit) })).filter(x => x.h);
   const frueher = Object.keys(aus).filter(id => !k.stufen.some(s => s.id === id)).reduce((x, id) => x + aus[id].anzahl, 0);
   const zeile = (aktion, i, titel, unten) => '<div class="zeile"><button type="button" class="inhalt" data-action="' + aktion + '" data-i="' + i + '">' +
     '<div class="text"><div>' + titel + '</div>' + unten.map(u => '<div class="klein umbrechen">' + u + '</div>').join("") + '</div>' +
     '<span class="klein" style="padding-right:16px">›</span></button></div>';
   return (
+    hinweise.map(x => kleidungHinweisHtml(x.h, x.i)).join("") +
+    '<h3 style="margin-top:8px">Stufe wählen nach</h3>' +
+    umschalterHtml("kleidung-grundlage", k.grundlage, [["fahrt", "gefühlt beim Fahren"], ["gefuehlt", "gefühlt (Open-Meteo)"]], "Stufe wählen nach") +
+    '<div class="feldhinweis">„Beim Fahren“ rechnet Fahrtwind, Windrichtung und Windstärke ein (je Teilstrecke, die für den Wind zählt). Es liegt meist 1–3 °C unter ' +
+    '„gefühlt“ von Open-Meteo (für einen stehenden Menschen); die Empfehlung fällt dadurch oft eine Stufe wärmer aus. Ohne Luftfeuchte in der Vorhersage gilt „gefühlt“.</div>' +
+    geschwindigkeitHtml() + plausibilitaetHtml() +
     '<label class="haken"><input type="checkbox" id="k-rueckmeldung" data-change="kleidung-rueckmeldung"' + (k.rueckmeldung ? " checked" : "") + '>' +
     '<span>Rückmeldung zur Kleidung<br><span class="klein">Karte „Wie war die Kleidung?“ im Reiter Wetter und die Knöpfe in den Einträgen. ' +
     'Ausgeschaltet bleiben gegebene Rückmeldungen und die Auswertung erhalten.</span></span></label>' +
-    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach der niedrigsten gefühlten Temperatur der Fahrt, von warm nach kalt. ' +
+    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach dem kältesten Wert der Fahrt (' + (k.grundlage === "fahrt" ? "gefühlt beim Fahren" : "gefühlt") +
+    '), von warm nach kalt. ' +
     'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
     '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
-      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen: " + auswertungText(aus[s.id])])).join("") + '</div>' +
+      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen " + seitText(seit[s.id])])).join("") + '</div>' +
     (frueher ? '<p class="klein">' + (frueher === 1 ? "1 Rückmeldung" : frueher + " Rückmeldungen") + ' zu früheren Stufen (gibt es nicht mehr, werden nicht zugeordnet).</p>' : "") +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-stufe-neu">+ Stufe</button></div>' +
     '<h3 style="margin-top:16px">Regenzusatz</h3><p class="klein" style="margin-top:0">Ab dieser Regenwahrscheinlichkeit kommt das Regenzeug in seinem Bereich dazu. ' +
@@ -618,9 +746,72 @@ function kleidungSeite() {
     (k.regen.length ? '<div class="liste">' + k.regen.map((r, i) => zeile("kleidung-regen", i, "ab " + zahlFeld(r.ab) + " %", [esc(bereicheKurz(r.bereiche))])).join("") + '</div>'
       : '<div class="liste"><div class="leer">Kein Regenzusatz.</div></div>') +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-regen-neu">+ Regenzusatz</button></div>' +
-    '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>'
+    '<div class="knopfreihe"><button type="button" class="voll" data-action="kleidung-standard">Auf Standard zurücksetzen</button></div>' +
+    '<div class="liste" style="margin-top:16px">' + seitenZeile("kleidung-protokoll", "Änderungen",
+      k.protokoll.length ? (k.protokoll.length === 1 ? "1 Änderung" : k.protokoll.length + " Änderungen") + ", zuletzt am " +
+        datumText(isoAusDate(new Date(k.protokoll[k.protokoll.length - 1].zeitpunkt))) : "noch keine") + '</div>' +
+    '<p class="klein">Die App protokolliert jede Änderung an einer Stufe, am Regenzusatz und am Umschalter „Stufe wählen nach“. Die Rückmeldungen zählen je Stufe ab ihrer ' +
+    'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt, und des Umschalters). Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „gefühlt“).</p>'
   );
 }
+// Fahrgeschwindigkeit für „beim Fahren“: automatisch (Vorlage und Dauer) oder ein eigener Wert
+function geschwindigkeitHtml() {
+  const w = daten.einstellungen.wetter, hin = fahrgeschwindigkeit("hinfahrt", w);
+  const kmh = x => zahl1.format(x) + " km/h";
+  const auto = fahrgeschwindigkeit("hinfahrt", Object.assign({}, w, { geschwindigkeit: null }));
+  const autoR = fahrgeschwindigkeit("rueckfahrt", Object.assign({}, w, { geschwindigkeit: null }));
+  const autoText = auto.quelle === "annahme" ? "angenommen " + kmh(auto.kmh) + " (keine Vorlage mit Arbeitsweg)"
+    : (auto.kmh === autoR.kmh ? kmh(auto.kmh) : "Hinfahrt " + kmh(auto.kmh) + ", Rückfahrt " + kmh(autoR.kmh)) + " aus der Vorlage „" + esc(auto.vorlage.name) + "“ (" +
+      zahl1.format(auto.vorlage.km) + " km, je Richtung die Hälfte in " + (w.hinfahrt.dauer === w.rueckfahrt.dauer ? w.hinfahrt.dauer : w.hinfahrt.dauer + " bzw. " + w.rueckfahrt.dauer) + " min)";
+  return '<label for="k-geschwindigkeit">Eigene Fahrgeschwindigkeit (km/h, optional)</label>' +
+    '<input type="text" id="k-geschwindigkeit" class="kurzfeld" inputmode="decimal" autocomplete="off" placeholder="automatisch" data-change="kleidung-geschwindigkeit" value="' +
+    (w.geschwindigkeit === null ? "" : zahlFeld(w.geschwindigkeit)) + '">' +
+    '<div class="feldhinweis">' + (hin.quelle === "eigen" ? "Es gilt " + kmh(hin.kmh) + " (automatisch wären es " + autoText + ")."
+      : "Leer = automatisch: " + autoText + ".") + ' Die Dauer enthält Ampelstopps; der Fahrtwind wirkt nur in Bewegung, die eigene Angabe darf deshalb höher sein. ' +
+    GESCHWINDIGKEIT_MIN + " bis " + GESCHWINDIGKEIT_MAX + ' km/h.</div>';
+}
+function geschwindigkeitGeaendert(el) {
+  const text = el.value.trim(), w = daten.einstellungen.wetter;
+  const v = text === "" ? null : zahlLesen(text);
+  if (text !== "" && (v === null || v < GESCHWINDIGKEIT_MIN || v > GESCHWINDIGKEIT_MAX)) {
+    alert("Bitte eine Fahrgeschwindigkeit von " + GESCHWINDIGKEIT_MIN + " bis " + GESCHWINDIGKEIT_MAX + " km/h eingeben oder das Feld leeren (automatisch).");
+    el.value = w.geschwindigkeit === null ? "" : zahlFeld(w.geschwindigkeit);
+    return;
+  }
+  if (v === w.geschwindigkeit) return;
+  w.geschwindigkeit = v === null ? null : Math.round(v * 10) / 10;
+  if (speichern()) { zeichnen(); meldung(v === null ? "Fahrgeschwindigkeit: automatisch" : "Fahrgeschwindigkeit " + zahl1.format(w.geschwindigkeit) + " km/h gespeichert"); }
+}
+// Plausibilität (nur im Testmodus „?test“): eigene Rechnung mit dem Wind, wie
+// Open-Meteo ihn einsetzt (0,75 · w10), gegen apparent_temperature der zuletzt
+// geladenen Vorhersage, größte Abweichung über alle Orte und Schritte
+const PLAUSIBEL_TOLERANZ = 0.3;
+function plausibilitaetHtml(jetzt = Date.now()) {
+  if (!TESTMODUS) return "";
+  const v = wetter.vorhersage, p = v ? plausibilitaet(v.orte) : null;
+  const zahl2 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let text;
+  if (!v) text = "Keine Vorhersage geladen. Im Testmodus lädt die App das Wetter nur mit „Aktualisieren“ im Reiter Wetter.";
+  else if (!p) text = "Die geladene Vorhersage enthält keine Luftfeuchte (älterer Stand). Bitte im Reiter Wetter „Aktualisieren“.";
+  else {
+    const orte = wetterOrte(), ort = orte.map(x => ortSchluessel(x.ort)).join(";") === v.schluessel && orte[p.ort] ? orte[p.ort].titel : "Ort " + (p.ort + 1);
+    const ok = p.abweichung <= PLAUSIBEL_TOLERANZ;
+    text = '<span class="' + (ok ? "status-gruen" : "status-rot") + '">Größte Abweichung ' + zahl2.format(p.abweichung) + " °C</span> über " + p.schritte + " Schritte (" +
+      (v.orte.length === 1 ? "1 Ort" : v.orte.length + " Orte") + "), am " + esc(ort) + " " + wochentag(isoAusDate(new Date(p.zeit))) + " " + kurzDatum(isoAusDate(new Date(p.zeit))) +
+      " " + uhrzeit(p.zeit) + ": eigene Rechnung " + zahl2.format(p.eigen).replace("-", "−") + " °C, Open-Meteo " + zahl1.format(p.openMeteo).replace("-", "−") + " °C. Toleranz " +
+      zahl1.format(PLAUSIBEL_TOLERANZ) + " °C: " + (ok ? "eingehalten" : "überschritten") + ". Stand: " + standText(v.stand, jetzt) + ".";
+  }
+  return '<div class="hinweis info" id="k-plausibel"><strong>Plausibilität (Testmodus)</strong><br>' + text + '</div>';
+}
+// Umschalter "Stufe wählen nach" (sofort gespeichert)
+function kleidungGrundlageSetzen(wert) {
+  const k = daten.einstellungen.wetter.kleidung;
+  if (!GRUNDLAGEN.includes(wert) || k.grundlage === wert) return;
+  k.protokoll.push(protokollEintrag("grundlage", null, k.grundlage, wert));
+  k.grundlage = wert;
+  if (speichern()) { zeichnen(); meldung(wert === "fahrt" ? "Stufe nach „gefühlt beim Fahren“" : "Stufe nach „gefühlt“ (Open-Meteo)"); }
+}
+
 // Schalter "Rückmeldung zur Kleidung" (sofort gespeichert; Rückmeldungen und Auswertung bleiben)
 function kleidungRueckmeldungSchalten(an) {
   daten.einstellungen.wetter.kleidung.rueckmeldung = an;
@@ -640,7 +831,7 @@ function kleidungStufeSeite(i) {
   const neu = i === null, letzte = !neu && i === n - 1;
   const vorschlag = k.stufen[n - 2].ab - 3;
   const s = neu ? { ab: vorschlag, bereiche: bereicheAus(), haendeBeiRegen: null } : k.stufen[i];
-  const z = neu ? null : rueckmeldungenAuswerten()[s.id];
+  const z = neu ? null : rueckmeldungenSeitAenderung()[s.id];
   return (
     (letzte ? '<p class="klein">Die letzte Stufe gilt unterhalb der vorigen (' + stufeBereich(k, i) + ').</p>'
       : '<label for="ks-ab">Ab gefühlter Temperatur (°C)</label><input type="text" id="ks-ab" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '">' +
@@ -649,7 +840,7 @@ function kleidungStufeSeite(i) {
     '<label for="ks-haende-regen">Hände bei Regen (optional)</label>' +
     '<input type="text" id="ks-haende-regen" autocomplete="off" placeholder="leer = wie bei Hände" value="' + esc(s.haendeBeiRegen || "") + '">' +
     '<div class="feldhinweis">Gilt statt „Hände“, sobald ein Regenzusatz greift, z. B. regenfeste Handschuhe. Mehrere Teile mit Komma trennen.</div>' +
-    (z ? '<p class="klein">Rückmeldungen: ' + auswertungText(z) + '</p>' : "") +
+    (z ? '<p class="klein">Rückmeldungen ' + seitText(z) + '</p>' : "") +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="kleidung-stufe-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +
     (!neu && n > 2 ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="kleidung-stufe-weg" data-i="' + i + '">Stufe entfernen</button></div>' : "")
@@ -669,6 +860,7 @@ function kleidungStufeSpeichern(iText) {
   const darunter = letzte ? stufe : andere.find(s => s.ab === null);
   const stufen = andere.filter(s => s.ab !== null).concat(letzte ? [] : [stufe]).sort((a, b) => b.ab - a.ab).concat(darunter);
   if (!kleidungPruefen({ stufen, regen: k.regen, rueckmeldung: k.rueckmeldung })) return;
+  k.protokoll.push(...stufenProtokoll(k.stufen, stufen));
   k.stufen = stufen;
   if (speichern()) { kleidungFormular(); zeichnen(); meldung(i === null ? "Stufe hinzugefügt" : "Stufe gespeichert"); }
 }
@@ -680,9 +872,10 @@ async function kleidungStufeWeg(i) {
     (letzte ? " Die Stufe " + esc(stufeBereich(k, i - 1)) + " gilt dann darunter." : "");
   if (!await frage(text, "Entfernen", "Abbrechen", true)) return;
   mitRueckgaengig(() => {
-    const st = daten.einstellungen.wetter.kleidung.stufen;
+    const kl = daten.einstellungen.wetter.kleidung, vorher = JSON.parse(JSON.stringify(kl.stufen)), st = kl.stufen;
     st.splice(i, 1);
     st[st.length - 1].ab = null;
+    kl.protokoll.push(...stufenProtokoll(vorher, st));
   }, "Stufe entfernt", () => kleidungFormular());
 }
 
@@ -715,6 +908,8 @@ function kleidungRegenSpeichern(iText) {
   if (andere.some(r => r.ab === ab)) { alert("Es gibt schon einen Regenzusatz ab " + zahlFeld(ab) + " %. Trage das Regenzeug dort ein."); return; }
   const regen = andere.concat({ ab, bereiche }).sort((a, b) => a.ab - b.ab);
   if (!kleidungPruefen({ stufen: k.stufen, regen, rueckmeldung: k.rueckmeldung })) return;
+  const alt = i === null ? null : k.regen[i];
+  if (!alt || !gleicherInhalt(alt, { ab, bereiche })) k.protokoll.push(protokollEintrag("regen", null, alt, { ab, bereiche }));
   k.regen = regen;
   if (speichern()) { kleidungFormular(); zeichnen(); meldung(i === null ? "Regenzusatz hinzugefügt" : "Regenzusatz gespeichert"); }
 }
@@ -722,7 +917,11 @@ async function kleidungRegenWeg(i) {
   const k = daten.einstellungen.wetter.kleidung;
   if (!k.regen[i]) return;
   if (!await frage("Regenzusatz ab " + zahlFeld(k.regen[i].ab) + " % entfernen?", "Entfernen", "Abbrechen", true)) return;
-  mitRueckgaengig(() => { daten.einstellungen.wetter.kleidung.regen.splice(i, 1); }, "Regenzusatz entfernt", () => kleidungFormular());
+  mitRueckgaengig(() => {
+    const kl = daten.einstellungen.wetter.kleidung;
+    kl.protokoll.push(protokollEintrag("regen", null, kl.regen[i], null));
+    kl.regen.splice(i, 1);
+  }, "Regenzusatz entfernt", () => kleidungFormular());
 }
 // Dieselben Regeln wie beim Einlesen einer Sicherung
 function kleidungPruefen(neu) {
@@ -733,6 +932,7 @@ async function kleidungStandard() {
   if (!await frage("Kleidungsregeln (Stufen und Regenzusatz) auf die Standardwerte zurücksetzen? Deine Rückmeldungen bleiben gespeichert.", "Zurücksetzen", "Abbrechen")) return;
   mitRueckgaengig(() => {
     const k = daten.einstellungen.wetter.kleidung, std = standardKleidung();
+    k.protokoll.push(...stufenProtokoll(k.stufen, std.stufen), ...regenProtokoll(k.regen, std.regen));
     Object.assign(k, { stufen: std.stufen, regen: std.regen });
   }, "Kleidungsregeln zurückgesetzt", () => kleidungFormular());
 }
@@ -768,7 +968,9 @@ function rueckmeldungGeben(id, fahrt, urteil, ausDetail) {
   if (!fw || !(urteil in RUECKMELDUNG_TEXT) || fw.rueckmeldung === urteil) return;
   mitRueckgaengig(() => { fw.rueckmeldung = urteil; }, () => {
     const k = daten.einstellungen.wetter.kleidung, i = k.stufen.findIndex(s => s.id === fw.kleidung);
-    return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + (i < 0 ? "" : " · Stufe " + stufeBereich(k, i) + ": " + auswertungText(rueckmeldungenAuswerten()[fw.kleidung]));
+    const z = rueckmeldungenSeitAenderung()[fw.kleidung];
+    const stand = !z ? "" : fw.empfohlenAm === null ? "vor 5d: " + auswertungText(z.vor5d) : seitText(z, false);
+    return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + (i < 0 || !stand ? "" : " · Stufe " + stufeBereich(k, i) + " " + stand);
   }, ausDetail ? () => { const y = fenster.scrollTop; eintragAnsicht(id); fenster.scrollTop = y; } : null);
 }
 function rueckmeldungKnoepfe(e, fahrt, fw, ausDetail) {
@@ -808,4 +1010,136 @@ function rueckmeldungKarte(jetzt) {
     '<div class="klein" style="margin-top:8px">' + tagTitel(x.e.datum, x.h) + ', ' + x.name + ': ' + esc(fahrtKleidungText(x.fw)) + '</div>' +
     rueckmeldungKnoepfe(x.e, x.art, x.fw, false)).join("") +
     '<div class="feldhinweis">Die Auswertung je Stufe steht unter Einstellungen → Wetter → Kleidung. Die Grenzen ändern sich dadurch nicht.</div></div>';
+}
+
+// ---------- Änderungsprotokoll der Kleidung und Zählung ab der letzten Änderung (N4) ----------
+
+function protokollEintrag(art, stufe, vorher, nachher, auchBetroffen = []) {
+  const kopie = x => x === null || x === undefined ? null : JSON.parse(JSON.stringify(x));
+  return { zeitpunkt: new Date(Date.now()).toISOString(), art, stufe, vorher: kopie(vorher), nachher: kopie(nachher), auchBetroffen };
+}
+// Inhalt einer Stufe im Protokoll
+const stufeInhalt = s => s ? { ab: s.ab, bereiche: Object.assign({}, s.bereiche), haendeBeiRegen: s.haendeBeiRegen } : null;
+// Protokolleinträge für eine Änderung der Stufen: je geänderte, neue oder
+// entfernte Stufe einer; dazu die Stufen, deren Temperaturbereich sich dadurch
+// mit verschoben hat (auchBetroffen, z. B. die nächstwärmere bei einer neuen Grenze)
+function stufenProtokoll(vorher, nachher) {
+  const bereich = (liste, id) => { const i = liste.findIndex(s => s.id === id); return i < 0 ? null : stufeBereich({ stufen: liste }, i); };
+  const ids = [...new Set(vorher.map(s => s.id).concat(nachher.map(s => s.id)))];
+  const finde = (liste, id) => liste.find(s => s.id === id) || null;
+  const geaendert = ids.filter(id => !gleicherInhalt(stufeInhalt(finde(vorher, id)), stufeInhalt(finde(nachher, id))));
+  if (!geaendert.length) return [];
+  const auch = nachher.map(s => s.id).filter(id => !geaendert.includes(id) && finde(vorher, id) && bereich(vorher, id) !== bereich(nachher, id));
+  return geaendert.map(id => protokollEintrag("stufe", id, stufeInhalt(finde(vorher, id)), stufeInhalt(finde(nachher, id)), auch));
+}
+// Protokolleinträge für den Regenzusatz (Zuordnung über die Schwelle)
+function regenProtokoll(vorher, nachher) {
+  const finde = (liste, ab) => liste.find(r => r.ab === ab) || null;
+  const abs = [...new Set(vorher.map(r => r.ab).concat(nachher.map(r => r.ab)))].sort((a, b) => a - b);
+  return abs.filter(ab => !gleicherInhalt(finde(vorher, ab), finde(nachher, ab))).map(ab => protokollEintrag("regen", null, finde(vorher, ab), finde(nachher, ab)));
+}
+// Letzte Änderung (ms), ab der die Rückmeldungen einer Stufe zählen: Änderungen der
+// Stufe selbst, Änderungen, die ihren Bereich verschieben, und des Umschalters; null = keine
+function letzteAenderung(id, k = daten.einstellungen.wetter.kleidung) {
+  return k.protokoll.filter(p => p.art === "grundlage" || (p.art === "stufe" && (p.stufe === id || p.auchBetroffen.includes(id))))
+    .reduce((m, p) => { const t = Date.parse(p.zeitpunkt); return m === null || t > m ? t : m; }, null);
+}
+// Rückmeldungen je Stufe ab ihrer letzten Änderung: gezählt werden Fahrten, deren
+// Empfehlung nach der aktuellen Grundlage und nach der Änderung berechnet wurde
+// und die nach der Änderung lagen. Rückmeldungen von vor 5d (empfohlenAm null)
+// stehen getrennt in "vor5d". { id: { seit, anzahl, "zu-warm", passte, "zu-kalt",
+// regen: {…}, fahrten: [{ urteil, lage, regen }], vor5d: {…} } }
+function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w = daten.einstellungen.wetter) {
+  const leer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0 });
+  const erg = {};
+  const fuer = id => erg[id] || (erg[id] = Object.assign(leer(), { seit: letzteAenderung(id, k), regen: leer(), fahrten: [], vor5d: Object.assign(leer(), { regen: leer() }) }));
+  daten.eintraege.forEach(e => e.wetter && [["hin", "hinfahrt"], ["rueck", "rueckfahrt"]].forEach(([art, fahrt]) => {
+    const f = e.wetter[art];
+    if (!f || !f.kleidung || !f.rueckmeldung) return;
+    const z = fuer(f.kleidung);
+    const zaehle = x => { x.anzahl++; x[f.rueckmeldung]++; if (f.regenkleidung) { x.regen.anzahl++; x.regen[f.rueckmeldung]++; } };
+    if (f.empfohlenAm === null) { zaehle(z.vor5d); return; }
+    if (f.grundlage !== k.grundlage) return;
+    if (z.seit !== null && (Date.parse(f.empfohlenAm) < z.seit || zeitpunktAm(e.datum, minutenAus(w[fahrt].bis)) < z.seit)) return;
+    zaehle(z);
+    z.fahrten.push({ urteil: f.rueckmeldung, lage: windLageGespeichert(f), regen: !!f.regenkleidung });
+  }));
+  return erg;
+}
+// "seit deiner Änderung am 08.11.: 2× zu kalt · vor 5d: 1× passte" ("seit 5d", wenn die Stufe nie geändert wurde)
+function seitText(z, mitVor5d = true) {
+  if (!z) return "seit 5d: noch keine";
+  return (z.seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(z.seit)))) + ": " + auswertungText(z) +
+    (mitVor5d && z.vor5d.anzahl ? " · vor 5d: " + auswertungText(z.vor5d) : "");
+}
+const LAGE_BEI = { Gegenwind: "bei Gegenwind", Seitenwind: "bei Seitenwind", Rückenwind: "bei Rückenwind", wechselnd: "bei wechselndem Wind", "kaum Wind": "bei wenig Wind" };
+// Hinweis zu einer Stufe: ab 2 gleichen Abweichungen seit der letzten Änderung,
+// wenn sie häufiger sind als „passte“ (2× zu kalt, 5× passte: kein Hinweis). Gibt
+// es beide Richtungen gleich oft, heißt der Hinweis „uneinheitlich“. null = keiner.
+function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.einstellungen.wetter.kleidung) {
+  const z = seit[id], i = k.stufen.findIndex(s => s.id === id);
+  if (!z || i < 0) return null;
+  const richtungen = ["zu-kalt", "zu-warm"].filter(u => z[u] >= 2 && z[u] > z.passte);
+  if (!richtungen.length) return null;
+  const titel = "Stufe " + stufeBereich(k, i) + ": " + (z.seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(z.seit)))) + " ";
+  if (richtungen.length === 2 && z["zu-kalt"] === z["zu-warm"]) {
+    return { id, richtung: null, text: titel + z["zu-kalt"] + "× zu kalt und " + z["zu-warm"] + "× zu warm – uneinheitlich" };
+  }
+  const u = richtungen.length === 2 ? (z["zu-kalt"] > z["zu-warm"] ? "zu-kalt" : "zu-warm") : richtungen[0];
+  const fahrten = z.fahrten.filter(f => f.urteil === u), n = fahrten.length;
+  // Wind und Regen der abweichenden Fahrten: "beide bei Gegenwind", "1× bei Gegenwind, 1× bei Seitenwind", "alle bei Regen"
+  const lagen = fahrten.map(f => f.lage).filter(Boolean);
+  const zaehl = [...new Set(lagen)].map(l => [l, lagen.filter(x => x === l).length]);
+  const alle = n === 2 ? "beide " : "alle ";
+  const teile = [];
+  if (lagen.length === n && zaehl.length === 1) teile.push(alle + LAGE_BEI[zaehl[0][0]]);
+  else if (zaehl.length) teile.push(zaehl.map(([l, c]) => c + "× " + LAGE_BEI[l]).join(", "));
+  const regen = fahrten.filter(f => f.regen).length;
+  if (regen === n) teile.push(teile.length ? "bei Regen" : alle + "bei Regen");
+  else if (regen) teile.push("davon " + regen + "× bei Regen");
+  return { id, richtung: u, text: titel + z[u] + "× " + RUECKMELDUNG_TEXT[u] + (teile.length ? " (" + teile.join(", ") + ")" : "") };
+}
+function kleidungHinweisHtml(h, i) {
+  return '<div class="hinweis warn">💡 ' + esc(h.text) +
+    '<br><button type="button" data-action="kleidung-stufe" data-i="' + i + '">Stufe bearbeiten</button></div>';
+}
+// In der Fahrt-Karte: Hinweis zur empfohlenen Stufe (nur, wenn die Rückmeldung eingeschaltet ist)
+function fahrtHinweisHtml(kl) {
+  if (!kl || !rueckmeldungAn()) return "";
+  const h = kleidungHinweis(kl.stufe.id);
+  return h ? '<div class="klein">💡 ' + esc(h.text) + ' <button type="button" class="leise" data-action="kleidung-stufe" data-i="' + kl.index + '">Stufe bearbeiten ›</button></div>' : "";
+}
+
+// Unterseite „Änderungen der Kleidung“: das Protokoll, neueste zuerst
+function kleidungProtokollSeite() {
+  const k = daten.einstellungen.wetter.kleidung;
+  if (!k.protokoll.length) return '<div class="liste"><div class="leer">Noch keine Änderungen seit 5d.</div></div>';
+  const leerText = t => t ? esc(t) : "–";
+  const name = p => {
+    const i = k.stufen.findIndex(s => s.id === p.stufe), x = p.nachher || p.vorher;
+    return i >= 0 ? "Stufe " + stufeBereich(k, i) : "frühere Stufe" + (x && x.ab !== null ? " (ab " + minus(zahlFeld(x.ab)) + " °C)" : "");
+  };
+  const grenze = x => x === null ? "darunter" : minus(zahlFeld(x)) + " °C";
+  const bereichsTeile = (a, b) => BEREICHE.filter(([bb]) => (a[bb] || "") !== (b[bb] || "")).map(([bb, n]) => n + ": " + leerText(a[bb]) + " → " + leerText(b[bb]));
+  const unterschiede = (a, b) => (a.ab !== b.ab ? ["Grenze " + grenze(a.ab) + " → " + grenze(b.ab)] : []).concat(bereichsTeile(a.bereiche, b.bereiche),
+    (a.haendeBeiRegen || null) !== (b.haendeBeiRegen || null) ? ["Hände bei Regen: " + leerText(a.haendeBeiRegen) + " → " + leerText(b.haendeBeiRegen)] : []);
+  const GRUNDLAGE_TEXT = { fahrt: "gefühlt beim Fahren", gefuehlt: "gefühlt (Open-Meteo)" };
+  const zeilen = k.protokoll.slice().reverse().map(p => {
+    const wann = datumText(isoAusDate(new Date(p.zeitpunkt))) + " " + uhrzeit(Date.parse(p.zeitpunkt));
+    let titel, details = [];
+    if (p.art === "grundlage") { titel = "Stufe wählen nach"; details = [GRUNDLAGE_TEXT[p.vorher] + " → " + GRUNDLAGE_TEXT[p.nachher]]; }
+    else if (p.art === "regen") {
+      const x = p.nachher || p.vorher;
+      titel = "Regenzusatz ab " + zahlFeld(x.ab) + " %" + (!p.vorher ? " neu" : !p.nachher ? " entfernt" : "");
+      details = p.vorher && p.nachher ? (p.vorher.ab !== p.nachher.ab ? ["Schwelle " + zahlFeld(p.vorher.ab) + " → " + zahlFeld(p.nachher.ab) + " %"] : [])
+        .concat(bereichsTeile(p.vorher.bereiche, p.nachher.bereiche)) : [bereicheKurz(x.bereiche)];
+    } else {
+      titel = name(p) + (!p.vorher ? " neu" : !p.nachher ? " entfernt" : "");
+      details = p.vorher && p.nachher ? unterschiede(p.vorher, p.nachher) : [bereicheKurz((p.nachher || p.vorher).bereiche)];
+    }
+    return '<div class="zeile"><div class="text" style="padding:10px 16px"><div>' + esc(titel) + '</div><div class="klein">' + esc(wann) + '</div>' +
+      details.map(d => '<div class="klein umbrechen">' + esc(d) + '</div>').join("") + '</div></div>';
+  });
+  return '<div class="liste">' + zeilen.join("") + '</div>' +
+    '<p class="klein">Neueste zuerst. Das Protokoll gehört zu deinen Daten und steht in der Sicherung.</p>';
 }

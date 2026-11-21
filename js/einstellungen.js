@@ -87,10 +87,12 @@ const EINSTELLUNGEN_SEITEN = {
   vorlagen: { titel: "Vorlagen", bild: () => vorlagenBereich() },
   fahrtage: { titel: "Fahrtage", bild: () => fahrtageSeite() },
   orte: { titel: "Orte und Strecke", bild: () => wetterOrteSeite() },
+  ort: { titel: v => ortTitel(v), bild: v => ortSeite(v), zurueck: "orte", formular: true },
   ausserhalb: { titel: "Außerhalb der Fahrten", bild: () => wetterAusserhalbSeite() },
   kleidung: { titel: "Kleidung", bild: () => kleidungSeite() },
   "kleidung-stufe": { titel: i => kleidungStufeTitel(i), bild: i => kleidungStufeSeite(i), zurueck: "kleidung", formular: true },
   "kleidung-regen": { titel: i => kleidungRegenTitel(i), bild: i => kleidungRegenSeite(i), zurueck: "kleidung", formular: true },
+  "kleidung-protokoll": { titel: "Änderungen der Kleidung", bild: () => kleidungProtokollSeite(), zurueck: "kleidung" },
   ampel: { titel: "Ampel-Grenzen", bild: () => ampelSeite(), formular: true },
   wartungsarten: { titel: "Wartungsarten", bild: () => wartungsartenBereich() }
 };

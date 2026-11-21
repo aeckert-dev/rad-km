@@ -118,6 +118,9 @@ const AKTIONEN = {
   "wegpunkt-runter": el => wegpunktVerschieben(Number(el.dataset.i), 1),
   "ort-suchen": () => ortSuchen(),
   "ort-waehlen": el => ortWaehlen(Number(el.dataset.i)),
+  "ort-letzter": el => ortLetzterWaehlen(Number(el.dataset.i)),
+  "ort-letzte-leeren": () => ortLetzteLeeren(),
+  "ort-name-uebernehmen": () => ortNameUebernehmen(),
   "ort-standort": () => ortStandort(),
   "ort-speichern": () => ortSpeichern(),
   "ort-entfernen": () => ortEntfernen(),
@@ -138,6 +141,7 @@ const AKTIONEN = {
   "kleidung-regen-speichern": el => kleidungRegenSpeichern(el.dataset.i),
   "kleidung-regen-weg": el => kleidungRegenWeg(Number(el.dataset.i)),
   "kleidung-standard": () => kleidungStandard(),
+  "kleidung-grundlage": el => kleidungGrundlageSetzen(el.dataset.wert),
   "rueckmeldung": el => rueckmeldungGeben(el.dataset.id, el.dataset.fahrt, el.dataset.urteil, !!el.dataset.detail),
   "wetter-nachtragen": () => wetterNachtragen(),
 
@@ -168,12 +172,14 @@ const AENDERUNGEN = {
   "weiterer-ort-aktiv": el => weitererOrtAktiv(el.checked),
   "teilstrecke-wind": el => teilstreckeWind(Number(el.dataset.i), el.checked),
   "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
+  "kleidung-geschwindigkeit": el => geschwindigkeitGeaendert(el),
   "ampel-feld": el => ampelSpeichern(el),
   "prognose-datum": () => prognoseAnzeigen()
 };
 const EINGABEN = {
   "termin-vorlauf": () => terminVorlaufEingabe(),
   "ort-karte": () => ortKarteAktualisieren(),
+  "ort-eingabe": () => ortEingabe(),
   "protokoll-km": () => protokollKmEingabe(),
   "prognose-datum": () => prognoseAnzeigen()
 };
