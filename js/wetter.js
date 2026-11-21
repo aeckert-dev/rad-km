@@ -1033,7 +1033,9 @@ function fahrtenWetter(orteDaten, datum, quelle, stand, berechnet = Date.now()) 
     const kl = kleidungFuer(sg.wert, v.regenWahrscheinlichkeit, w.kleidung);
     return Object.assign({ temperatur: r1(v.temperatur), gefuehlt: r1(v.gefuehlt), niederschlag: v.niederschlag, regenWahrscheinlichkeit: v.regenWahrscheinlichkeit,
       wind: r1(wind), boeen: r1(v.boeen), ampel: b.farbe, kleidung: kl.stufe.id, empfehlung: Object.assign({}, kl.bereiche), regenkleidung: kl.mitRegen, rueckmeldung: null },
-      fahrtGefuehltSpeichern(g), { grundlage: sg.grundlage, empfohlenAm: new Date(berechnet).toISOString() });
+      fahrtGefuehltSpeichern(g), { grundlage: sg.grundlage, empfohlenAm: new Date(berechnet).toISOString() },
+      // Ab 5e: Zeitfenster, für das das Wetter berechnet wurde, und die Abfahrt
+      { von: f.von, bis: f.bis, abfahrt: ueblicheAbfahrt(f), geplanteAbfahrt: null });
   };
   const hin = fahrt("hinfahrt"), rueck = fahrt("rueckfahrt");
   return hin || rueck ? { quelle, stand: new Date(stand).toISOString(), hin, rueck } : null;

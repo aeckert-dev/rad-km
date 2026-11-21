@@ -17,10 +17,10 @@ const WETTER_SCHLUESSEL = TESTMODUS ? "radkm-test-wetter" : "radkm-wetter";
 // Die zuletzt gewählten Orte (ab 5d; nur auf dem Gerät, kein Teil der Daten und der Sicherung)
 const LETZTE_ORTE_SCHLUESSEL = TESTMODUS ? "radkm-test-letzte-orte" : "radkm-letzte-orte";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "5d";
+const APP_VERSION = "5e";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 11;
+const DATEN_VERSION = 12;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;

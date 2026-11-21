@@ -95,12 +95,12 @@ const KLEIDUNG_VERSION_4 = {
   regen: [{ ab: 40, text: "Regenjacke" }, { ab: 60, text: "Regenhose" }]
 };
 // Wetter: Orte, Wegpunkte (Wohnort → Arbeitsort) und je Teilstrecke, ob sie
-// für den Wind zählt, Ort für das Wetter außerhalb der Fahrten, Fahrzeiten
+// für den Wind zählt (bis Version 11 auch der Ort für das Wetter außerhalb der Fahrten), Fahrzeiten
 // (Zeitraum, Schalter und Uhrzeit der üblichen Abfahrt, Dauer in Minuten), Ampel, Kleidung
 function standardWetter() {
   const v4 = wetterVersion4();
   return {
-    wohnort: null, arbeitsort: null, weitererOrt: null, wegpunkte: [], windTeilstrecken: [true], ortAusserhalb: "wohnort",
+    wohnort: null, arbeitsort: null, weitererOrt: null, wegpunkte: [], windTeilstrecken: [true],
     hinfahrt: fahrzeitMitSchalter(v4.hinfahrt, true), rueckfahrt: fahrzeitMitSchalter(v4.rueckfahrt, true),
     // Ab Version 11: eigene Fahrgeschwindigkeit in km/h (null = aus Vorlage und Dauer)
     geschwindigkeit: null,
@@ -282,8 +282,27 @@ const MIGRATIONEN = {
     if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
       ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion10(e.wetter.hin), rueck: fahrtAusVersion10(e.wetter.rueck) }) }) : e);
     return d;
+  },
+  // Version 11 → 12 (Release 5e): Die Ansicht „Jetzt“ und mit ihr die Einstellung
+  // „Wetter außerhalb der Fahrten“ (ortAusserhalb) entfallen. Gespeicherte Fahrten
+  // bekommen Zeitfenster und Abfahrt leer (vor 5e: nach den damaligen Einstellungen).
+  11: alt => {
+    const d = Object.assign({}, alt, { version: 12 });
+    const es = alt.einstellungen;
+    if (istObjekt(es) && istObjekt(es.wetter)) {
+      const w = Object.assign({}, es.wetter);
+      delete w.ortAusserhalb;
+      d.einstellungen = Object.assign({}, es, { wetter: w });
+    }
+    if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion11(e.wetter.hin), rueck: fahrtAusVersion11(e.wetter.rueck) }) }) : e);
+    return d;
   }
 };
+
+// Neue Werte je Fahrt ab Version 12: Zeitfenster und Abfahrt, bei älteren Fahrten leer
+const FAHRT_WERTE_12 = { von: null, bis: null, abfahrt: null, geplanteAbfahrt: null };
+function fahrtAusVersion11(f) { return istObjekt(f) ? Object.assign({}, FAHRT_WERTE_12, f) : f; }
 
 // Neue Werte je Fahrt ab Version 11 (gefühlt beim Fahren), bei älteren Fahrten leer
 const FAHRT_WERTE_11 = { beimFahren: null, luftfeuchte: null, windRichtung: null, windAnteil: null, teilstrecken: null, geschwindigkeit: null };
@@ -565,8 +584,6 @@ function wetterPruefen(w, fehler) {
     if (!(Number.isInteger(dauer) && dauer >= 5 && dauer <= 240)) fehler(wo + ": dauer muss eine ganze Zahl von 5 bis 240 (Minuten) sein.");
     return { von, bis, abfahrtAn, abfahrt, dauer };
   };
-  const ortAusserhalb = w.ortAusserhalb === undefined ? std.ortAusserhalb : w.ortAusserhalb;
-  if (!ORT_AUSSERHALB.includes(ortAusserhalb)) fehler("Wetter: „ortAusserhalb“ muss „wohnort“ oder „standort“ sein.");
 
   let ampel = std.ampel;
   if (w.ampel !== undefined) {
@@ -640,7 +657,7 @@ function wetterPruefen(w, fehler) {
 
   return {
     wohnort: ort("wohnort", "Wohnort"), arbeitsort: ort("arbeitsort", "Arbeitsort"), weitererOrt: ort("weitererOrt", "weiterer Ort"),
-    wegpunkte, windTeilstrecken, ortAusserhalb, hinfahrt: fahrt("hinfahrt", "Hinfahrt"), rueckfahrt: fahrt("rueckfahrt", "Rückfahrt"), geschwindigkeit, ampel, kleidung
+    wegpunkte, windTeilstrecken, hinfahrt: fahrt("hinfahrt", "Hinfahrt"), rueckfahrt: fahrt("rueckfahrt", "Rückfahrt"), geschwindigkeit, ampel, kleidung
   };
 }
 
@@ -750,9 +767,16 @@ function eintragWetterPruefen(ew, wo, fehler) {
         zaehlt: pr("zaehlt", v => typeof v === "boolean", "true oder false"), wind: pr("wind", ab0, "eine Zahl ≥ 0 (km/h)"), richtung,
         luftstrom: pr("luftstrom", ab0, "eine Zahl ≥ 0 (km/h)"), beimFahren: pr("beimFahren", istEndlich, "eine Zahl (°C)") };
     });
+    // Ab Version 12: Zeitfenster der Fahrt, tatsächliche Abfahrt und bei „Heute später los“ die geplante (fehlend = null)
+    const von = opt("von", istUhrzeit, "eine Uhrzeit im Format HH:MM"), bis = opt("bis", istUhrzeit, "eine Uhrzeit im Format HH:MM");
+    if ((von === null) !== (bis === null)) fehler(wn + ": von und bis gibt es nur zusammen (beide null vor 5e).");
+    if (von !== null && !(von < bis)) fehler(wn + ": „von“ muss vor „bis“ liegen.");
+    const abfahrt = opt("abfahrt", istUhrzeit, "eine Uhrzeit im Format HH:MM");
+    const geplanteAbfahrt = opt("geplanteAbfahrt", istUhrzeit, "eine Uhrzeit im Format HH:MM");
+    if (geplanteAbfahrt !== null && abfahrt === null) fehler(wn + ": geplanteAbfahrt gibt es nur zusammen mit abfahrt.");
     return { temperatur: zahl("temperatur"), gefuehlt: zahl("gefuehlt"), niederschlag: zahl("niederschlag", 0), regenWahrscheinlichkeit: w,
       wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, empfehlung, regenkleidung, rueckmeldung: rm,
-      beimFahren, luftfeuchte, windRichtung, windAnteil, teilstrecken, geschwindigkeit, grundlage, empfohlenAm };
+      beimFahren, luftfeuchte, windRichtung, windAnteil, teilstrecken, geschwindigkeit, grundlage, empfohlenAm, von, bis, abfahrt, geplanteAbfahrt };
   };
   return { quelle: ew.quelle, stand: ew.stand, hin: fahrt(ew.hin, "hin"), rueck: fahrt(ew.rueck, "rueck") };
 }

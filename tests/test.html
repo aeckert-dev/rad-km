@@ -89,10 +89,15 @@ const ohneProtokollId = m => { const { protokollId, ...rest } = m; return rest; 
 // Ab Version 11 (Release 5d): eigene Fahrgeschwindigkeit (null), Kleidung mit Grundlage „beim Fahren“ und leerem
 // Änderungsprotokoll; gespeicherte Fahrten mit leeren Werten „beim Fahren“, Stufe damals nach Open-Meteo („vor 5d“)
 const kleidungV11 = k => k && Object.assign({}, k, { grundlage: "fahrt", protokoll: [] });
-const wetterV11 = wt => Object.assign({}, wt, { geschwindigkeit: null }, wt.kleidung ? { kleidung: kleidungV11(wt.kleidung) } : {});
+const wetterV11 = wt => ohneOrtAusserhalb(Object.assign({}, wt, { geschwindigkeit: null }, wt.kleidung ? { kleidung: kleidungV11(wt.kleidung) } : {}));
 const fahrtV11 = f => f && Object.assign({}, f, { beimFahren: null, luftfeuchte: null, windRichtung: null, windAnteil: null, teilstrecken: null,
   geschwindigkeit: null, grundlage: f.kleidung ? "gefuehlt" : null, empfohlenAm: null });
-const eintragV11 = e => e.wetter ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtV11(e.wetter.hin), rueck: fahrtV11(e.wetter.rueck) }) }) : e;
+const eintragV11 = e => eintragV12(e.wetter ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtV11(e.wetter.hin), rueck: fahrtV11(e.wetter.rueck) }) }) : e);
+// Ab Version 12 (Release 5e): ohne „Wetter außerhalb der Fahrten“ (ortAusserhalb); gespeicherte Fahrten mit leerem
+// Zeitfenster und leerer Abfahrt. wetterV11/eintragV11 liefern den Stand nach allen Umwandlungen bis zur aktuellen Version.
+const ohneOrtAusserhalb = wt => { const { ortAusserhalb, ...rest } = wt; return rest; };
+const fahrtV12 = f => f && Object.assign({}, f, { von: null, bis: null, abfahrt: null, geplanteAbfahrt: null });
+const eintragV12 = e => e.wetter ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtV12(e.wetter.hin), rueck: fahrtV12(e.wetter.rueck) }) }) : e;
 
 // index.html im unsichtbaren Rahmen laden und auf den Start warten
 function appLaden() {
@@ -206,7 +211,7 @@ async function start() {
     const mit = aend => JSON.stringify(Object.assign(kopie(v3), aend));
     const art = aend => [Object.assign({}, v3.wartungsarten[0], { einmalig: false }, aend)];
     const nurArt = aend => mit({ wartungsarten: art(aend), auftraege: [], maengel: [] });
-    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: 12 })), "neueren App-Version");
+    wirft("Neuere Version wird abgelehnt", () => w.datenEinlesen(mit({ version: w.eval("DATEN_VERSION") + 1 })), "neueren App-Version");
     wirft("Zeitfenster über den Jahreswechsel wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 11, fensterBis: 2 })), "Jahreswechsel");
     wirft("Nur ein Fenstermonat wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: 3, fensterBis: null })), "beide");
     wirft("gueltigAbJahr ohne Zeitfenster wird abgelehnt", () => w.datenEinlesen(nurArt({ fensterVon: null, fensterBis: null, gueltigAbJahr: 2027 })), "gueltigAbJahr");
@@ -743,7 +748,7 @@ async function start() {
     gleich("Andere JSON-Datei: keine Rad-km-Sicherung", [erg.status, erg.details], ["defekt", ["Die Versionsnummer („version“) fehlt oder ist ungültig."]]);
     erg = auswerten("\u0089PNG\r\n\u001a\n");
     gleich("Bild statt Sicherung: beschädigt bzw. keine Rad-km-Sicherung", erg.status, "defekt");
-    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: 12 })));
+    erg = auswerten(JSON.stringify(Object.assign(JSON.parse(sicherung), { version: w.eval("DATEN_VERSION") + 1 })));
     gleich("Sicherung einer neueren App-Version wird erkannt", [erg.status, erg.details[0].includes("neueren App-Version")], ["defekt", true]);
     gleich("Datumsbereiche: zusammenhängende Tage, Monats- und Jahreswechsel, andere Jahre, Kürzung",
       [w.datumsBereiche(["2026-10-27", "2026-10-25", "2026-10-26"], HP), w.datumsBereiche(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], HP),
@@ -767,7 +772,7 @@ async function start() {
     abschnitt("14. Oberfläche");
     w.eval("wartungAnsicht = 'aktuell'; aktiverTab = 'einstellungen'; einstellungenSeite = null; zeichnen()");
     const einst = w.document.getElementById("inhalt");
-    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion11"), einst.textContent);
+    wahr("Einstellungen: App-Version und Datenversion", einst.textContent.includes("App-Version" + w.eval("APP_VERSION")) && einst.textContent.includes("Datenversion" + w.eval("DATEN_VERSION")), einst.textContent);
     wahr("Einstellungen: „Jetzt sichern“ auf der Hauptseite, Zeile zur Unterseite Datensicherung",
       einst.querySelector('[data-action="sichern"]') && einst.querySelector('[data-action="einstellungen-seite"][data-seite="sicherung"]'));
     w.eval("einstellungenSeite = 'sicherung'; zeichnen()");
@@ -1099,8 +1104,9 @@ async function start() {
     // „gefuehlt“); die Tests für „gefühlt beim Fahren“ (ab Abschnitt 70) setzen die Grundlage selbst
     const wetterEinst = aend => Object.assign(kopie(STD_WETTER), { wohnort: MUSTERDORF, arbeitsort: BEISPIELSTADT,
       kleidung: Object.assign(kopie(STD_WETTER.kleidung), { grundlage: "gefuehlt" }) }, aend);
-    // Gespeichertes Wetter ohne die Werte ab 5d („beim Fahren“, Grundlage, Zeitpunkt der Empfehlung)
-    const NEU_5D = ["beimFahren", "luftfeuchte", "windRichtung", "windAnteil", "teilstrecken", "geschwindigkeit", "grundlage", "empfohlenAm"];
+    // Gespeichertes Wetter ohne die Werte ab 5d („beim Fahren“, Grundlage, Zeitpunkt der Empfehlung) und ab 5e (Zeitfenster, Abfahrt)
+    const NEU_5D = ["beimFahren", "luftfeuchte", "windRichtung", "windAnteil", "teilstrecken", "geschwindigkeit", "grundlage", "empfohlenAm",
+      "von", "bis", "abfahrt", "geplanteAbfahrt"];
     const bis5c = f => f && Object.fromEntries(Object.entries(f).filter(([k]) => !NEU_5D.includes(k)));
     const wetterBis5c = ew => ew && Object.assign({}, ew, { hin: bis5c(ew.hin), rueck: bis5c(ew.rueck) });
     const wetterDaten = (aend = {}, fahrtage = [1, 2, 5]) => setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage, wetter: wetterEinst(aend) } });
@@ -1179,7 +1185,7 @@ async function start() {
     const v3Text = await (await fetch("daten-v3.json", { cache: "no-store" })).text();
     const v3d = JSON.parse(v3Text);
     const pruefeV3 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten (alle Aufträge, Eigenleistung ergänzt), Protokoll und Termine (als Aufträge) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v3d.fahrrad, v3d.vorlagen, [...v3d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG],
@@ -1197,9 +1203,9 @@ async function start() {
     pruefeV3(kopie(w3.eval("daten")), "Beim Laden");
     gleich("Beim Laden: Version-3-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v3Text);
     w3.frameElement.remove();
-    gleich("Standardwerte Wetter: keine Orte; Hinfahrt 06:00–07:00, Rückfahrt 16:00–17:00, übliche Abfahrt an, 06:00 bzw. 16:00, Dauer 60 min; außerhalb der Fahrten Wohnort",
-      [STD_WETTER.wohnort, STD_WETTER.arbeitsort, STD_WETTER.weitererOrt, STD_WETTER.hinfahrt, STD_WETTER.rueckfahrt, STD_WETTER.ortAusserhalb],
-      [null, null, null, { von: "06:00", bis: "07:00", abfahrtAn: true, abfahrt: "06:00", dauer: 60 }, { von: "16:00", bis: "17:00", abfahrtAn: true, abfahrt: "16:00", dauer: 60 }, "wohnort"]);
+    gleich("Standardwerte Wetter: keine Orte; Hinfahrt 06:00–07:00, Rückfahrt 16:00–17:00, übliche Abfahrt an, 06:00 bzw. 16:00, Dauer 60 min; kein „Wetter außerhalb der Fahrten“ mehr (seit 5e)",
+      [STD_WETTER.wohnort, STD_WETTER.arbeitsort, STD_WETTER.weitererOrt, STD_WETTER.hinfahrt, STD_WETTER.rueckfahrt, "ortAusserhalb" in STD_WETTER],
+      [null, null, null, { von: "06:00", bis: "07:00", abfahrtAn: true, abfahrt: "06:00", dauer: 60 }, { von: "16:00", bis: "17:00", abfahrtAn: true, abfahrt: "16:00", dauer: 60 }, false]);
     const B = (kopf, hals, haende, oberkoerper, beine, fuesse) => ({ kopf, hals, haende, oberkoerper, beine, fuesse });
     gleich("Standardwerte Ampel und Kleidung je Körperbereich (Release 4c)", [STD_WETTER.ampel, STD_WETTER.kleidung], [
       { rotBoeen: 60, rotStarkregen: 5, rotWarnstufe: 2, gelbRegenWahrscheinlichkeit: 50, gelbNiederschlag: 0.5, gelbBoeen: 40, gelbTemperatur: 0, glaetteTemperatur: 1 },
@@ -1239,9 +1245,9 @@ async function start() {
     v5.einstellungen.wetter.kleidung.rueckmeldung = false;
     v5.einstellungen.wetter.ampel.rotBoeen = 55;
     const v5rund = kopie(w.datenEinlesen(JSON.stringify(w.datenEinlesen(JSON.stringify(v5)))));
-    gleich("Alle Felder (Orte, Wegpunkte mit Teilstrecken, Fahrzeiten ohne übliche Abfahrt mit Uhrzeit, Wetter außerhalb der Fahrten am Standort, Ampel, Kleidung je Bereich mit „Hände bei Regen“, " +
-      "Rückmeldung aus, Hinweis ab 17:30, Wetter je Eintrag mit Empfehlung): Import → Export → Import verlustfrei",
-      [v5rund.einstellungen, v5rund.eintraege[0].wetter], [v5.einstellungen, eintragV11(v5.eintraege[0]).wetter]);
+    gleich("Alle Felder (Orte, Wegpunkte mit Teilstrecken, Fahrzeiten ohne übliche Abfahrt mit Uhrzeit, Ampel, Kleidung je Bereich mit „Hände bei Regen“, " +
+      "Rückmeldung aus, Hinweis ab 17:30, Wetter je Eintrag mit Empfehlung): Import → Export → Import verlustfrei; „Wetter außerhalb der Fahrten“ entfällt (seit 5e)",
+      [v5rund.einstellungen, v5rund.eintraege[0].wetter], [Object.assign({}, v5.einstellungen, { wetter: ohneOrtAusserhalb(v5.einstellungen.wetter) }), eintragV11(v5.eintraege[0]).wetter]);
     gleich("Koordinaten werden beim Einlesen auf 4 Nachkommastellen gerundet (ca. 10 m, W11)",
       w.datenEinlesen(JSON.stringify(Object.assign(kopie(v5), { einstellungen: { wetter: { wohnort: { name: " Musterdorf ", lat: 51.123456, lon: 10.987654 } } } }))).einstellungen.wetter.wohnort,
       { name: "Musterdorf", lat: 51.1235, lon: 10.9877 });
@@ -1261,9 +1267,8 @@ async function start() {
     wirft("Schalter der üblichen Abfahrt muss true oder false sein", () => w.datenEinlesen(mitWetter({ hinfahrt: { von: "06:00", bis: "07:00", abfahrtAn: "ja", abfahrt: "06:00", dauer: 60 } })), "abfahrtAn muss true oder false");
     gleich("Fehlt der Schalter der üblichen Abfahrt, ist sie an",
       kopie(w.datenEinlesen(mitWetter({ hinfahrt: { von: "06:00", bis: "07:00", abfahrt: "06:10", dauer: 60 } })).einstellungen.wetter.hinfahrt), { von: "06:00", bis: "07:00", abfahrtAn: true, abfahrt: "06:10", dauer: 60 });
-    wirft("Wetter außerhalb der Fahrten: nur Wohnort oder Standort", () => w.datenEinlesen(mitWetter({ ortAusserhalb: "arbeitsort" })), "ortAusserhalb");
-    gleich("Fehlt die Angabe zum Wetter außerhalb der Fahrten, gilt der Wohnort",
-      w.datenEinlesen(mitWetter({ ortAusserhalb: undefined })).einstellungen.wetter.ortAusserhalb, "wohnort");
+    gleich("Seit 5e: „Wetter außerhalb der Fahrten“ in einer älteren Datei (auch mit einem unbekannten Wert) entfällt beim Einlesen",
+      ["arbeitsort", "standort", undefined].map(o => "ortAusserhalb" in w.datenEinlesen(mitWetter({ ortAusserhalb: o })).einstellungen.wetter), [false, false, false]);
     const mitHinweis = aend => JSON.stringify(Object.assign(kopie(v5), { einstellungen: Object.assign(kopie(v5.einstellungen), aend) }));
     wirft("Version 7: Hinweis für heute null wird abgelehnt (aus = hinweisHeuteAn false)", () => w.datenEinlesen(mitHinweis({ hinweisHeuteAb: null })), "hinweisHeuteAn false");
     wirft("Schalter „Hinweis schon am selben Tag“ muss true oder false sein", () => w.datenEinlesen(mitHinweis({ hinweisHeuteAn: "ja" })), "hinweisHeuteAn");
@@ -1909,7 +1914,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5d, Datenversion 11 (Release 5d)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5d", 11]);
+    gleich("App-Version 5e, Datenversion 12 (Release 5e)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5e", 12]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -1922,7 +1927,7 @@ async function start() {
     // Erwartete Empfehlung einer Fahrt: Text, wie 4b ihn angezeigt hat (im Feld Oberkörper), und ob Regenkleidung galt
     const mitEmpfehlung = (f, text, regen) => f && Object.assign({}, f, { empfehlung: text === null ? null : OK(text), regenkleidung: regen });
     const pruefeV4 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v4d.fahrrad, v4d.vorlagen, [...v4d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v4d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -1980,7 +1985,7 @@ async function start() {
     const v5Text = await (await fetch("daten-v5.json", { cache: "no-store" })).text();
     const v5d = JSON.parse(v5Text);
     const pruefeV5 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v5d.fahrrad, v5d.vorlagen, [...v5d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v5d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -2040,7 +2045,7 @@ async function start() {
     const v6Text = await (await fetch("daten-v6.json", { cache: "no-store" })).text();
     const v6d = JSON.parse(v6Text);
     const pruefeV6 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge (mit Wetter, Empfehlung und Rückmeldung), Wartung, Termine und Mängel erhalten; der Termin der Aufgabe Kette (20.11.) " +
         "kommt in einen geplanten Auftrag der Großen Inspektion (Zeitfenster Oktober–November)",
         [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.auftraege, d.maengel],
@@ -2064,7 +2069,7 @@ async function start() {
     pruefeV6(kopie(w6d.eval("daten")), "Beim Laden");
     gleich("Beim Laden: Version-6-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v6Text);
     const exp6 = w6d.exportInhalt("2026-10-31T19:00:00.000Z");
-    gleich("Umgewandelte Daten: Export als Version 11, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [11, kopie(w6d.eval("daten"))]);
+    gleich("Umgewandelte Daten: Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [12, kopie(w6d.eval("daten"))]);
     const fr6 = "2026-10-23"; // Freitag, Fahrtag ohne Eintrag
     const fehltAm = minuten => w6d.fehlendeFahrtage(fr6, minuten).includes(fr6);
     const ausFr6 = [fehltAm(23 * 60 + 59), w6d.fehlendeFahrtage("2026-10-24", 0).includes(fr6)];
@@ -3324,7 +3329,7 @@ async function start() {
         positionen: [pos("pos-termin-reifen-hinten", "aufgabe", "reifen-hinten", "offen")] })
     ];
     const pruefeV7 = (d, wo) => {
-      gleich(wo + ": version = 11, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [11, false, false]);
+      gleich(wo + ": version = 12, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [12, false, false]);
       gleichInhalt(wo + ": Fahrrad, Einstellungen (Wetter mit Standardwerten), Vorlagen und Einträge unverändert", [d.fahrrad, d.vorlagen, d.eintraege, d.einstellungen.jahresziele],
         [v7d.fahrrad, v7d.vorlagen, v7d.eintraege, v7d.einstellungen.jahresziele]);
       gleich(wo + ": Einordnung: Zeitfenster, einmalig, „Inspektion“ oder „Reparatur“ im Namen → Auftrag, sonst Aufgabe (ohne Bauteil, Standard „nächste Inspektion“); Eigenleistung ergänzt",
@@ -3377,10 +3382,10 @@ async function start() {
     wV7.document.getElementById("a-bauteil").value = "Bremse vorn";
     wV7.document.getElementById("a-zuordnung").value = "grosse-inspektion";
     wV7.artSpeichern("bremse");
-    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 11 gespeichert",
+    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 12 gespeichert",
       [wV7.document.querySelector("#fensterinhalt h2").textContent, wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").bauteil,
         wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").zuordnung, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version],
-      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 11]);
+      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 12]);
     wV7.document.querySelector('#fensterinhalt [data-action="fenster-zu"]').click();
     gleich("„Später“: Fenster zu, Hinweis bleibt", [wV7.eval("fenster.open"), inhalt7().textContent.includes("Bitte Wartungsarten prüfen")], [false, true]);
     inhalt7().querySelector('[data-action="pruefung-oeffnen"]').click();
@@ -3390,12 +3395,12 @@ async function start() {
     wV7.frameElement.remove();
     const wV7b = await appLaden();
     wV7b.eval("aktiverTab = 'wartung'; zeichnen()");
-    gleich("Nach erneutem Laden (Daten schon Version 11): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
+    gleich("Nach erneutem Laden (Daten schon Version 12): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
     wV7b.sicherungAuswerten(v7Text, wV7b.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit einer Version-7-Datei merkt nichts vor und ändert nichts", localStorage.getItem(PRUEF), null);
     wV7b.frage = async () => true;
     await wV7b.importDateiGewaehlt(new wV7b.File([v7Text], "alt.json", { type: "application/json" }));
-    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [11, "ja"]);
+    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [12, "ja"]);
     wV7b.frameElement.remove();
     localStorage.removeItem(PRUEF);
 
@@ -3943,7 +3948,7 @@ async function start() {
     const nach56 = w.exportInhalt();
     const wieder56 = w.eval("datenEinlesen(" + JSON.stringify(nach56) + ")");
     gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 11)",
-      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 11]);
+      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 12]);
     gleich("„Sicherung prüfen“: frische Sicherung identisch", w.sicherungAuswerten(nach56, w.eval("daten"), H5).status, "identisch");
     const alt56 = w.sicherungAuswerten(sich56, w.eval("daten"), H5);
     gleich("„Sicherung prüfen“: Sicherung von vorher weicht ab (Auftrag geändert, Mangel geändert)", [alt56.status, alt56.titel, alt56.details],
@@ -4050,7 +4055,7 @@ async function start() {
     const v8Text = await (await fetch("daten-v8.json", { cache: "no-store" })).text();
     const v8d = JSON.parse(v8Text);
     const pruefeV8 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Aufträge vollständig erhalten, jeweils mit terminZeit = null (ganztägig), ohne Vorlauf und Kalenderstand", d.auftraege,
         v8d.auftraege.map(a => Object.assign({}, a, { terminZeit: null, vorlauf: null, imKalender: null })));
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
@@ -4072,7 +4077,7 @@ async function start() {
     let erg8 = wV8.sicherungAuswerten(v8Text, wV8.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit der Version-8-Datei: identisch, Kurzinfo passt", [erg8.status, erg8.kurzinfoPasst], ["identisch", true]);
     const exp8 = wV8.exportInhalt();
-    gleich("Export als Version 11, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [11, kopie(wV8.eval("daten"))]);
+    gleich("Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [12, kopie(wV8.eval("daten"))]);
     // Prüfung von terminZeit
     const basis9 = JSON.parse(exp8);
     const mitZeit = (id, aend) => JSON.stringify(Object.assign({}, basis9, { auftraege: basis9.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
@@ -4096,8 +4101,8 @@ async function start() {
     gleich("Gespeichert: Termin unverändert, terminZeit 09:30, Werkstatt und Notiz unverändert",
       [auftrag8("a-klein").termin, auftrag8("a-klein").terminZeit, auftrag8("a-klein").werkstatt, auftrag8("a-klein").notiz],
       ["2026-11-20", "09:30", "Rad & Co, Süd; Filiale", "Schlüssel abgeben\nRückruf erbeten"]);
-    gleich("… und im Speicher als Version 11", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
-      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [11, "09:30"]);
+    gleich("… und im Speicher als Version 12", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [12, "09:30"]);
     wV8.eval("aktiverTab = 'wartung'; zeichnen()");
     wahr("Reiter Wartung: „Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)“",
       wV8.document.getElementById("inhalt").textContent.includes("Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)"));
@@ -4364,7 +4369,7 @@ async function start() {
     const v9Text = await (await fetch("daten-v9.json", { cache: "no-store" })).text();
     const v9d = JSON.parse(v9Text);
     const pruefeV9 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Aufträge vollständig erhalten (auch die Uhrzeit 09:30), jeweils mit vorlauf = null und imKalender = null", d.auftraege,
         v9d.auftraege.map(a => Object.assign({}, a, { vorlauf: null, imKalender: null })));
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
@@ -4381,7 +4386,7 @@ async function start() {
     const erg9 = wV9.sicherungAuswerten(v9Text, wV9.eval("daten"), "2026-11-05");
     gleich("„Sicherung prüfen“ mit der Version-9-Datei: identisch, Kurzinfo passt", [erg9.status, erg9.kurzinfoPasst], ["identisch", true]);
     const exp9 = wV9.exportInhalt();
-    gleich("Export als Version 11, Export → Import verlustfrei", [JSON.parse(exp9).version, kopie(wV9.datenEinlesen(exp9))], [11, kopie(wV9.eval("daten"))]);
+    gleich("Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp9).version, kopie(wV9.datenEinlesen(exp9))], [12, kopie(wV9.eval("daten"))]);
     const basis10 = JSON.parse(exp9);
     const mit10 = (id, aend) => JSON.stringify(Object.assign({}, basis10, { auftraege: basis10.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
     const auftrag10 = (text, id) => wV9.datenEinlesen(text).auftraege.find(a => a.id === id);
@@ -4873,7 +4878,7 @@ async function start() {
     const v10Text = await (await fetch("daten-v10.json", { cache: "no-store" })).text();
     const v10d = JSON.parse(v10Text);
     const pruefeV10 = (d, wo) => {
-      gleich(wo + ": version = 11", d.version, 11);
+      gleich(wo + ": version = 12", d.version, 12);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Aufträge (mit Vorlauf und Kalenderstand), Mängel, Fahrtage, Jahresziele und Hinweis unverändert",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele, d.einstellungen.hinweisHeuteAn, d.einstellungen.hinweisHeuteAb],
         [v10d.fahrrad, v10d.vorlagen, v10d.wartungsarten, v10d.auftraege, v10d.maengel, v10d.einstellungen.fahrtage, v10d.einstellungen.jahresziele, true, "18:00"]);
@@ -4897,7 +4902,7 @@ async function start() {
     const erg10 = wV10.sicherungAuswerten(v10Text, wV10.eval("daten"), "2026-11-06");
     gleich("„Sicherung prüfen“ mit der Version-10-Datei: identisch, Kurzinfo passt", [erg10.status, erg10.kurzinfoPasst], ["identisch", true]);
     const exp10 = wV10.exportInhalt();
-    gleich("Export als Version 11, Export → Import verlustfrei", [JSON.parse(exp10).version, kopie(wV10.datenEinlesen(exp10))], [11, kopie(wV10.eval("daten"))]);
+    gleich("Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp10).version, kopie(wV10.datenEinlesen(exp10))], [12, kopie(wV10.eval("daten"))]);
     const basis11 = JSON.parse(exp10);
     const mitWetter11 = aend => JSON.stringify(Object.assign({}, basis11, { einstellungen: Object.assign({}, basis11.einstellungen,
       { wetter: Object.assign({}, basis11.einstellungen.wetter, aend) }) }));
@@ -4964,6 +4969,72 @@ async function start() {
     fahrtFalsch({ empfohlenAm: "gestern" }, "empfohlenAm muss", "empfohlenAm ohne Zeitpunkt");
     gleich("Prüfung und Umwandlung verändern die gespeicherten Daten nicht", localStorage.getItem(TEST_SCHLUESSEL), v10Text);
     wV10.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 69a. Datenversion 12 (Release 5e): Umwandlung 11 → 12 (tests/daten-v11.json)
+    // -------------------------------------------------------------
+    abschnitt("69a. Datenversion 12: Umwandlung 11 → 12 (tests/daten-v11.json), ohne „Wetter außerhalb der Fahrten“, Zeitfenster und Abfahrt je Fahrt prüfen");
+    const v11Text = await (await fetch("daten-v11.json", { cache: "no-store" })).text();
+    const v11d = JSON.parse(v11Text);
+    const pruefeV11 = (d, wo) => {
+      gleich(wo + ": version = 12", d.version, 12);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Aufträge, Mängel, Fahrtage, Jahresziele und Hinweis unverändert",
+        [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele, d.einstellungen.hinweisHeuteAn, d.einstellungen.hinweisHeuteAb],
+        [v11d.fahrrad, v11d.vorlagen, v11d.wartungsarten, v11d.auftraege, v11d.maengel, v11d.einstellungen.fahrtage, v11d.einstellungen.jahresziele, true, "17:00"]);
+      gleich(wo + ": „ortAusserhalb“ (war „standort“) entfällt", "ortAusserhalb" in d.einstellungen.wetter, false);
+      gleichInhalt(wo + ": alle übrigen Wetter-Einstellungen unverändert (Orte, weiterer Ort, Wegpunkte, Teilstrecken, Fahrzeiten, Geschwindigkeit, Ampel, Kleidung mit Protokoll)",
+        d.einstellungen.wetter, ohneOrtAusserhalb(v11d.einstellungen.wetter));
+      gleichInhalt(wo + ": Einträge vollständig erhalten (Werte, „beim Fahren“, Empfehlung, Rückmeldung); je Fahrt Zeitfenster und Abfahrt leer",
+        d.eintraege, v11d.eintraege.map(eintragV12));
+      gleich(wo + ": neue Felder im Einzelnen; fehlende Rückfahrt bleibt null",
+        [["von", "bis", "abfahrt", "geplanteAbfahrt"].map(k => d.eintraege[0].wetter.rueck[k]), d.eintraege[1].wetter.rueck], [[null, null, null, null], null]);
+    };
+    pruefeV11(kopie(w.datenEinlesen(v11Text)), "Beim Import");
+    localStorage.setItem(TEST_SCHLUESSEL, v11Text);
+    const wV11 = await appLaden();
+    wV11.heute = () => "2026-11-20";
+    gleich("Beim Laden: kein Ladefehler", wV11.eval("ladeFehler"), null);
+    pruefeV11(kopie(wV11.eval("daten")), "Beim Laden");
+    gleich("Beim Laden: Version-11-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v11Text);
+    const erg11 = wV11.sicherungAuswerten(v11Text, wV11.eval("daten"), "2026-11-20");
+    gleich("„Sicherung prüfen“ mit der Version-11-Datei: identisch, Kurzinfo passt", [erg11.status, erg11.kurzinfoPasst], ["identisch", true]);
+    const exp11 = wV11.exportInhalt();
+    gleich("Export als Version 12 ohne „ortAusserhalb“, Export → Import verlustfrei",
+      [JSON.parse(exp11).version, exp11.includes("ortAusserhalb"), kopie(wV11.datenEinlesen(exp11))], [12, false, kopie(wV11.eval("daten"))]);
+    // Alte Dateien mit jedem Wert für ortAusserhalb (auch einem, den 5d abgelehnt hätte) lassen sich importieren
+    gleich("Import einer Version-11-Datei mit „ortAusserhalb“ „wohnort“, „standort“ oder einem unbekannten Wert: das Feld entfällt",
+      ["wohnort", "standort", "irgendwo"].map(o => "ortAusserhalb" in kopie(wV11.datenEinlesen(JSON.stringify(Object.assign({}, v11d, { einstellungen: Object.assign({}, v11d.einstellungen,
+        { wetter: Object.assign({}, v11d.einstellungen.wetter, { ortAusserhalb: o }) }) })))).einstellungen.wetter), [false, false, false]);
+    const basis12 = JSON.parse(exp11);
+    const mitFahrt12 = aend => JSON.stringify(Object.assign({}, basis12, { eintraege: basis12.eintraege.map(e => e.id === "e-tag1"
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { rueck: Object.assign({}, e.wetter.rueck, aend) }) }) : e) }));
+    const rueck12 = text => kopie(wV11.datenEinlesen(text)).eintraege.find(e => e.id === "e-tag1").wetter.rueck;
+    const zeit12 = { von: "18:30", bis: "19:30", abfahrt: "18:30", geplanteAbfahrt: "16:00" };
+    gleich("Fahrt mit verschobener Abfahrt (Zeitfenster, Abfahrt, geplante Abfahrt): Import → Export → Import verlustfrei",
+      (() => { const r = rueck12(JSON.stringify(kopie(wV11.datenEinlesen(mitFahrt12(zeit12))))); return Object.fromEntries(Object.keys(zeit12).map(k => [k, r[k]])); })(), zeit12);
+    gleich("Fahrt ohne Verschiebung und ohne übliche Abfahrt: Zeitfenster gesetzt, Abfahrt und geplante Abfahrt null",
+      (() => { const r = rueck12(mitFahrt12({ von: "16:00", bis: "17:00", abfahrt: null, geplanteAbfahrt: null })); return [r.von, r.bis, r.abfahrt, r.geplanteAbfahrt]; })(),
+      ["16:00", "17:00", null, null]);
+    const zeitFalsch = (aend, teil, text) => wirft("Fahrt: " + text + " wird abgelehnt", () => wV11.datenEinlesen(mitFahrt12(Object.assign({}, zeit12, aend))), teil);
+    zeitFalsch({ von: "18.30" }, "von muss", "Zeitfenster „18.30“");
+    zeitFalsch({ bis: "25:00" }, "bis muss", "Ende 25:00");
+    zeitFalsch({ bis: null }, "nur zusammen", "nur der Beginn des Zeitfensters");
+    zeitFalsch({ von: "19:30", bis: "18:30" }, "„von“ muss vor „bis“", "Beginn nach dem Ende");
+    zeitFalsch({ abfahrt: 1830 }, "abfahrt muss", "Abfahrt als Zahl");
+    zeitFalsch({ abfahrt: null }, "geplanteAbfahrt gibt es nur zusammen mit abfahrt", "geplante Abfahrt ohne Abfahrt");
+    zeitFalsch({ geplanteAbfahrt: "4 Uhr" }, "geplanteAbfahrt muss", "geplante Abfahrt „4 Uhr“");
+    // Kette über alle Versionen: jede ältere Testdatei kommt ohne ortAusserhalb und mit leeren Zeitfenstern an
+    const ketteDateien = ["daten-v1.json", "daten-v2.json", "daten-v3.json", "daten-v4.json", "daten-v5.json", "daten-v6.json", "daten-v7.json", "daten-v8.json", "daten-v9.json", "daten-v10.json"];
+    const kette = [];
+    for (const datei of ketteDateien) {
+      const d = kopie(wV11.datenEinlesen(await (await fetch(datei, { cache: "no-store" })).text()));
+      const fahrten = d.eintraege.filter(e => e.wetter).flatMap(e => [e.wetter.hin, e.wetter.rueck]).filter(Boolean);
+      kette.push(datei + ": " + [d.version, "ortAusserhalb" in d.einstellungen.wetter, fahrten.every(f => f.von === null && f.bis === null && f.abfahrt === null && f.geplanteAbfahrt === null)].join("/"));
+    }
+    gleich("Umwandlung aus allen älteren Versionen (Testdateien v1 bis v10): Version 12, kein „ortAusserhalb“, Zeitfenster und Abfahrt je Fahrt leer",
+      kette, ketteDateien.map(d => d + ": 12/false/true"));
+    gleich("Prüfung und Umwandlung verändern die gespeicherten Daten nicht", localStorage.getItem(TEST_SCHLUESSEL), v11Text);
+    wV11.frameElement.remove();
 
     // -------------------------------------------------------------
     // 70. Gefühlt beim Fahren (N5, Release 5d): Formel, Luftstrom, Windprofil, Fahrgeschwindigkeit, Rechnung je Fahrt
@@ -5466,7 +5537,7 @@ async function start() {
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV1(d, v1) {
-  gleich("version = 11", d.version, 11);
+  gleich("version = 12", d.version, 12);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
   gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele; Wetter ohne Orte)", d.einstellungen, stdEinstellungen());
@@ -5494,7 +5565,7 @@ function pruefeUmwandlungV1(d, v1) {
 
 // Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV2(d, v2, wo) {
-  gleich(wo + ": version = 11", d.version, 11);
+  gleich(wo + ": version = 12", d.version, 12);
   gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
   gleich(wo + ": Einstellungen mit Standardwerten ergänzt (auch Wetter)", d.einstellungen, stdEinstellungen());
   gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
