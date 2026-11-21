@@ -5301,6 +5301,80 @@ async function start() {
       [ohneWeiteren(datenText()) === ohneWeiteren(vorOrte73), w.eval("daten.einstellungen.wetter.weitererOrt.name")], [true, "Zwei neu"]);
     localStorage.removeItem("radkm-test-letzte-orte");
     w.eval("aktiverTab = 'uebersicht'; einstellungenSeite = null; zeichnen()");
+
+    // -------------------------------------------------------------
+    // 74. Umschalter im Reiter Wetter (B14.1, Release 5e)
+    // -------------------------------------------------------------
+    abschnitt("74. Umschalter im Reiter Wetter (B14.1): Heute | Nächster | weiterer Ort, Voreinstellung bis 2 h nach der Rückfahrt, bis 24:00, „vorbei ›“ eingeklappt");
+    // Ruhiges Wetter auch am weiteren Ort (als dritter Ort in derselben Abfrage)
+    const ruhigDrei = () => { const r = ruhig(); return [...r, kopie(r[1])]; };
+    const auswahlBei = (datum, u) => { const a = w.wetterAnsicht(zeit(datum, u)); return [a.auswahl.optionen.map(o => o.wert), a.auswahl.wert]; };
+    const umschalterText = (datum, u) => { const d = w.document.createElement("div"); d.innerHTML = w.bildWetter(zeit(datum, u));
+      const el = d.querySelector(".wetter-auswahl"); return el ? [...el.querySelectorAll("button")].map(b => ohneTags(b.innerHTML) + (b.classList.contains("aktiv") ? " *" : "")) : null; };
+    w.eval("wetterWahl = null");
+    wetterDaten();
+    await laden(ruhig(), undefined, zeit(D, "06:00"));
+    gleich("Fahrtag vor dem Ende der Rückfahrt (Di 06:00 / 10:00 / 16:59): nur der heutige Fahrtag, kein Umschalter",
+      [auswahlBei(D, "06:00"), auswahlBei(D, "10:00"), auswahlBei(D, "16:59"), umschalterText(D, "16:59")],
+      [[["naechster"], "naechster"], [["naechster"], "naechster"], [["naechster"], "naechster"], null]);
+    gleich("Nach der Rückfahrt (Di 17:00): „Heute · Di 27.10. | Nächster · Fr 30.10.“, voreingestellt „Heute“", umschalterText(D, "17:00"), ["Heute Di 27.10. *", "Nächster Fr 30.10."]);
+    gleich("2-Stunden-Regel: Di 18:59 noch „Heute“, ab 19:00 „Nächster“; „Heute“ bleibt bis 23:59 erreichbar, ab 00:00 (Mi, kein Fahrtag) nicht mehr",
+      [auswahlBei(D, "17:00"), auswahlBei(D, "18:59"), auswahlBei(D, "19:00"), auswahlBei(D, "23:59"), auswahlBei("2026-10-28", "00:00")],
+      [[["heute", "naechster"], "heute"], [["heute", "naechster"], "heute"], [["heute", "naechster"], "naechster"], [["heute", "naechster"], "naechster"], [["naechster"], "naechster"]]);
+    seite = ohneTags(w.bildWetter(zeit(D, "17:30")));
+    wahr("„Heute“ (Di 17:30): Überschrift „Heute, Di 27.10.“, beide Fahrten eingeklappt „vorbei ›“; die Übersicht zeigt schon Fr 30.10.",
+      seite.includes("Heute Di 27.10. Nächster Fr 30.10. Heute, Di 27.10. Hinfahrt 06:00–07:00 · vorbei › Rückfahrt 16:00–17:00 · vorbei ›") &&
+      ohneTags(w.wetterKachel(zeit(D, "17:30"))).startsWith("🌦️ Fr 30.10. (vorläufig) · Hin grün · Rück grün"), seite);
+    // Ein Tipp gilt, bis sich die Voreinstellung ändert
+    w.wetterWahlSetzen("naechster", zeit(D, "17:30"));
+    gleich("Tipp auf „Nächster“ um 17:30: gilt um 18:59 (Voreinstellung weiter „Heute“)", [auswahlBei(D, "17:30")[1], auswahlBei(D, "18:59")[1], umschalterText(D, "18:00")],
+      ["naechster", "naechster", ["Heute Di 27.10.", "Nächster Fr 30.10. *"]]);
+    seite = ohneTags(w.bildWetter(zeit(D, "18:00")));
+    wahr("… der Reiter zeigt dann den nächsten Fahrtag", seite.includes("Nächster Fr 30.10. Fr 30.10. · in 3 Tagen · vorläufig") && seite.includes("Hinfahrt 06:00–07:00 grün"), seite);
+    w.wetterWahlSetzen("heute", zeit(D, "20:00"));
+    gleich("Tipp auf „Heute“ um 20:00: gilt bis 23:59, um 00:00 zurück zur Voreinstellung", [auswahlBei(D, "20:00")[1], auswahlBei(D, "23:59")[1], auswahlBei("2026-10-28", "00:00")[1]],
+      ["heute", "heute", "naechster"]);
+    w.eval("wetterWahl = null");
+    gleich("Ein Tipp auf eine Auswahl, die es nicht gibt, ändert nichts", (w.wetterWahlSetzen("heute", zeit(D, "10:00")), w.eval("wetterWahl")), null);
+    gleich("Wochenende: Fr 17:00 „Heute · Fr 30.10. | Nächster · Mo 02.11.“; Sa 10:00 und So 23:59 kein Umschalter",
+      [umschalterText("2026-10-30", "17:00"), umschalterText("2026-10-31", "10:00"), umschalterText("2026-11-01", "23:59")],
+      [["Heute Fr 30.10. *", "Nächster Mo 02.11."], null, null]);
+    // Eingeklappte Fahrt per Tipp aufklappen (im Reiter)
+    w.eval("aktiverTab = 'wetter'; zeichnen()");
+    const T74 = zeit(D, "17:30");
+    w.document.getElementById("inhalt").innerHTML = w.bildWetter(T74);
+    w.document.querySelector('#inhalt .fahrt-vorbei[data-schluessel="' + D + '|rueckfahrt"]').click();
+    w.document.getElementById("inhalt").innerHTML = w.bildWetter(T74);
+    const rueckOffen = [...w.document.querySelectorAll("#inhalt .karte")].find(k => ohneTags(k.innerHTML).startsWith("Rückfahrt 16:00–17:00 · vorbei ⌄"));
+    gleich("Tipp auf „vorbei ›“: die Karte klappt vollständig auf (Ampel, Kleidung, Wind); die andere bleibt eingeklappt",
+      [!!rueckOffen, rueckOffen && ohneTags(rueckOffen.innerHTML).includes("👕 Kleidung"), rueckOffen && ohneTags(rueckOffen.innerHTML).includes("🧭 Wind"),
+        w.document.querySelectorAll("#inhalt .fahrt-vorbei").length], [true, true, true, 1]);
+    rueckOffen.querySelector('[data-action="fahrt-aufklappen"]').click();
+    w.document.getElementById("inhalt").innerHTML = w.bildWetter(T74);
+    gleich("… ein Tipp auf den Kopf klappt sie wieder ein", w.document.querySelectorAll("#inhalt .fahrt-vorbei").length, 2);
+    // Warnungen bei „Heute“: nur die, die noch gelten
+    await laden(ruhig(), dwdMit(W("STURMBÖEN", "Moderate", "15:00", "16:30"), W("FROST", "Minor", "18:00", "23:00")), T74);
+    gleich("„Heute“ nach der Fahrt: nur Warnungen, die noch gelten", w.wetterAnsicht(T74).warnungen.map(x => x.ereignis), ["FROST"]);
+    // Weiterer Ort: dritte Auswahl, nur wenn er aktiv ist
+    wetterDaten({ weitererOrt: { name: "Ferienort", lat: 47.5, lon: 11, aktiv: true } });
+    await laden(ruhigDrei(), undefined, zeit(D, "06:00"));
+    gleich("Weiterer Ort aktiv: Di 10:00 „Heute · Di 27.10. | 📍 Ferienort“, Di 17:30 drei Felder, Mi 10:00 „Nächster · Fr 30.10. | 📍 Ferienort“",
+      [umschalterText(D, "10:00"), umschalterText(D, "17:30"), umschalterText("2026-10-28", "10:00")],
+      [["Heute Di 27.10. *", "📍 Ferienort"], ["Heute Di 27.10. *", "Nächster Fr 30.10.", "📍 Ferienort"], ["Nächster Fr 30.10. *", "📍 Ferienort"]]);
+    w.wetterWahlSetzen("ort", zeit(D, "10:00"));
+    seite = ohneTags(w.bildWetter(zeit(D, "10:00")));
+    wahr("Tipp auf den Ort: Wetter dort heute und morgen, ohne Hin- und Rückfahrt, mit „Nicht mehr zeigen“; Warnungen „für heute und morgen“",
+      seite.includes("📍 Ferienort (weiterer Ort) Wetter an diesem Ort für heute und morgen, ohne Hin- und Rückfahrt. Nicht mehr zeigen Heute, Di 27.10. 10 °C bis 10 °C") &&
+      seite.includes("Morgen, Mi 28.10.") && !seite.includes("Hinfahrt") && seite.includes("Keine amtlichen Warnungen für heute und morgen."), seite);
+    gleich("Übersicht mit aktivem weiterem Ort: Fahrtag-Zeile, darunter eine Zeile zum Ort (auch wenn im Reiter der Ort gewählt ist)",
+      ohneTags(w.wetterKachel(zeit(D, "10:00"))).replace(/ Nicht aktuell – Stand: .*$/, ""), "🌦️ Heute, Di 27.10. · Rück grün 📍 Ferienort heute: 10 °C bis 10 °C · Regen 0 %");
+    gleich("Eintragswetter: nur die Orte der Strecke aus der gemeinsamen Abfrage", [!!w.wetterAusVorhersage(D), w.wetterAusVorhersage(D).hin.temperatur], [true, 10]);
+    w.eval("wetterWahl = null");
+    w.eval("daten.einstellungen.wetter.weitererOrt.aktiv = false");
+    gleich("Weiterer Ort nicht aktiv: keine Auswahl für ihn, keine Zeile auf der Übersicht",
+      [auswahlBei(D, "17:30")[0], umschalterText(D, "10:00"), ohneTags(w.wetterKachel(zeit(D, "10:00"))).includes("Ferienort")], [["heute", "naechster"], null, false]);
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
+    wetterLeeren();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
