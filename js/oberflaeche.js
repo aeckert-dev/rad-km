@@ -8,8 +8,10 @@
 const fenster = document.getElementById("fenster");
 const fensterInhalt = document.getElementById("fensterinhalt");
 
-function fensterOeffnen(html) {
+// "unten": Fenster von unten (über der Home-Zone), z. B. „Heute später los“
+function fensterOeffnen(html, { unten = false } = {}) {
   fensterInhalt.innerHTML = html;
+  fenster.classList.toggle("unten", unten);
   if (!fenster.open) fenster.showModal();
   fenster.scrollTop = 0;
 }

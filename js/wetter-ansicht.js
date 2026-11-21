@@ -167,6 +167,96 @@ function heuteFahrtHtml(f) {
   if (fw) html += '<button type="button" class="leise weg" data-action="eintrag-ansehen" data-id="' + e.id + '">Gespeichertes Wetter dieser Fahrt ›</button>';
   return html;
 }
+// ---------- „Heute später los …“ (B14.2) ----------
+
+// Fenster von unten: Abfahrt, Schnellwahl ab der geplanten Abfahrt (die Tasten
+// addieren nicht auf), Vorschau der Ampel. Gilt nur für heute; die Einstellungen
+// bleiben. Gespeichert wird nur auf dem Gerät (radkm-heute-abfahrt).
+let formSpaeter = null; // { art, datum, geplant, jetzt }
+function spaeterText(min) { return "+" + (min < 60 ? min + " min" : zahl1.format(min / 60) + " h"); }
+function spaeterFormular(art, jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter, h = isoAusDate(new Date(jetzt));
+  const zf = fahrtZeitfenster(art, h, w, abweichungFuer(jetzt, w)), plan = fahrtZeitfenster(art, h, w, null);
+  formSpaeter = { art, datum: h, geplant: zf.geplant, jetzt };
+  fensterOeffnen('<h2>' + FAHRT_NAME[art] + ': heute später los</h2>' +
+    '<div class="klein">Geplant: Abfahrt ' + plan.geplant + ', Fahrt ' + plan.von + '–' + plan.bis + '. Die Dauer bleibt. Gilt nur für heute; die Einstellungen bleiben.</div>' +
+    '<label for="sp-abfahrt">Abfahrt</label><input type="time" id="sp-abfahrt" value="' + (zf.abfahrt || zf.geplant) + '" data-change="spaeter-zeit" data-input="spaeter-zeit">' +
+    '<div class="schnellwahl" role="group" aria-label="Später als geplant">' + SPAETER_MINUTEN.map(m =>
+      '<button type="button" data-action="spaeter-plus" data-min="' + m + '" aria-pressed="false">' + spaeterText(m) + '</button>').join("") + '</div>' +
+    '<div id="sp-vorschau" class="sp-vorschau" aria-live="polite"></div>' +
+    '<div class="knopfreihe"><button type="button" data-action="fenster-zu">Abbrechen</button>' +
+    '<button type="button" class="primaer" data-action="spaeter-uebernehmen">Übernehmen</button></div>', { unten: true });
+  spaeterAktualisieren();
+}
+// Schnellwahl: immer ab der geplanten Abfahrt (ein erneuter Tipp ändert nichts)
+function spaeterPlus(min) {
+  const el = document.getElementById("sp-abfahrt");
+  if (!el || !formSpaeter) return;
+  el.value = uhrzeitAus(minutenAus(formSpaeter.geplant) + min);
+  spaeterAktualisieren();
+}
+// Hervorhebung der Schnellwahl und Vorschau der Ampel für die gewählte Abfahrt
+function spaeterAktualisieren() {
+  const el = document.getElementById("sp-abfahrt"), f = formSpaeter;
+  if (!el || !f) return;
+  const neu = el.value.slice(0, 5), gueltig = istUhrzeit(neu), diff = gueltig ? minutenAus(neu) - minutenAus(f.geplant) : null;
+  document.querySelectorAll('#fensterinhalt [data-action="spaeter-plus"]').forEach(b => {
+    const an = Number(b.dataset.min) === diff;
+    b.classList.toggle("aktiv", an);
+    b.setAttribute("aria-pressed", String(an));
+  });
+  const vorschau = document.getElementById("sp-vorschau"), w = daten.einstellungen.wetter;
+  const fehler = gueltig ? abweichungPruefen(f.art, neu, f.datum, w, abweichungFuer(f.jetzt, w)) : "Bitte eine Uhrzeit eingeben, z. B. 18:30.";
+  if (fehler) { vorschau.innerHTML = '<div class="hinweis warn">' + esc(fehler) + '</div>'; return; }
+  const v = spaeterVorschau(f.art, neu, f.datum, f.jetzt);
+  vorschau.innerHTML = '<div class="klein">Vorschau ' + FAHRT_NAME[f.art] + ' ' + v.zf.von + '–' + v.zf.bis + (diff === 0 ? " (wie geplant)" : "") + '</div>' +
+    (v.bewertung ? '<div class="ampelzeile">' + ampelText(v.bewertung) + '</div>' : '<div class="klein">Für diese Zeit liegt noch keine Vorhersage vor.</div>');
+}
+// „Übernehmen“: Ampel, Kleidung, Wind, Sonne und Abfahrtsfenster rechnen dann mit
+// dem neuen Zeitfenster. Die geplante Zeit gilt wie „zurücksetzen“.
+async function spaeterUebernehmen() {
+  const f = formSpaeter, el = document.getElementById("sp-abfahrt");
+  if (!f || !el) return;
+  const w = daten.einstellungen.wetter, neu = el.value.slice(0, 5), abw = abweichungFuer(f.jetzt, w);
+  const fehler = abweichungPruefen(f.art, neu, f.datum, w, abw);
+  if (fehler) { alert(fehler); return; }
+  abw[f.art] = neu === f.geplant ? null : neu;
+  if (!abweichungSchreiben(abw)) { alert("Die Abfahrt lässt sich auf diesem Gerät nicht speichern."); return; }
+  fensterSchliessen();
+  formSpaeter = null;
+  zeichnen();
+  meldung(abw[f.art] ? FAHRT_NAME[f.art] + " heute ab " + neu + " statt " + f.geplant : FAHRT_NAME[f.art] + " wieder wie geplant");
+  await eintragWetterNachVerschiebung(f.art, f.datum, f.jetzt);
+}
+// „zurücksetzen“: zurück zur Planung (nur so)
+async function spaeterZuruecksetzen(art, jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter, abw = abweichungFuer(jetzt, w);
+  if (!abw[art]) return;
+  abw[art] = null;
+  if (!abweichungSchreiben(abw)) return;
+  zeichnen();
+  meldung(FAHRT_NAME[art] + " wieder wie geplant");
+  await eintragWetterNachVerschiebung(art, abw.datum, jetzt);
+}
+// Ist für heute schon ein Eintrag mit Wetter aus der Vorhersage gespeichert, fragt
+// die App, ob das Wetter dieser Fahrt für das neue Zeitfenster neu berechnet wird.
+// Die Rückmeldung zur Kleidung bleibt; ohne Zustimmung bleibt alles, wie es ist.
+async function eintragWetterNachVerschiebung(art, datum, jetzt = Date.now()) {
+  const e = eintragAm(datum), k = art === "hinfahrt" ? "hin" : "rueck";
+  if (!e || !mitWetter(e) || !e.wetter || e.wetter.quelle !== "vorhersage") return false;
+  const neu = wetterAusVorhersage(datum, null, jetzt), z = neu && neu[k];
+  if (!z) return false;
+  const alt = e.wetter[k];
+  if (alt && alt.von === z.von && alt.bis === z.bis && alt.abfahrt === z.abfahrt) return false;
+  if (!await frage("Für heute ist schon ein Eintrag mit Wetter gespeichert. Das gespeicherte Wetter der " + FAHRT_NAME[art] + " für die neue Zeit (" + z.von + "–" + z.bis +
+    ") neu berechnen?<br><br>Deine Rückmeldung zur Kleidung bleibt.", "Neu berechnen", "Nein")) return false;
+  mitRueckgaengig(() => {
+    const x = daten.eintraege.find(y => y.id === e.id);
+    x.wetter = Object.assign({}, x.wetter, { stand: neu.stand, [k]: Object.assign({}, z, { rueckmeldung: x.wetter[k] ? x.wetter[k].rueckmeldung : null }) });
+  }, "Gespeichertes Wetter der " + FAHRT_NAME[art] + " neu berechnet", () => {});
+  return true;
+}
+
 // Vorbeigegangene Fahrt auf- bzw. zuklappen
 function fahrtAufklappen(schluessel) {
   if (fahrtAufgeklappt.has(schluessel)) fahrtAufgeklappt.delete(schluessel); else fahrtAufgeklappt.add(schluessel);

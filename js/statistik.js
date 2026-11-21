@@ -11,7 +11,8 @@ function minutenJetzt(d = new Date()) { return d.getHours() * 60 + d.getMinutes(
 
 // Eingestellte Fahrtage der letzten 14 Tage (bis gestern) ohne Eintrag, ab dem
 // Startdatum; der heutige Tag ab der Uhrzeit "hinweisHeuteAb" (Standard 18:00),
-// wenn der Schalter "Hinweis schon am selben Tag" (hinweisHeuteAn) an ist.
+// wenn der Schalter "Hinweis schon am selben Tag" (hinweisHeuteAn) an ist (bei
+// einer verschobenen Abfahrt frühestens nach dem Ende der verschobenen Fahrt).
 // "minuten" ist die Uhrzeit am Stichtag; ohne Angabe die aktuelle, wenn der
 // Stichtag heute ist, sonst 0:00. Ein Eintrag mit 0 km ("keine Fahrt") und eine
 // Wochensumme in derselben Woche gelten als erfasst.
@@ -21,7 +22,11 @@ function fehlendeFahrtage(h = heute(), minuten = h === heute() ? minutenJetzt() 
   const fahrtage = new Set(daten.einstellungen.fahrtage);
   const wochen = new Set(daten.eintraege.filter(e => e.typ === "woche").map(e => montagDerWoche(e.datum)));
   const es = daten.einstellungen;
-  const bis = es.hinweisHeuteAn && minuten >= minutenAus(es.hinweisHeuteAb) ? h : plusTage(h, -1);
+  // Ab 5e: Ist heute eine Abfahrt verschoben („Heute später los“), erscheint der
+  // Hinweis für heute frühestens nach dem Ende der verschobenen Fahrt
+  const ende = verschobenesEndeMin(h);
+  const ab = Math.max(minutenAus(es.hinweisHeuteAb), ende ?? 0);
+  const bis = es.hinweisHeuteAn && minuten >= ab ? h : plusTage(h, -1);
   const tage = [];
   for (let d = plusTage(h, -14); d <= bis; d = plusTage(d, 1)) {
     if (d >= f.startdatum && fahrtage.has(isoWochentag(d)) && !eintragAm(d) && !wochen.has(montagDerWoche(d))) tage.push(d);

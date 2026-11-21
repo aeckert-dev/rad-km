@@ -16,15 +16,21 @@ const TAG_ENDE_MIN = 24 * 60 - 1;
 
 // Nur auf dem Gerät (Hilfsspeicher, nicht in den Daten und nicht in der Sicherung):
 // { datum, hinfahrt: "HH:MM" | null, rueckfahrt: "HH:MM" | null }. Sie gilt nur am
-// Tag "datum"; an jedem anderen Tag wird sie beim Lesen gelöscht.
+// Tag "datum"; an jedem anderen Tag zählt sie nicht (und wird beim Start gelöscht).
 function abweichungLesen(h = heute()) {
   const leer = { datum: h, hinfahrt: null, rueckfahrt: null };
   let a = null;
-  try { a = JSON.parse(localStorage.getItem(ABWEICHUNG_SCHLUESSEL) || "null"); } catch (e) { a = undefined; }
-  if (a === null) return leer;
+  try { a = JSON.parse(localStorage.getItem(ABWEICHUNG_SCHLUESSEL) || "null"); } catch (e) { a = null; }
   const gueltig = istObjekt(a) && a.datum === h && FAHRTARTEN.every(k => (a[k] ?? null) === null || istUhrzeit(a[k]));
-  if (!gueltig) { abweichungLoeschen(); return leer; }
-  return { datum: h, hinfahrt: a.hinfahrt ?? null, rueckfahrt: a.rueckfahrt ?? null };
+  return gueltig ? { datum: h, hinfahrt: a.hinfahrt ?? null, rueckfahrt: a.rueckfahrt ?? null } : leer;
+}
+// Beim Start: eine Abweichung von einem anderen Tag (oder eine unlesbare) löschen
+function abweichungAufraeumen(h = heute()) {
+  let roh = null;
+  try { roh = localStorage.getItem(ABWEICHUNG_SCHLUESSEL); } catch (e) { return; }
+  if (roh === null) return;
+  const a = abweichungLesen(h);
+  if (!a.hinfahrt && !a.rueckfahrt) abweichungLoeschen();
 }
 function abweichungLoeschen() { try { localStorage.removeItem(ABWEICHUNG_SCHLUESSEL); } catch (e) { /* nicht verfügbar */ } }
 // Speichert die Abweichung (ohne verschobene Fahrt wird der Speicher gelöscht); false, wenn das nicht geht
@@ -78,6 +84,13 @@ function abweichungFuer(jetzt, w = daten.einstellungen.wetter) {
   return erg;
 }
 
+// Ende der Fahrten am Tag "datum" in Minuten nach Mitternacht, wenn eine Abfahrt
+// verschoben ist; sonst null (für den Hinweis „Fahrtag ohne Eintrag“)
+function verschobenesEndeMin(datum, w = daten.einstellungen.wetter) {
+  const abw = abweichungFuer(zeitpunktAm(datum, 0), w);
+  if (!abw.hinfahrt && !abw.rueckfahrt) return null;
+  return Math.max(...FAHRTARTEN.map(art => fahrtZeitfenster(art, datum, w, abw).bisMin));
+}
 // Ende der Fahrten am Tag "datum" (ms): das spätere Ende von Hin- und Rückfahrt
 function fahrtEnde(datum, w = daten.einstellungen.wetter, abw = null) {
   return Math.max(...FAHRTARTEN.map(art => fahrtZeitfenster(art, datum, w, abw).bisMs));

@@ -388,6 +388,16 @@ dialog {
   overflow: auto;
 }
 dialog::backdrop { background: rgba(0,0,0,.45); }
+/* Fenster von unten („Heute später los“): unten angedockt, über der Home-Zone */
+dialog.unten {
+  margin: auto auto 0; width: 100%; max-width: 560px; border-radius: 16px 16px 0 0;
+  max-height: calc(100% - env(safe-area-inset-top) - 24px);
+}
+dialog.unten .fensterinhalt { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+.schnellwahl { display: flex; gap: 6px; margin-top: 10px; }
+.schnellwahl button { flex: 1 1 0; min-height: 44px; padding: 6px 2px; }
+.schnellwahl button.aktiv { background: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+.sp-vorschau { margin-top: 10px; min-height: 44px; }
 dialog .fensterinhalt { padding: 18px 16px 16px; }
 dialog h2 { margin-top: 0; }
 

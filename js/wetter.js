@@ -839,6 +839,21 @@ function wetterAnsicht(jetzt = Date.now()) {
   return a;
 }
 
+// Vorhersage und Warnungen der Strecke aus dem Zwischenspeicher (orteDaten null ohne passende Vorhersage)
+function streckeWetter(w = daten.einstellungen.wetter) {
+  const alle = wetterOrte(w), orte = streckenOrte(w), n0 = orte.length;
+  const schluessel = alle.map(x => ortSchluessel(x.ort)).join(";");
+  const passend = teil => teil && teil.schluessel === schluessel && Array.isArray(teil.orte) && teil.orte.length === alle.length ? teil : null;
+  const v = passend(wetter.vorhersage), wa = passend(wetter.warnungen);
+  return { orte, orteDaten: v && n0 ? v.orte.slice(0, n0) : null, warnungen: wa && n0 ? warnungenZusammen({ orte: wa.orte.slice(0, n0) }, orte) : [] };
+}
+// Vorschau „Heute später los“: Zeitfenster und Ampel der Fahrt "art" am Tag "datum" mit der Abfahrt "neu"
+function spaeterVorschau(art, neu, datum, jetzt = Date.now()) {
+  const w = daten.einstellungen.wetter, abw = Object.assign({}, abweichungFuer(jetzt, w), { datum, [art]: neu });
+  const zf = fahrtZeitfenster(art, datum, w, abw), s = streckeWetter(w);
+  return { zf, bewertung: s.orteDaten ? fahrtBewerten(s.orteDaten, s.warnungen, zf.vonMs, zf.bisMs, w.ampel) : null };
+}
+
 // ---------- Wetter je Eintrag (nur Arbeitsweg) ----------
 
 // Bekommt der Eintrag Wetter? Nur Tages-Einträge mit Merkmal "Arbeitsweg" und mehr als 0 km

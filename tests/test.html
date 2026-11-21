@@ -5375,6 +5375,196 @@ async function start() {
       [auswahlBei(D, "17:30")[0], umschalterText(D, "10:00"), ohneTags(w.wetterKachel(zeit(D, "10:00"))).includes("Ferienort")], [["heute", "naechster"], null, false]);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
+
+    // -------------------------------------------------------------
+    // 75. „Heute später los …“ (B14.2, Release 5e)
+    // -------------------------------------------------------------
+    abschnitt("75. „Heute später los …“ (B14.2): Fenster von unten, Schnellwahl ab der geplanten Abfahrt, Vorschau, Grenzen, neues Zeitfenster überall, nur auf dem Gerät");
+    const ABW = "radkm-test-heute-abfahrt";
+    localStorage.removeItem(ABW);
+    w.eval("wetterWahl = null");
+    const T75 = zeit(D, "15:00");
+    wetterDaten();
+    // Regen während der geplanten Rückfahrt (16:00–17:00), danach trocken
+    const om75 = aendern(ruhig(), "precipitation_probability", D, "16:00", "17:00", 70);
+    await laden(om75, undefined, T75);
+    const daten75 = localStorage.getItem(TEST_SCHLUESSEL);
+    const einst75 = kopie(w.eval("daten.einstellungen"));
+    const karteVon = (jetzt, art) => { const d = w.document.createElement("div"); d.innerHTML = w.bildWetter(jetzt);
+      return [...d.querySelectorAll(".karte")].find(k => ohneTags(k.innerHTML).startsWith(art)); };
+    gleich("Karte der Rückfahrt von heute: Knopf „Heute später los …“; ein künftiger Fahrtag hat keinen",
+      [ohneTags(karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]').innerHTML),
+        !!karteVon(zeit("2026-10-28", "10:00"), "Rückfahrt").querySelector('[data-action="spaeter-los"]')], ["Heute später los …", false]);
+    w.spaeterFormular("rueckfahrt", T75);
+    const sp = () => feld("sp-abfahrt").value, aktivTasten = () => [...w.document.querySelectorAll('#fensterinhalt [data-action="spaeter-plus"].aktiv')].map(b => b.textContent);
+    const vorschau = () => ohneTags(feld("sp-vorschau").innerHTML);
+    const tippeSp = min => w.document.querySelector('#fensterinhalt [data-action="spaeter-plus"][data-min="' + min + '"]').click();
+    gleich("Fenster von unten: Feld „Abfahrt“ 16:00, Schnellwahl +30 min, +1 h, +1,5 h, +2 h, keine hervorgehoben, Vorschau wie geplant (gelb)",
+      [w.document.getElementById("fenster").classList.contains("unten"), feld("sp-abfahrt").type, sp(),
+        [...w.document.querySelectorAll('#fensterinhalt [data-action="spaeter-plus"]')].map(b => b.textContent), aktivTasten(), vorschau()],
+      [true, "time", "16:00", ["+30 min", "+1 h", "+1,5 h", "+2 h"], [], "Vorschau Rückfahrt 16:00–17:00 (wie geplant) gelb: 70 % Regen"]);
+    tippeSp(60);
+    const nachEins = [sp(), aktivTasten()];
+    tippeSp(60);
+    const nachZwei = [sp(), aktivTasten()];
+    tippeSp(120); const nach120 = sp();
+    tippeSp(30); const nach30 = sp();
+    tippeSp(90);
+    gleich("Schnellwahl rechnet immer ab der geplanten Abfahrt 16:00 und addiert nicht auf; die gewählte Taste ist hervorgehoben, ein erneuter Tipp ändert nichts",
+      [nachEins, nachZwei, nach120, nach30, sp(), aktivTasten(), vorschau()],
+      [["17:00", ["+1 h"]], ["17:00", ["+1 h"]], "18:00", "16:30", "17:30", ["+1,5 h"], "Vorschau Rückfahrt 17:30–18:30 grün: trocken"]);
+    const setzeSp = v => { feld("sp-abfahrt").value = v; feld("sp-abfahrt").dispatchEvent(new w.Event("change", { bubbles: true })); };
+    setzeSp("18:30");
+    gleich("Uhrzeit von Hand 18:30: keine Taste hervorgehoben, Vorschau 18:30–19:30 (die Dauer bleibt)", [aktivTasten(), vorschau()], [[], "Vorschau Rückfahrt 18:30–19:30 grün: trocken"]);
+    setzeSp("23:30");
+    alerts.length = 0;
+    await w.spaeterUebernehmen();
+    gleich("Grenze: Die Fahrt muss vor Mitternacht enden; „Übernehmen“ lehnt ab, nichts gespeichert",
+      [vorschau(), alerts.length, localStorage.getItem(ABW), w.document.getElementById("fenster").open], ["Die Fahrt muss vor Mitternacht enden; späteste Abfahrt 22:59.", 1, null, true]);
+    setzeSp("22:59");
+    gleich("… 22:59 geht (Ende 23:59)", vorschau(), "Vorschau Rückfahrt 22:59–23:59 grün: trocken");
+    w.document.querySelector('#fensterinhalt [data-action="fenster-zu"]').click();
+    gleich("„Abbrechen“: nichts gespeichert", [localStorage.getItem(ABW), w.document.getElementById("fenster").open], [null, false]);
+    w.spaeterFormular("hinfahrt", zeit(D, "05:00"));
+    setzeSp("16:30");
+    gleich("Grenze: Die Hinfahrt muss vor der Rückfahrt enden", vorschau(), "Die Hinfahrt muss vor der Rückfahrt (ab 16:00) enden.");
+    w.fensterSchliessen();
+    // Übernehmen: nur auf dem Gerät, die Einstellungen und Daten bleiben
+    w.spaeterFormular("rueckfahrt", T75);
+    setzeSp("18:30");
+    await w.spaeterUebernehmen();
+    gleich("„Übernehmen“ 18:30: nur im Hilfsspeicher radkm-heute-abfahrt; Daten und Einstellungen unverändert; Meldung",
+      [JSON.parse(localStorage.getItem(ABW)), localStorage.getItem(TEST_SCHLUESSEL) === daten75, kopie(w.eval("daten.einstellungen")), toast()[0], w.exportInhalt().includes("18:30")],
+      [{ datum: D, hinfahrt: null, rueckfahrt: "18:30" }, true, einst75, "Rückfahrt heute ab 18:30 statt 16:00", false]);
+    ans = w.wetterAnsicht(T75);
+    const r75 = ans.naechsterTag.fahrten[1];
+    gleich("Neues Zeitfenster 18:30–19:30: Ampel, Kleidung „beim Fahren“, Wind, Sonne und Abfahrtsfenster dafür",
+      [r75.fahrt.von, r75.fahrt.bis, r75.bewertung.text, !!r75.kleidung && !!r75.beimFahren, !!r75.wind, r75.sonne, r75.abfahrt && w.uhrzeitAus(r75.abfahrt.felder[0].minuten),
+        r75.abfahrt && r75.abfahrt.ueblich.minuten],
+      ["18:30", "19:30", "grün: trocken", true, true, "🌇 Sonnenuntergang 16:49 · Fahrt im Dunkeln", "18:00", 18 * 60 + 30]);
+    seite = ohneTags(karteVon(T75, "Rückfahrt").innerHTML);
+    wahr("Karte: „Abfahrt heute 18:30 statt 16:00 · zurücksetzen“ und „Andere Zeit …“", seite.startsWith("Rückfahrt 18:30–19:30 grün: trocken") &&
+      seite.includes("🕒 Abfahrt heute 18:30 statt 16:00 · zurücksetzen Andere Zeit …") && !seite.includes("Heute später los"), seite);
+    w.spaeterFormular("rueckfahrt", T75);
+    gleich("„Andere Zeit …“: das Fenster beginnt mit 18:30, Schnellwahl weiter ab 16:00", [sp(), (tippeSp(30), sp())], ["18:30", "16:30"]);
+    w.fensterSchliessen();
+    // Das verschobene Ende gilt überall, wo das Ende der Fahrt zählt
+    const tag75 = u => w.wetterAnsicht(zeit(D, u));
+    gleich("Ende der Fahrt 19:30 (über die geplante Endzeit 17:00 hinaus): bis 19:29 heute, ab 19:30 Fr; Umschalter erst ab 19:30, „Heute“ voreingestellt bis 21:29",
+      [tag75("17:00").naechster.datum, tag75("19:29").naechster.datum, tag75("19:30").naechster.datum, tag75("19:29").auswahl.optionen.length,
+        tag75("19:30").auswahl.wert, tag75("21:29").auswahl.wert, tag75("21:30").auswahl.wert],
+      [D, D, "2026-10-30", 1, "heute", "heute", "naechster"]);
+    gleich("Übersicht: um 19:29 noch heute (nur die Rückfahrt), um 19:30 schon Fr",
+      [kachelAm(D, "19:29"), kachelAm(D, "19:30")], ["🌦️ Heute, Di 27.10. · Rück grün", "🌦️ Fr 30.10. (vorläufig) · Hin grün · Rück grün"]);
+    // Ergänzung: Hinweis „Fahrtag ohne Eintrag“ frühestens nach dem Ende der verschobenen Fahrt
+    w.eval("daten.einstellungen.hinweisHeuteAb = '17:00'");
+    const fehltHeute = u => w.fehlendeFahrtage(D, w.minutenAus(u)).includes(D);
+    gleich("Hinweis „Fahrtag ohne Eintrag“ (eingestellt 17:00, Rückfahrt bis 19:30): um 17:00 und 19:29 nicht, ab 19:30 schon",
+      [fehltHeute("17:00"), fehltHeute("19:29"), fehltHeute("19:30")], [false, false, true]);
+    const abwSicher = localStorage.getItem(ABW);
+    localStorage.removeItem(ABW);
+    gleich("… ohne Verschiebung wie bisher: ab 17:00", [fehltHeute("16:59"), fehltHeute("17:00")], [false, true]);
+    w.eval("daten.einstellungen.hinweisHeuteAb = '22:00'");
+    localStorage.setItem(ABW, abwSicher);
+    gleich("… gilt die eingestellte Uhrzeit später (22:00), bleibt sie", [fehltHeute("19:30"), fehltHeute("22:00")], [false, true]);
+    w.eval("daten.einstellungen.hinweisHeuteAb = '18:00'");
+    // Eintrag speichern: Wetter für das tatsächliche Zeitfenster mit der tatsächlichen Abfahrt
+    const zeitVon = f => [f.von, f.bis, f.abfahrt, f.geplanteAbfahrt];
+    const ew75 = w.wetterAusVorhersage(D, null, T75);
+    gleich("Eintragswetter: Rückfahrt 18:30–19:30 mit Abfahrt 18:30 statt 16:00 (trocken, grün); Hinfahrt wie geplant",
+      [zeitVon(ew75.rueck), ew75.rueck.ampel, ew75.rueck.regenWahrscheinlichkeit, zeitVon(ew75.hin)],
+      [["18:30", "19:30", "18:30", "16:00"], "gruen", 0, ["06:00", "07:00", "06:00", null]]);
+    const jetztEcht = w.Date.now;
+    w.Date.now = () => T75;
+    const e75 = { id: "e75", datum: D, km: 14.2, vorlage: null, notiz: "", typ: "tag", arbeitsweg: true, wetter: null };
+    w.eintragWetterSetzen(e75);
+    w.Date.now = jetztEcht;
+    gleich("… ebenso beim Speichern eines Eintrags (eintragWetterSetzen)", [zeitVon(e75.wetter.rueck), zeitVon(e75.wetter.hin)], [["18:30", "19:30", "18:30", "16:00"], ["06:00", "07:00", "06:00", null]]);
+    w.eval("daten.eintraege.push(" + JSON.stringify(e75) + "); speichern()");
+    // „Wie war die Kleidung?“ erst nach dem verschobenen Ende
+    const offen75 = u => w.offeneRueckmeldungen(zeit(D, u)).map(x => x.art);
+    gleich("„Wie war die Kleidung?“: um 19:29 nur die Hinfahrt, ab 19:30 auch die Rückfahrt", [offen75("19:29"), offen75("19:30")], [["hin"], ["hin", "rueck"]]);
+    // Rückblick: das gespeicherte Zeitfenster gilt
+    const z75 = w.gespeicherteZeiten(w.eval("eintragAm('" + D + "')"));
+    const rb75 = w.fahrtenWetter(w.streckeWetter().orteDaten, D, "rueckblick", T75, T75, z75);
+    gleich("„Wetter nachtragen“ nimmt das gespeicherte Zeitfenster (Rückfahrt 18:30–19:30), nicht die Einstellungen", [zeitVon(rb75.rueck), rb75.rueck.ampel], [["18:30", "19:30", "18:30", "16:00"], "gruen"]);
+    gleich("Ohne gespeichertes Zeitfenster (vor 5e) gelten die Einstellungen", zeitVon(w.fahrtenWetter(w.streckeWetter().orteDaten, "2026-10-26", "rueckblick", T75, T75,
+      w.gespeicherteZeiten({ datum: "2026-10-26", wetter: { hin: { von: null, bis: null }, rueck: null } })).rueck), ["16:00", "17:00", "16:00", null]);
+    // Eintrag schon gespeichert, danach eine andere Zeit: Rückfrage, Rückmeldung bleibt
+    w.eval("eintragAm('" + D + "').wetter.rueck.rueckmeldung = 'passte'; speichern()");
+    const fragen75 = [];
+    let antwort75 = false;
+    w.frage = async text => { fragen75.push(ohneTags(text)); return antwort75; };
+    const vorFrage75 = localStorage.getItem(TEST_SCHLUESSEL);
+    w.spaeterFormular("rueckfahrt", T75);
+    setzeSp("17:00");
+    await w.spaeterUebernehmen();
+    gleich("Andere Zeit 17:00 bei gespeichertem Eintrag: Rückfrage; „Nein“ lässt den Eintrag, wie er ist",
+      [fragen75, localStorage.getItem(TEST_SCHLUESSEL) === vorFrage75, JSON.parse(localStorage.getItem(ABW)).rueckfahrt],
+      [["Für heute ist schon ein Eintrag mit Wetter gespeichert. Das gespeicherte Wetter der Rückfahrt für die neue Zeit (17:00–18:00) neu berechnen? Deine Rückmeldung zur Kleidung bleibt."],
+        true, "17:00"]);
+    antwort75 = true;
+    w.spaeterFormular("rueckfahrt", T75);
+    setzeSp("18:00");
+    await w.spaeterUebernehmen();
+    const re75 = () => w.eval("eintragAm('" + D + "').wetter");
+    gleich("„Neu berechnen“: Rückfahrt 18:00–19:00 neu, Rückmeldung „passte“ bleibt, Hinfahrt unverändert; mit „Rückgängig“",
+      [zeitVon(re75().rueck), re75().rueck.rueckmeldung, zeitVon(re75().hin), toast()],
+      [["18:00", "19:00", "18:00", "16:00"], "passte", ["06:00", "07:00", "06:00", null], ["Gespeichertes Wetter der Rückfahrt neu berechnet", true]]);
+    // zurücksetzen: zurück zur Planung, wieder mit Rückfrage
+    fragen75.length = 0;
+    await w.spaeterZuruecksetzen("rueckfahrt", T75);
+    gleich("„zurücksetzen“: Planung 16:00–17:00, Hilfsspeicher leer, Knopf wieder „Heute später los …“, Rückfrage für den Eintrag",
+      [localStorage.getItem(ABW), w.wetterAnsicht(T75).naechsterTag.fahrten[1].fahrt.von, !!karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]'),
+        ohneTags(karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]').innerHTML), fragen75.length, zeitVon(re75().rueck), re75().rueck.rueckmeldung],
+      [null, "16:00", true, "Heute später los …", 1, ["16:00", "17:00", "16:00", null], "passte"]);
+    w.frage = async () => true;
+    // Nach der Fahrt (auch wenn ich doch später fahre): Knopf in der aufgeklappten Karte
+    w.fahrtAufklappen(D + "|rueckfahrt");
+    w.wetterWahlSetzen("heute", zeit(D, "17:30"));
+    gleich("Nach der Fahrt: der Knopf steht in der aufgeklappten Karte von heute",
+      !!karteVon(zeit(D, "17:30"), "Rückfahrt").querySelector('[data-action="spaeter-los"][data-art="rueckfahrt"]'), true);
+    w.fahrtAufklappen(D + "|rueckfahrt");
+    w.eval("wetterWahl = null");
+    // Verfall: gilt nur heute
+    localStorage.setItem(ABW, JSON.stringify({ datum: D, hinfahrt: null, rueckfahrt: "18:30" }));
+    gleich("Am nächsten Tag zählt die Verschiebung nicht; beim Start wird sie gelöscht, am selben Tag nicht",
+      [w.abweichungLesen("2026-10-28"), w.wetterAnsicht(zeit("2026-10-30", "15:00")).naechsterTag.fahrten[1].fahrt.von,
+        (w.abweichungAufraeumen(D), localStorage.getItem(ABW) !== null), (w.abweichungAufraeumen("2026-10-28"), localStorage.getItem(ABW))],
+      [{ datum: "2026-10-28", hinfahrt: null, rueckfahrt: null }, "16:00", true, null]);
+    localStorage.setItem(ABW, "kaputt");
+    gleich("Unlesbarer Hilfsspeicher: gilt nicht, wird beim Start gelöscht", [w.abweichungLesen(D).rueckfahrt, (w.abweichungAufraeumen(D), localStorage.getItem(ABW))], [null, null]);
+    // Eine Verschiebung, die nach geänderten Einstellungen nicht mehr passt, gilt nicht
+    localStorage.setItem(ABW, JSON.stringify({ datum: D, hinfahrt: "15:30", rueckfahrt: null }));
+    gleich("Verschiebung, die nicht mehr passt (Hinfahrt über die Rückfahrt hinaus), gilt nicht", w.abweichungFuer(T75).hinfahrt, null);
+    localStorage.removeItem(ABW);
+
+    // -------------------------------------------------------------
+    // 76. „Gespeichertes Wetter dieser Fahrt ›“ (B14.3, Release 5e)
+    // -------------------------------------------------------------
+    abschnitt("76. „Gespeichertes Wetter dieser Fahrt ›“ (B14.3): in den Karten von heute, sobald der Eintrag gespeichert ist");
+    localStorage.setItem(ABW, JSON.stringify({ datum: D, hinfahrt: null, rueckfahrt: "18:30" }));
+    w.eval("daten.eintraege = daten.eintraege.filter(e => e.datum !== '" + D + "')");
+    gleich("Ohne Eintrag: kein Link", !!karteVon(T75, "Rückfahrt").querySelector('[data-action="eintrag-ansehen"]'), false);
+    w.Date.now = () => T75;
+    w.eintragWetterSetzen(e75);
+    w.Date.now = jetztEcht;
+    w.eval("daten.eintraege.push(" + JSON.stringify(e75) + ")");
+    const link76 = karteVon(T75, "Rückfahrt").querySelector('[data-action="eintrag-ansehen"]');
+    gleich("Mit gespeichertem Eintrag: Link in den Karten von heute (Hin- und Rückfahrt), nicht bei einem anderen Tag",
+      [link76 && ohneTags(link76.innerHTML), link76 && link76.dataset.id, !!karteVon(zeit(D, "05:00"), "Hinfahrt").querySelector('[data-action="eintrag-ansehen"]'),
+        !!karteVon(zeit("2026-10-28", "10:00"), "Rückfahrt").querySelector('[data-action="eintrag-ansehen"]')],
+      ["Gespeichertes Wetter dieser Fahrt ›", "e75", true, false]);
+    w.document.getElementById("inhalt").appendChild(link76);
+    link76.click();
+    const detail76 = ohneTags(fensterInhaltHtml());
+    wahr("Der Link öffnet den Eintrag mit seinem Wetter (Zeitfenster und tatsächliche Abfahrt)",
+      detail76.startsWith("Eintrag") && detail76.includes("Wetter Hinfahrt 06:00–07:00 grün") && detail76.includes("Rückfahrt 18:30–19:30 · Abfahrt 18:30 statt 16:00 grün"), detail76);
+    w.fensterSchliessen();
+    link76.remove();
+    localStorage.removeItem(ABW);
+    w.eval("daten.eintraege = daten.eintraege.filter(e => e.id !== 'e75')");
+    wetterLeeren();
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
