@@ -20,8 +20,9 @@ ist für das iPhone optimiert.
   Temperatur **beim Fahren** (mit Fahrtwind, Windrichtung und Windstärke je
   Teilstrecke) und Ampel-Grenzen selbst einstellen; bei Regen nach dem
   Zwiebelprinzip; die Rückmeldung „zu warm / passte / zu kalt“ nach der Fahrt
-  zählt je Stufe ab ihrer letzten Änderung (mit Änderungsprotokoll und Hinweis
-  „Stufe bearbeiten“)
+  (seit 5f mit „Wo?“ nach Körperbereichen und Kommentar) zählt je Stufe ab
+  ihrer letzten Änderung (mit Änderungsprotokoll und Hinweis „Stufe
+  bearbeiten“)
 - Wetter jeder Fahrt zur Arbeit beim Eintrag gespeichert, auf Wunsch auch
   nachträglich; Statistik „km bei Regen“, „Tage unter 0 °C“ und Ampelverteilung
 - Aktueller Kilometerstand und Summen für heute, diese Woche, diesen Monat, dieses Jahr
@@ -548,7 +549,10 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   (Kopf, Hals, Hände, Oberkörper, Beine, Füße); leere Bereiche (nichts
   anzuziehen) entfallen dort, damit die Karte kompakt bleibt. Darüber stehen
   beide Werte, fett der für die Stufe, z. B. „gefühlt 2 °C · **beim Fahren
-  −1 °C** (Gegenwind)“. Standardstufen (– = nichts):
+  −1 °C** (Gegenwind)“. Die Wertezeile darüber nennt deshalb seit 5f nur die
+  Temperatur, z. B. „−2 °C · Regen 0 %, 0 mm“ (vorher stand „(gefühlt …)“
+  doppelt da); beim weiteren Ort (ohne Kleidung) bleibt „(gefühlt … bis …)“.
+  Standardstufen (– = nichts):
 
   | Temperatur (beim Fahren bzw. gefühlt) | Kopf | Hals | Hände | Oberkörper | Beine | Füße |
   |---|---|---|---|---|---|---|
@@ -683,14 +687,43 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - Die Rückmeldung wird je Fahrt gespeichert (mit „Rückgängig“) und
     **verschiebt keine Grenzen**. Eine geänderte Rückmeldung ersetzt die
     vorige. Die App ändert nie selbst etwas an den Stufen.
+  - **Wo? und Kommentar** (seit 5f): Nach **zu warm** oder **zu kalt** klappt
+    darunter „Wo war es zu kalt?“ bzw. „Wo war es zu warm?“ auf, mit den
+    Schaltern **Kopf · Hals · Hände · Oberkörper · Beine · Füße**
+    (Mehrfachauswahl, erneutes Antippen wählt ab) und einem optionalen
+    einzeiligen **Kommentar** (höchstens 200 Zeichen, z. B.
+    „Unterziehhandschuhe unterwegs angezogen“). Beides gilt je Fahrt (Hin und
+    Rück getrennt) und wird still gespeichert – ohne Meldung, der Kommentar
+    schon beim Tippen. Wie jede Änderung beendet ein Tipp das Angebot
+    „Rückgängig“ der Rückmeldung.
+    - Im Reiter Wetter bleibt die Fahrt nach „zu warm“/„zu kalt“ in der Karte
+      „Wie war die Kleidung?“ stehen, bis du **Fertig** tippst; bei „passte“
+      verschwindet sie gleich.
+    - In der Detailansicht des Eintrags stehen Schalter und Kommentar bei der
+      jeweiligen Fahrt und lassen sich jederzeit ändern.
+    - **Wechsel des Urteils:** auf „passte“ werden Bereiche und Kommentar
+      geleert (die Meldung sagt es, mit „Rückgängig“); in die Gegenrichtung
+      (zu kalt ↔ zu warm) bleiben beide, die Meldung nennt sie („Bereiche
+      (Hände, Füße) und Kommentar übernommen“).
+    - Für VoiceOver sind die Bereiche Schalter in einer beschrifteten Gruppe
+      („Wo war es zu kalt? (Hinfahrt)“), das Kommentarfeld hat eine
+      Beschriftung.
   - **Auswertung** je Stufe ab ihrer **letzten Änderung** (seit 5d), z. B.
     „Rückmeldungen seit deiner Änderung am 08.11.: 3× zu kalt, 1× passte (bei
-    Regen: 1× zu kalt)“, ohne Änderung „seit 5d“. Gezählt werden Fahrten nach
+    Regen: 1× zu kalt)“, ohne Änderung „seit 5d“. Seit 5f gilt das auch für
+    Stufen ganz ohne Rückmeldung: „seit deiner Änderung am 21.11.: noch keine“
+    (vorher stand dort immer „seit 5d: noch keine“). Gezählt werden Fahrten nach
     der Änderung, deren Empfehlung nach der Änderung und nach der aktuellen
     Grundlage (Umschalter) berechnet wurde. Als Änderung einer Stufe zählt auch
     eine Grenze einer anderen Stufe, die ihren Bereich verschiebt (z. B. wird
     „3 bis 7 °C“ zu „3 bis 8 °C“), und der Umschalter (für alle Stufen); der
     Regenzusatz nicht. Die Meldung nach einer Rückmeldung nennt den neuen Stand.
+  - **Wo** (seit 5f): Unter der Zählung steht je Stufe eine Zeile nach
+    Körperbereichen, z. B. „Wo: Hände 2× zu kalt · Füße 1× zu kalt, 1× zu
+    warm“ (ab der letzten Änderung, nur wenn Bereiche genannt sind). Die
+    Unterseite der Stufe zeigt dazu die **letzten 5 Kommentare** ab der letzten
+    Änderung, neueste zuerst, z. B. „21.11. Hinfahrt, zu kalt:
+    „Unterziehhandschuhe unterwegs angezogen““.
   - **Vor 5d** gegebene Rückmeldungen (Stufe damals nach „gefühlt“) bleiben
     erhalten und stehen getrennt, z. B. „· vor 5d: 2× zu kalt“; sie lösen keinen
     Hinweis aus. Rückmeldungen zu Stufen, die es nicht mehr gibt (z. B. die
@@ -698,15 +731,21 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   - **Hinweis:** ab 2 gleichen Abweichungen seit der letzten Änderung, wenn sie
     häufiger sind als „passte“ (2× zu kalt und 5× passte: kein Hinweis), z. B.
     „Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide bei
-    Gegenwind)“ mit dem Knopf **Stufe bearbeiten**. In der Klammer stehen Wind
-    und Regen der Fahrten („1× bei Gegenwind, 1× bei Seitenwind“, „bei
-    Regen“); gibt es beide Richtungen gleich oft, heißt es „uneinheitlich“. Der
+    Gegenwind)“ mit dem Knopf **Stufe bearbeiten**. In der Klammer stehen seit
+    5f zuerst die genannten Bereiche der abweichenden Fahrten („beide Male
+    Hände“, „alle 3 Male Hände und Füße“, sonst gezählt „2× Hände, 1× Füße“;
+    Fahrten ohne Bereich zählen dafür nicht), nach einem Semikolon Wind und
+    Regen der Fahrten („1× bei Gegenwind, 1× bei Seitenwind“, „bei Regen“),
+    z. B. „2× zu kalt (beide Male Hände; 1× bei Gegenwind, 1× bei
+    Seitenwind)“. Gibt es beide Richtungen gleich oft, heißt es
+    „uneinheitlich“. Der
     Hinweis steht oben auf der Seite Kleidung und – bei eingeschalteter
     Rückmeldung – in der Fahrt-Karte unter der Kleidung, wenn sie diese Stufe
     empfiehlt.
   - **Schalter „Rückmeldung zur Kleidung“** aus: Die Karte „Wie war die
     Kleidung?“ und die Knöpfe in der Detailansicht verschwinden; eine schon
-    gegebene Rückmeldung steht dort nur noch als Text. Rückmeldungen und
+    gegebene Rückmeldung steht dort nur noch als Text (seit 5f mit Bereichen
+    und Kommentar, z. B. „Rückmeldung: zu kalt · Hände, Füße“). Rückmeldungen und
     Auswertung bleiben erhalten; nach dem Wiedereinschalten ist alles wieder da.
 - **Wetter je Eintrag:** Speicherst du einen Eintrag mit Arbeitsweg und mehr
   als 0 km, übernimmt die App aus der geladenen Vorhersage je Hin- und
@@ -719,8 +758,11 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   „beim Fahren“, Luftfeuchte, Windrichtung, die Anteile von Gegen-, Seiten- und
   Rückenwind, die Werte je Teilstrecke, die Fahrgeschwindigkeit, wonach die
   Stufe gewählt wurde und wann. Die Detailansicht des Eintrags zeigt das
-  Wetter (z. B. „beim Fahren −1 °C (Gegenwind) bei 17 km/h · Stufe nach „beim
-  Fahren““), die Kleidung in einer Zeile und „Wie war die Kleidung?“. Sind
+  Wetter (z. B. „−2 °C · Regen 0 %, 0 mm · Wind 8 km/h · Böen 20 km/h“ und
+  darunter „gefühlt 2 °C · beim Fahren −1 °C (Gegenwind) bei 17 km/h · Stufe
+  nach „beim Fahren““ wie in der Karte; bei Fahrten ohne „beim Fahren“, also
+  von vor 5d, steht „(gefühlt …)“ weiter in der Wertezeile), die Kleidung in
+  einer Zeile und „Wie war die Kleidung?“. Sind
   Wegpunkte festgelegt, zählen deren Werte mit. Seit 5e gilt das tatsächliche
   Zeitfenster (nach „Heute später los …“ das verschobene), und der Eintrag
   speichert es mit der Abfahrt; die Detailansicht zeigt z. B. „Rückfahrt
@@ -1241,7 +1283,7 @@ Die Datei ist ein JSON-Objekt mit folgenden Teilen:
 
 | Feld | Typ | Pflicht | Bedeutung |
 |---|---|---|---|
-| `version` | Zahl | ja | Version des Datenmodells, aktuell `11` |
+| `version` | Zahl | ja | Version des Datenmodells, aktuell `13` |
 | `kurzinfo` | Objekt | nein | Kurzinfo der Sicherung (ab Version 3, siehe unten); wird beim Import nicht übernommen |
 | `exportiertAm` | Text | nein | Nur in Sicherungen bis Version 2: Zeitpunkt des Exports; wird beim Import ignoriert |
 | `fahrrad` | Objekt oder `null` | nein | Das Fahrrad (siehe unten) |
@@ -1431,7 +1473,7 @@ Werte sind die ungünstigsten an Wohnort, Wegpunkten und Arbeitsort.
 |---|---|---|
 | `quelle` | `"vorhersage"` oder `"rueckblick"` | aus der Vorhersage übernommen bzw. nachträglich für einen vergangenen Tag geholt |
 | `stand` | Text | Zeitpunkt der Daten (ISO 8601) |
-| `hin`, `rueck` | Objekt oder `null` | je Fahrt: `temperatur` (niedrigste, °C), `gefuehlt` (niedrigste gefühlte, °C), `niederschlag` (Summe, mm, ≥ 0), `regenWahrscheinlichkeit` (höchste, 0–100 oder `null`), `wind` (Mittel, km/h), `boeen` (höchste, km/h), `ampel` (`"gruen"`, `"gelb"`, `"rot"`), `kleidung` (`id` der empfohlenen Kleidungsstufe oder `null`), `empfehlung` (ab Version 6: die tatsächlich empfohlene Kleidung je Bereich wie bei `bereiche` einer Stufe, mit Zwiebelprinzip, oder `null`), `regenkleidung` (ab Version 6: `true`, wenn ein Regenzusatz galt; fehlt das Feld, gilt `false`), `rueckmeldung` (`"zu-warm"`, `"passte"`, `"zu-kalt"` oder `null`; wird je Stufe ausgewertet); ab Version 11 dazu die Werte „beim Fahren“, ab Version 12 Zeitfenster und Abfahrt (siehe unten) |
+| `hin`, `rueck` | Objekt oder `null` | je Fahrt: `temperatur` (niedrigste, °C), `gefuehlt` (niedrigste gefühlte, °C), `niederschlag` (Summe, mm, ≥ 0), `regenWahrscheinlichkeit` (höchste, 0–100 oder `null`), `wind` (Mittel, km/h), `boeen` (höchste, km/h), `ampel` (`"gruen"`, `"gelb"`, `"rot"`), `kleidung` (`id` der empfohlenen Kleidungsstufe oder `null`), `empfehlung` (ab Version 6: die tatsächlich empfohlene Kleidung je Bereich wie bei `bereiche` einer Stufe, mit Zwiebelprinzip, oder `null`), `regenkleidung` (ab Version 6: `true`, wenn ein Regenzusatz galt; fehlt das Feld, gilt `false`), `rueckmeldung` (`"zu-warm"`, `"passte"`, `"zu-kalt"` oder `null`; wird je Stufe ausgewertet); ab Version 11 dazu die Werte „beim Fahren“, ab Version 12 Zeitfenster und Abfahrt, ab Version 13 Bereiche und Kommentar zur Rückmeldung (siehe unten) |
 
 **Werte „beim Fahren“ je Fahrt** (ab Version 11; jedes Feld darf fehlen oder
 `null` sein, z. B. bei Wetter von vor 5d):
@@ -1462,6 +1504,18 @@ damaligen Einstellungen):
 
 „Wetter nachtragen“ rechnet mit dem gespeicherten Zeitfenster; ohne es (vor 5e)
 mit der Fahrzeit aus den Einstellungen.
+
+**Bereiche und Kommentar zur Rückmeldung je Fahrt** (ab Version 13; fehlt ein
+Feld, gilt es als leer):
+
+| Feld | Typ | Bedeutung |
+|---|---|---|
+| `rueckmeldungBereiche` | Liste | Körperbereiche, an denen es zu warm bzw. zu kalt war: `"kopf"`, `"hals"`, `"haende"`, `"oberkoerper"`, `"beine"`, `"fuesse"`; jeder höchstens einmal, beim Einlesen in dieser Reihenfolge; leer `[]` |
+| `rueckmeldungKommentar` | Text | freier Kommentar, einzeilig, höchstens 200 Zeichen (ohne Leerzeichen am Rand); leer `""` |
+
+Beide gibt es nur bei `rueckmeldung` `"zu-warm"` oder `"zu-kalt"`; bei
+`"passte"` und `null` müssen sie leer sein. „Neu berechnen“ nach „Heute später
+los …“ und „Wetter nachtragen“ behalten sie wie die Rückmeldung.
 
 ### `wartungsarten[]`
 
@@ -1543,8 +1597,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
 
 ```json
 {
-  "version": 12,
-  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5e", "eintraege": 4,
+  "version": 13,
+  "kurzinfo": { "zeitpunkt": "2025-03-01T18:00:00.000Z", "appVersion": "5f", "eintraege": 4,
                 "kmSumme": 98, "kmStand": 198, "wartungen": 1, "maengel": 2 },
   "fahrrad": { "name": "Mein Rad", "startdatum": "2025-01-01", "startKm": 100,
                "rahmennummer": "AB 12345", "beschreibung": "Blau, 28 Zoll" },
@@ -1613,7 +1667,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
                    { "laenge": 2.5, "kurs": 80, "zaehlt": false, "wind": 12, "richtung": 251, "luftstrom": 10, "beimFahren": -4.9 },
                    { "laenge": 1.6, "kurs": 250, "zaehlt": true, "wind": 13, "richtung": 249, "luftstrom": 18.7, "beimFahren": -7.6 }],
                  "geschwindigkeit": 10, "grundlage": "fahrt", "empfohlenAm": "2025-01-20T04:50:12.000Z",
-                 "von": "06:00", "bis": "07:00", "abfahrt": "06:00", "geplanteAbfahrt": null },
+                 "von": "06:00", "bis": "07:00", "abfahrt": "06:00", "geplanteAbfahrt": null,
+                 "rueckmeldungBereiche": [], "rueckmeldungKommentar": "" },
         "rueck": { "temperatur": 9, "gefuehlt": 8.5, "niederschlag": 0.8, "regenWahrscheinlichkeit": 65, "wind": 18,
                    "boeen": 42, "ampel": "gelb", "kleidung": "stufe4",
                    "empfehlung": { "kopf": "leichte Mütze", "hals": "", "haende": "Übergangshandschuhe",
@@ -1621,7 +1676,8 @@ noch keine Felder `typ`, `bauteil` und `zuordnung`.
                    "regenkleidung": true, "rueckmeldung": "zu-kalt",
                    "beimFahren": null, "luftfeuchte": null, "windRichtung": null, "windAnteil": null, "teilstrecken": null,
                    "geschwindigkeit": null, "grundlage": "gefuehlt", "empfohlenAm": null,
-                   "von": "17:30", "bis": "18:30", "abfahrt": "17:30", "geplanteAbfahrt": "16:00" } } },
+                   "von": "17:30", "bis": "18:30", "abfahrt": "17:30", "geplanteAbfahrt": "16:00",
+                   "rueckmeldungBereiche": ["haende", "fuesse"], "rueckmeldungKommentar": "Unterziehhandschuhe unterwegs angezogen" } } },
     { "datum": "2025-01-21", "km": 12.5, "notiz": "Umweg" }
   ],
   "wartungsarten": [
@@ -1797,8 +1853,14 @@ damit nichts verloren geht.
   (Einträge mit Wetter, Werten „beim Fahren“, Empfehlung und Rückmeldung,
   Kleidung mit Protokoll, Orte, weiterer Ort, Aufträge …). Die umgewandelten
   Daten werden beim nächsten Speichern als Version 12 abgelegt.
-- Daten aus Version 1 bis 10 werden in einem Schritt über die
-  Zwischenversionen auf Version 12 gebracht.
+- **Version 12 → 13** (Release 5f): Jede gespeicherte Fahrt bekommt
+  `rueckmeldungBereiche` als `[]` und `rueckmeldungKommentar` als `""`
+  (Rückmeldungen von vor 5f ohne Bereiche und Kommentar). Alles andere bleibt
+  unverändert (Einträge mit Wetter, Werten „beim Fahren“, Zeitfenstern,
+  Empfehlung und Rückmeldung, Kleidung mit Protokoll, Orte, Aufträge …). Die
+  umgewandelten Daten werden beim nächsten Speichern als Version 13 abgelegt.
+- Daten aus Version 1 bis 11 werden in einem Schritt über die
+  Zwischenversionen auf Version 13 gebracht.
 
 **App-Versionen:** Die Zahl `version` oben gilt für die Daten. Die App selbst
 zählt ab Release 5c so: fortlaufende Buchstaben für jedes Release (5c, 5d …)
@@ -1834,12 +1896,20 @@ tatsächliche Zeitfenster und der Weg „Gespeichertes Wetter dieser Fahrt ›�
 Die Ansicht „Jetzt“, die Einstellung „Wetter außerhalb der Fahrten“ und die
 Standortabfrage für das Wetter sind entfallen.
 
+**Release 5f** (Datenversion 13): Korrekturen und Optimierungen – die gefühlte
+Temperatur steht in den Fahrt-Karten und der Eintragsansicht nur noch einmal
+(B15), Stufen ohne Rückmeldung zählen ab ihrer letzten Änderung („seit deiner
+Änderung am …: noch keine“, B16), und die Rückmeldung zur Kleidung bekommt
+„Wo war es zu kalt?“ bzw. „… zu warm?“ nach Körperbereichen und einen
+Kommentar je Fahrt; Hinweis und Übersicht je Stufe nennen die Bereiche, die
+Unterseite der Stufe die letzten Kommentare (B17).
+
 ## Tests
 
 `tests/test.html` prüft unter anderem:
 
-- die Umwandlung von Version 1 bis 11 auf Version 12 (`tests/daten-v1.json`
-  bis `tests/daten-v11.json`, erfundene Werte; auch dass geänderte
+- die Umwandlung von Version 1 bis 12 auf Version 13 (`tests/daten-v1.json`
+  bis `tests/daten-v12.json`, erfundene Werte; auch dass geänderte
   Kleidungsregeln erhalten bleiben und Protokoll und Termine zu Aufträgen
   werden) und die Ablehnung fehlerhafter Daten,
 - die Zusammenfassung der Einträge an den Wochen-, Monats- und Jahresgrenzen,
@@ -2074,6 +2144,29 @@ Standortabfrage für das Wetter sind entfallen.
 - Release 5e, Link (B14.3): „Gespeichertes Wetter dieser Fahrt ›“ nur mit
   gespeichertem Eintrag von heute; er öffnet den Eintrag mit Zeitfenster und
   Abfahrt.
+- Release 5f, Datenversion 13: die Umwandlung 12 → 13 mit
+  `tests/daten-v12.json` (alle Werte erhalten, Bereiche und Kommentar leer,
+  „Sicherung prüfen“ identisch, Export → Import verlustfrei), die Kette aus
+  allen älteren Testdateien und die Prüfung beim Import (unbekannter oder
+  doppelter Bereich, kein Text, Zeilenumbruch, mehr als 200 Zeichen, Bereiche
+  oder Kommentar bei „passte“ bzw. ohne Rückmeldung; fehlende Felder leer).
+- Release 5f, gefühlte Temperatur (B15): Fahrt-Karten „Heute“ und „Nächster“
+  ohne „(gefühlt …)“, die Kleidungszeile mit „gefühlt“; weiterer Ort und alte
+  Fahrten ohne „beim Fahren“ mit Klammer; Eintragsansicht wie die Karte.
+- Release 5f, Zählertext (B16): geänderte Stufe, verschobene Nachbarstufe und
+  Umschalter ohne Rückmeldung „seit deiner Änderung am …: noch keine“, sonst
+  „seit 5d“; Unterseite der Stufe und Hinweistext.
+- Release 5f, „Wo?“ und Kommentar (B17): Aufklappen nach „zu kalt“/„zu warm“,
+  die Fahrt in der Karte bis „Fertig“, Schalter an/aus (still gespeichert, in
+  der Reihenfolge der Stufen), Kommentar (beim Tippen gespeichert, ohne
+  Leerzeichen am Rand, einzeilig, gekürzt), Hin und Rück getrennt, Wechsel auf
+  „passte“ (geleert, „Rückgängig“) und in die Gegenrichtung (bleibt),
+  Eintragsansicht mit Rückmeldung an und aus, Beschriftungen für VoiceOver,
+  „Neu berechnen“ und „Wetter nachtragen“ behalten beides.
+- Release 5f, Auswertung (B17): Hinweis mit „beide Male Hände“, „alle 3 Male
+  Hände und Füße“ bzw. „2× Hände, 1× Füße“ vor Wind und Regen, Regel
+  unverändert, „Wo“ je Stufe ab der letzten Änderung (ohne vor 5d), die letzten
+  5 Kommentare neueste zuerst und als Text.
 
 Die Tests zur Ansicht „Jetzt“ und zum aktuellen Standort für das Wetter (oben
 unter 4d, 4e, 5c und 5d genannt) sind mit 5e entfallen.
@@ -2161,12 +2254,12 @@ fester Reihenfolge; Code, der schon beim Laden läuft, steht nur in
 | `js/fahrtag.js` | Fahrtag (seit 5e): nächster Fahrtag („vorläufig“, Vorlauf, außerhalb der Vorhersage, „Keine Fahrt“), Auswahl im Reiter Wetter (Heute \| Nächster \| Ort, 2-Stunden-Regel), verschobene Abfahrt „Heute später los“ (Zeitfenster, Grenzen, Hilfsspeicher `radkm-heute-abfahrt`, Ende der Fahrt) |
 | `js/gefuehlt.js` | Gefühlt beim Fahren: Formel wie Open-Meteo, Luftstrom am Körper, Wind auf Körperhöhe, Fahrgeschwindigkeit, Rechnung je Fahrt (Teilstrecken, kältester Schritt, ohne Richtung), Windlage, Plausibilität |
 | `js/orte.js` | Ortseingabe: Koordinaten und Kartenlinks lesen, Ortssuche beim Tippen (Verzögerung, Abbruch, Umlaute), zuletzt gewählte Orte, Namensvorschlag über die Gemeinde des DWD |
-| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappte vorbeigegangene Fahrten, „Heute später los …“ als Fenster von unten, Weg zum gespeicherten Wetter) und Kachel (mit Windpfeilen, Sonnenzeile und „gefühlt · beim Fahren“), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ mit dem Formular eines Orts, „Kleidung“ mit Umschalter, Fahrgeschwindigkeit, Plausibilität im Testmodus, Stufe, Regenzusatz und „Änderungen“, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt, Änderungsprotokoll, Zählung ab der letzten Änderung und Hinweise |
+| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappte vorbeigegangene Fahrten, „Heute später los …“ als Fenster von unten, Weg zum gespeicherten Wetter) und Kachel (mit Windpfeilen, Sonnenzeile und „gefühlt · beim Fahren“), Wetter-Einstellungen (Zeilen der Hauptseite, Seiten „Orte und Strecke“ mit dem Formular eines Orts, „Kleidung“ mit Umschalter, Fahrgeschwindigkeit, Plausibilität im Testmodus, Stufe, Regenzusatz und „Änderungen“, „Ampel-Grenzen“, Fahrzeiten), Rückmeldung nach der Fahrt (seit 5f mit „Wo?“ nach Körperbereichen und Kommentar), Änderungsprotokoll, Zählung ab der letzten Änderung, Hinweise mit Bereichen, Übersicht „Wo“ je Stufe und letzte Kommentare |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (für Fahrten → Einträge), Eintragsformular, Kilometerstand für ein Datum |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Datensicherung: Export, Prüfung vor dem Teilen, Vergleich mit einer Sicherung, Import |
 | `js/oberflaeche.js` | Bausteine der Oberfläche: Fenster, Rückfrage, Meldung, Rückgängig; `zeichnen()`, Reiter, Unterseiten, Umschalter, Wege zu den Einstellungen, Verankern der Reiterleiste |
-| `js/bedienung.js` | Zuordnung der Klicks und Eingaben (`data-action`, `data-change`) zu den Funktionen |
+| `js/bedienung.js` | Zuordnung der Klicks und Eingaben (`data-action`, `data-change`, `data-input`, `data-enter`) zu den Funktionen |
 | `js/start.js` | Anmeldung des Service Workers, Hinweis „Neue Version verfügbar“, Start der App |
 | `sw.js` | Service Worker (siehe unten) |
 | `tests/` | Testseite, Offline-Test und erfundene Testdateien (siehe „Tests“) |

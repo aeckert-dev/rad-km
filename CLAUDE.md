@@ -25,6 +25,11 @@ sind immer erfunden.
   außerhalb der Daten (nicht in der Sicherung): `radkm-wetter`,
   `radkm-wartungsarten-pruefen`, `radkm-letzte-orte`, `radkm-heute-abfahrt`
   (verschobene Abfahrt von heute, gilt nur an diesem Tag).
+- Die gefühlte Temperatur steht nur einmal: Steht die Kleidungszeile mit
+  „gefühlt …“ dabei, entfällt „(gefühlt …)“ in der Wertezeile
+  (`werteText(w, false)`, B15, 5f).
+- Bereiche und Kommentar zur Rückmeldung werden still gespeichert (ohne
+  Meldung); eine Meldung mit „Rückgängig“ gibt es nur beim Urteil selbst.
 - Den Standort des iPhones fragt nur „📍 Aktueller Standort“ im Ortsformular ab
   (auf Tipp); das Wetter nie (seit 5e).
 - Für das iPhone optimiert, Hell- und Dunkelmodus über die Farbvariablen in
@@ -53,7 +58,7 @@ sind immer erfunden.
 | `js/fahrtag.js` | Nächster Fahrtag (`naechsterFahrtag`, „vorläufig“, Vorlauf, außerhalb der Vorhersage, „Keine Fahrt“), Auswahl im Reiter Wetter (`wetterAuswahl`, 2-Stunden-Regel), „Heute später los“ (`fahrtZeitfenster`, `abweichungPruefen`, Hilfsspeicher `radkm-heute-abfahrt`, `fahrtEnde`) |
 | `js/gefuehlt.js` | Gefühlt beim Fahren: Formel wie Open-Meteo, Luftstrom, Wind auf 1,5 m, Fahrgeschwindigkeit, `fahrtGefuehlt` (Teilstrecken, kältester Schritt, ohne Richtung), Windlage, Plausibilität |
 | `js/orte.js` | Ortseingabe: Koordinaten/Kartenlinks lesen (`ortAusText`), Ortssuche beim Tippen (Verzögerung, Abbruch, Umlaute), zuletzt gewählte Orte, Namensvorschlag (DWD-Gemeinde) |
-| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappt „vorbei ›“, „Heute später los …“ als Fenster von unten, Link zum gespeicherten Wetter), Kachel, Windpfeile, „gefühlt · beim Fahren“, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, Ort-Formular, Kleidung mit Umschalter/Fahrgeschwindigkeit/Plausibilität im Testmodus, Stufe/Regenzusatz, Änderungen, Ampel-Grenzen), Rückmeldung, Änderungsprotokoll, Zählung ab der letzten Änderung, Hinweise |
+| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappt „vorbei ›“, „Heute später los …“ als Fenster von unten, Link zum gespeicherten Wetter), Kachel, Windpfeile, „gefühlt · beim Fahren“, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, Ort-Formular, Kleidung mit Umschalter/Fahrgeschwindigkeit/Plausibilität im Testmodus, Stufe/Regenzusatz, Änderungen, Ampel-Grenzen), Rückmeldung mit „Wo?“ (Bereiche) und Kommentar (`rueckmeldungOffen` bis „Fertig“), Änderungsprotokoll, Zählung ab der letzten Änderung (`seitTitel`/`seitText`), Hinweise mit Bereichen, „Wo“ je Stufe, letzte Kommentare |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (Fahrten → Einträge), Eintragsformular, Prognosefenster |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Export, Prüfung, Vergleich, Import |
