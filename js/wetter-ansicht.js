@@ -10,9 +10,10 @@ function ampelText(b) {
 }
 // "Heute, Di 27.10." bzw. "Mo 02.11."
 function tagUeberschrift(datum, titel) { return titel === "Heute" || titel === "Morgen" ? titel + ", " + wochentag(datum) + " " + kurzDatum(datum) : titel; }
-// Werte einer Fahrt (ohne Böen, die stehen in der Zeile zum Wind)
-function werteText(w) {
-  return gradText(w.temperatur) + " (gefühlt " + gradText(w.gefuehlt) + ") · Regen " +
+// Werte einer Fahrt (ohne Böen, die stehen in der Zeile zum Wind). Die Klammer
+// „(gefühlt …)“ nur ohne Kleidungszeile mit „gefühlt“ daneben (B15, ab 5f).
+function werteText(w, mitGefuehlt = true) {
+  return gradText(w.temperatur) + (mitGefuehlt ? " (gefühlt " + gradText(w.gefuehlt) + ")" : "") + " · Regen " +
     (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm";
 }
 function tageswerteText(t) {
@@ -151,7 +152,7 @@ function fahrtKarte(f, alt) {
   if (!b) html += '<div class="klein">Für diese Zeit liegt noch keine Vorhersage vor.</div>';
   else {
     html += '<div class="ampelzeile">' + ampelText(b) + '</div>' +
-      '<div class="klein">' + werteText(b.werte) + '</div>' +
+      '<div class="klein">' + werteText(b.werte, false) + '</div>' +
       (f.sonne ? '<div class="sonne">' + esc(f.sonne) + '</div>' : "") +
       '<div style="margin-top:6px">👕 Kleidung</div><div class="klein">' + gefuehltZeileHtml(f, b.werte.gefuehlt) + '</div>' + kleidungBereicheHtml(f.kleidung) +
       fahrtHinweisHtml(f.kleidung) +
@@ -867,7 +868,7 @@ function kleidungSeite() {
     '), von warm nach kalt. ' +
     'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
     '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
-      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen " + seitText(seit[s.id])])).join("") + '</div>' +
+      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen " + seitText(s.id, seit[s.id])])).join("") + '</div>' +
     (frueher ? '<p class="klein">' + (frueher === 1 ? "1 Rückmeldung" : frueher + " Rückmeldungen") + ' zu früheren Stufen (gibt es nicht mehr, werden nicht zugeordnet).</p>' : "") +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-stufe-neu">+ Stufe</button></div>' +
     '<h3 style="margin-top:16px">Regenzusatz</h3><p class="klein" style="margin-top:0">Ab dieser Regenwahrscheinlichkeit kommt das Regenzeug in seinem Bereich dazu. ' +
@@ -970,7 +971,7 @@ function kleidungStufeSeite(i) {
     '<label for="ks-haende-regen">Hände bei Regen (optional)</label>' +
     '<input type="text" id="ks-haende-regen" autocomplete="off" placeholder="leer = wie bei Hände" value="' + esc(s.haendeBeiRegen || "") + '">' +
     '<div class="feldhinweis">Gilt statt „Hände“, sobald ein Regenzusatz greift, z. B. regenfeste Handschuhe. Mehrere Teile mit Komma trennen.</div>' +
-    (z ? '<p class="klein">Rückmeldungen ' + seitText(z) + '</p>' : "") +
+    (neu ? "" : '<p class="klein">Rückmeldungen ' + seitText(s.id, z) + '</p>') +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="kleidung-stufe-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +
     (!neu && n > 2 ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="kleidung-stufe-weg" data-i="' + i + '">Stufe entfernen</button></div>' : "")
@@ -1099,7 +1100,7 @@ function rueckmeldungGeben(id, fahrt, urteil, ausDetail) {
   mitRueckgaengig(() => { fw.rueckmeldung = urteil; }, () => {
     const k = daten.einstellungen.wetter.kleidung, i = k.stufen.findIndex(s => s.id === fw.kleidung);
     const z = rueckmeldungenSeitAenderung()[fw.kleidung];
-    const stand = !z ? "" : fw.empfohlenAm === null ? "vor 5d: " + auswertungText(z.vor5d) : seitText(z, false);
+    const stand = !z ? "" : fw.empfohlenAm === null ? "vor 5d: " + auswertungText(z.vor5d) : seitText(fw.kleidung, z, false);
     return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + (i < 0 || !stand ? "" : " · Stufe " + stufeBereich(k, i) + " " + stand);
   }, ausDetail ? () => { const y = fenster.scrollTop; eintragAnsicht(id); fenster.scrollTop = y; } : null);
 }
@@ -1201,11 +1202,13 @@ function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w 
   }));
   return erg;
 }
-// "seit deiner Änderung am 08.11.: 2× zu kalt · vor 5d: 1× passte" ("seit 5d", wenn die Stufe nie geändert wurde)
-function seitText(z, mitVor5d = true) {
-  if (!z) return "seit 5d: noch keine";
-  return (z.seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(z.seit)))) + ": " + auswertungText(z) +
-    (mitVor5d && z.vor5d.anzahl ? " · vor 5d: " + auswertungText(z.vor5d) : "");
+// "seit 5d" (Stufe nie geändert) bzw. "seit deiner Änderung am 08.11." (seit = ms der letzten Änderung)
+function seitTitel(seit) { return seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(seit))); }
+// "seit deiner Änderung am 08.11.: 2× zu kalt · vor 5d: 1× passte". Ohne Rückmeldung
+// (z fehlt) zählt die letzte Änderung der Stufe "id" trotzdem (B16, ab 5f).
+function seitText(id, z, mitVor5d = true) {
+  return seitTitel(z ? z.seit : letzteAenderung(id)) + ": " + auswertungText(z) +
+    (mitVor5d && z && z.vor5d.anzahl ? " · vor 5d: " + auswertungText(z.vor5d) : "");
 }
 const LAGE_BEI = { Gegenwind: "bei Gegenwind", Seitenwind: "bei Seitenwind", Rückenwind: "bei Rückenwind", wechselnd: "bei wechselndem Wind", "kaum Wind": "bei wenig Wind" };
 // Hinweis zu einer Stufe: ab 2 gleichen Abweichungen seit der letzten Änderung,
@@ -1216,7 +1219,7 @@ function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.ein
   if (!z || i < 0) return null;
   const richtungen = ["zu-kalt", "zu-warm"].filter(u => z[u] >= 2 && z[u] > z.passte);
   if (!richtungen.length) return null;
-  const titel = "Stufe " + stufeBereich(k, i) + ": " + (z.seit === null ? "seit 5d" : "seit deiner Änderung am " + kurzDatum(isoAusDate(new Date(z.seit)))) + " ";
+  const titel = "Stufe " + stufeBereich(k, i) + ": " + seitTitel(z.seit) + " ";
   if (richtungen.length === 2 && z["zu-kalt"] === z["zu-warm"]) {
     return { id, richtung: null, text: titel + z["zu-kalt"] + "× zu kalt und " + z["zu-warm"] + "× zu warm – uneinheitlich" };
   }

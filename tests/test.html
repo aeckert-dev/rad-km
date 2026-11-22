@@ -1893,7 +1893,7 @@ async function start() {
     seite = ohneTags(ablageR.innerHTML);
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
-        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung gefühlt 9 °C · beim Fahren 7 °C (kaum Wind) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
+        "10 °C · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung gefühlt 9 °C · beim Fahren 7 °C (kaum Wind) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
         "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
@@ -2688,7 +2688,7 @@ async function start() {
     ablageB.innerHTML = w.bildWetter(ABEND);
     rk = rueckKarte();
     wahr("Gelb wegen Böen: Böen als Grund in der Ampelzeile und in der Zeile zum Wind, nicht bei den Werten",
-      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
+      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C · Regen 0 %, 0 mm 🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
 
@@ -5103,7 +5103,7 @@ async function start() {
       [2, { zeitpunkt: "2026-11-14T08:00:00.000Z", art: "stufe", stufe: "stufe5", vorher: S5_NACH,
         nachher: Object.assign(kopie(S5_NACH), { bereiche: Object.assign(kopie(S5_NACH.bereiche), { hals: "Schal, Tuch" }) }), auchBetroffen: [] }, 2]);
     gleich("… die Zählung beginnt neu („seit deiner Änderung am 14.11.: noch keine“), der Hinweis verschwindet",
-      [w.seitText(w.rueckmeldungenSeitAenderung().stufe5), w.kleidungHinweis("stufe5")], ["seit deiner Änderung am 14.11.: noch keine · vor 5d: 1× zu warm", null]);
+      [w.seitText("stufe5", w.rueckmeldungenSeitAenderung().stufe5), w.kleidungHinweis("stufe5")], ["seit deiner Änderung am 14.11.: noch keine · vor 5d: 1× zu warm", null]);
     uhrN4 = Date.parse("2026-11-14T08:05:00.000Z");
     w.kleidungStufeFormular(3);
     feld("ks-ab").value = "8";
@@ -5566,6 +5566,70 @@ async function start() {
     localStorage.removeItem(ABW);
     w.eval("daten.eintraege = daten.eintraege.filter(e => e.id !== 'e75')");
     wetterLeeren();
+
+    // -------------------------------------------------------------
+    // 77. Gefühlte Temperatur nicht doppelt (B15, Release 5f)
+    // -------------------------------------------------------------
+    abschnitt("77. Gefühlte Temperatur nicht doppelt (B15): Fahrt-Karten Heute und Nächster ohne „(gefühlt …)“, weiterer Ort und alte Fahrten mit, Eintragsansicht wie die Karte");
+    const W77 = { temperatur: -2, gefuehlt: -5, regenWahrscheinlichkeit: 0, niederschlag: 0 };
+    gleich("Wertezeile: ohne Kleidungszeile mit Klammer, sonst ohne", [w.werteText(W77), w.werteText(W77, false)],
+      ["−2 °C (gefühlt −5 °C) · Regen 0 %, 0 mm", "−2 °C · Regen 0 %, 0 mm"]);
+    setze7({ fahrrad: F("2026-01-01", 0), vorlagen: [{ id: "v-arbeit", name: "Arbeit", km: 34, arbeitsweg: true }], einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt() } });
+    await laden(kopie(gfRoh), fx["wetter-dwd-leer"], SO);
+    const karten77 = jetzt => { const d = w.document.createElement("div"); d.innerHTML = w.bildWetter(jetzt); return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ohneTags(k.innerHTML)); };
+    const naechste77 = karten77(SO);
+    gleich("Nächster (Mo 09.11.): Hin- und Rückfahrt ohne „(gefühlt“, die Kleidungszeile mit „gefühlt … · beim Fahren …“",
+      [w.wetterAnsicht(SO).auswahl.wert, naechste77.length, naechste77.some(t => t.includes("(gefühlt")), naechste77.every(t => /👕 Kleidung gefühlt −?\d+ °C · beim Fahren/.test(t))],
+      ["naechster", 2, false, true]);
+    const MO = zeit("2026-11-09", "17:30");
+    w.eval("fahrtAufgeklappt.add('2026-11-09|hinfahrt'); fahrtAufgeklappt.add('2026-11-09|rueckfahrt')");
+    const heute77 = karten77(MO);
+    w.eval("fahrtAufgeklappt.clear()");
+    gleich("Heute (Mo 17:30, beide Fahrten aufgeklappt): ebenso", [w.wetterAnsicht(MO).auswahl.wert, heute77.length, heute77.some(t => t.includes("(gefühlt")),
+      heute77.every(t => /👕 Kleidung gefühlt −?\d+ °C · beim Fahren/.test(t))], ["heute", 2, false, true]);
+    wetterLeeren();
+    gleich("Weiterer Ort (ohne Kleidung): Tageswerte mit „(gefühlt … bis …)“", w.tageswerteText({ tmin: -2, tmax: 3, gefuehltMin: -5, gefuehltMax: 1, regenWahrscheinlichkeit: 0, niederschlag: 0,
+      wind: 10, boeen: 20, gewitter: false }).includes("−2 °C bis 3 °C (gefühlt −5 °C bis 1 °C)"), true);
+    setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt() }, eintraege: [
+      AE("g1", "2026-11-09", 34, EW(FW({ temperatur: -2, gefuehlt: -5, regenWahrscheinlichkeit: 0, beimFahren: -8, luftfeuchte: 80, windRichtung: 90, windAnteil: null, teilstrecken: null,
+        geschwindigkeit: 18, grundlage: "fahrt", empfohlenAm: "2026-11-09T05:00:00.000Z" }), FW({ temperatur: 4, gefuehlt: 2 })))] });
+    w.eintragAnsicht("g1");
+    const detail77 = ohneTags(fensterInhaltHtml());
+    wahr("Eintragsansicht mit „beim Fahren“: „−2 °C · Regen …“ und „gefühlt −5 °C · beim Fahren −8 °C bei 18 km/h · Stufe nach „beim Fahren““",
+      detail77.includes("−2 °C · Regen 0 %, 0 mm · Wind 8 km/h") && detail77.includes("gefühlt −5 °C · beim Fahren −8 °C bei 18 km/h · Stufe nach „beim Fahren“") &&
+      (detail77.match(/gefühlt −5 °C/g) || []).length === 1, detail77);
+    wahr("… alte Fahrt ohne „beim Fahren“ (vor 5d): Klammer bleibt", detail77.includes("4 °C (gefühlt 2 °C) · Regen 10 %, 0 mm"), detail77);
+    w.fensterSchliessen();
+
+    // -------------------------------------------------------------
+    // 78. Zählertext ab der letzten Änderung auch ohne Rückmeldung (B16, Release 5f)
+    // -------------------------------------------------------------
+    abschnitt("78. Zählertext „seit deiner Änderung am …: noch keine“ bei geänderten Stufen ohne Rückmeldung (B16)");
+    const T78 = "2026-11-21T09:00:00.000Z";
+    const kleidung78 = (mitUmschalter = false) => { const k = kleidungN4();
+      k.protokoll = [{ zeitpunkt: T78, art: "stufe", stufe: "stufe5", vorher: S5_VOR, nachher: S5_NACH, auchBetroffen: ["stufe6"] }].concat(mitUmschalter
+        ? [{ zeitpunkt: "2026-11-22T08:00:00.000Z", art: "grundlage", stufe: null, vorher: "gefuehlt", nachher: "fahrt", auchBetroffen: [] }] : []);
+      return k; };
+    n4Daten([], kleidung78());
+    const zeile78 = i => ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="' + i + '"] .text').innerHTML).split("Rückmeldungen ")[1];
+    w.kleidungFormular();
+    gleich("Seite Kleidung: geänderte Stufe und die Nachbarstufe, deren Bereich sich verschoben hat, „seit deiner Änderung am 21.11.: noch keine“; unveränderte „seit 5d“",
+      [zeile78(4), zeile78(5), zeile78(0), w.seitText("stufe5", undefined), w.seitText("stufe1", undefined)],
+      ["seit deiner Änderung am 21.11.: noch keine", "seit deiner Änderung am 21.11.: noch keine", "seit 5d: noch keine",
+        "seit deiner Änderung am 21.11.: noch keine", "seit 5d: noch keine"]);
+    w.kleidungStufeFormular(4);
+    wahr("Unterseite der Stufe: „Rückmeldungen seit deiner Änderung am 21.11.: noch keine“ (auch ohne Rückmeldung)",
+      ohneTags(inhaltHtml()).includes("Rückmeldungen seit deiner Änderung am 21.11.: noch keine"), ohneTags(inhaltHtml()));
+    w.kleidungStufeFormular(null);
+    wahr("Neue Stufe: ohne Zeile „Rückmeldungen“", !ohneTags(inhaltHtml()).includes("Rückmeldungen seit"), ohneTags(inhaltHtml()));
+    n4Daten([], kleidung78(true));
+    w.kleidungFormular();
+    gleich("Nach dem Umschalter (22.11.): alle Stufen „seit deiner Änderung am 22.11.: noch keine“", [zeile78(0), zeile78(4), zeile78(5)],
+      ["seit deiner Änderung am 22.11.: noch keine", "seit deiner Änderung am 22.11.: noch keine", "seit deiner Änderung am 22.11.: noch keine"]);
+    n4Daten([AE("h1", "2026-11-23", 34, EW(FN("zu-kalt", "2026-11-23T05:00:00.000Z", { kleidung: "stufe6" }), FN("zu-kalt", "2026-11-23T05:00:00.000Z", { kleidung: "stufe6" })))], kleidung78());
+    const k78 = w.eval("daten.einstellungen.wetter.kleidung");
+    gleich("Hinweistext mit derselben Prüfung: Nachbarstufe „seit deiner Änderung am 21.11.“", w.kleidungHinweis("stufe6").text,
+      "Stufe " + w.stufeBereich(k78, 5) + ": seit deiner Änderung am 21.11. 2× zu kalt (beide bei Gegenwind)");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
