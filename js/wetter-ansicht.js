@@ -255,7 +255,10 @@ async function eintragWetterNachVerschiebung(art, datum, jetzt = Date.now()) {
     ") neu berechnen?<br><br>Deine Rückmeldung zur Kleidung bleibt.", "Neu berechnen", "Nein")) return false;
   mitRueckgaengig(() => {
     const x = daten.eintraege.find(y => y.id === e.id);
-    x.wetter = Object.assign({}, x.wetter, { stand: neu.stand, [k]: Object.assign({}, z, { rueckmeldung: x.wetter[k] ? x.wetter[k].rueckmeldung : null }) });
+    // Die Rückmeldung bleibt, ab 5f mit Bereichen und Kommentar
+    const a = x.wetter[k];
+    x.wetter = Object.assign({}, x.wetter, { stand: neu.stand, [k]: Object.assign({}, z, a ? { rueckmeldung: a.rueckmeldung, rueckmeldungBereiche: a.rueckmeldungBereiche,
+      rueckmeldungKommentar: a.rueckmeldungKommentar } : {}) });
   }, "Gespeichertes Wetter der " + FAHRT_NAME[art] + " neu berechnet", () => {});
   return true;
 }

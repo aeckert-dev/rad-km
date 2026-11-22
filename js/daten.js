@@ -297,8 +297,21 @@ const MIGRATIONEN = {
     if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
       ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion11(e.wetter.hin), rueck: fahrtAusVersion11(e.wetter.rueck) }) }) : e);
     return d;
+  },
+  // Version 12 → 13 (Release 5f): Körperbereiche und Kommentar zur Rückmeldung
+  // je Fahrt (rueckmeldungBereiche, rueckmeldungKommentar), bei allen gespeicherten
+  // Fahrten leer. Alles andere bleibt.
+  12: alt => {
+    const d = Object.assign({}, alt, { version: 13 });
+    if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion12(e.wetter.hin), rueck: fahrtAusVersion12(e.wetter.rueck) }) }) : e);
+    return d;
   }
 };
+
+// Neue Werte je Fahrt ab Version 13: Bereiche und Kommentar zur Rückmeldung, bei älteren Fahrten leer
+const fahrtWerte13 = () => ({ rueckmeldungBereiche: [], rueckmeldungKommentar: "" });
+function fahrtAusVersion12(f) { return istObjekt(f) ? Object.assign(fahrtWerte13(), f) : f; }
 
 // Neue Werte je Fahrt ab Version 12: Zeitfenster und Abfahrt, bei älteren Fahrten leer
 const FAHRT_WERTE_12 = { von: null, bis: null, abfahrt: null, geplanteAbfahrt: null };
@@ -774,9 +787,22 @@ function eintragWetterPruefen(ew, wo, fehler) {
     const abfahrt = opt("abfahrt", istUhrzeit, "eine Uhrzeit im Format HH:MM");
     const geplanteAbfahrt = opt("geplanteAbfahrt", istUhrzeit, "eine Uhrzeit im Format HH:MM");
     if (geplanteAbfahrt !== null && abfahrt === null) fehler(wn + ": geplanteAbfahrt gibt es nur zusammen mit abfahrt.");
+    // Ab Version 13: Körperbereiche und Kommentar zur Rückmeldung, nur bei „zu warm“ oder „zu kalt“ (fehlend = leer)
+    const rb = f.rueckmeldungBereiche ?? [];
+    if (!Array.isArray(rb) || rb.some(b => !BEREICH_SCHLUESSEL.includes(b)))
+      fehler(wn + ": rueckmeldungBereiche muss eine Liste aus „kopf“, „hals“, „haende“, „oberkoerper“, „beine“ und „fuesse“ sein.");
+    if (new Set(rb).size !== rb.length) fehler(wn + ": rueckmeldungBereiche enthält einen Bereich doppelt.");
+    const rkRoh = f.rueckmeldungKommentar ?? "";
+    if (typeof rkRoh !== "string") fehler(wn + ": rueckmeldungKommentar muss ein Text sein.");
+    if (/[\r\n]/.test(rkRoh)) fehler(wn + ": rueckmeldungKommentar muss einzeilig sein.");
+    const rk = rkRoh.trim();
+    if ([...rk].length > KOMMENTAR_MAX) fehler(wn + ": rueckmeldungKommentar darf höchstens " + KOMMENTAR_MAX + " Zeichen haben.");
+    if ((rb.length || rk) && rm !== "zu-warm" && rm !== "zu-kalt")
+      fehler(wn + ": rueckmeldungBereiche und rueckmeldungKommentar gibt es nur bei der Rückmeldung „zu-warm“ oder „zu-kalt“.");
     return { temperatur: zahl("temperatur"), gefuehlt: zahl("gefuehlt"), niederschlag: zahl("niederschlag", 0), regenWahrscheinlichkeit: w,
       wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, empfehlung, regenkleidung, rueckmeldung: rm,
-      beimFahren, luftfeuchte, windRichtung, windAnteil, teilstrecken, geschwindigkeit, grundlage, empfohlenAm, von, bis, abfahrt, geplanteAbfahrt };
+      beimFahren, luftfeuchte, windRichtung, windAnteil, teilstrecken, geschwindigkeit, grundlage, empfohlenAm, von, bis, abfahrt, geplanteAbfahrt,
+      rueckmeldungBereiche: BEREICH_SCHLUESSEL.filter(b => rb.includes(b)), rueckmeldungKommentar: rk };
   };
   return { quelle: ew.quelle, stand: ew.stand, hin: fahrt(ew.hin, "hin"), rueck: fahrt(ew.rueck, "rueck") };
 }

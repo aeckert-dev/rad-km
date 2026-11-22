@@ -22,7 +22,7 @@ const ABWEICHUNG_SCHLUESSEL = TESTMODUS ? "radkm-test-heute-abfahrt" : "radkm-he
 const APP_VERSION = "5e";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
-const DATEN_VERSION = 12;
+const DATEN_VERSION = 13;
 const EXPORT_ERINNERUNG_TAGE = 30;
 // Prognosen erst, wenn seit dem Startdatum so viele Tage vergangen sind
 const PROGNOSE_MIN_TAGE = 7;
@@ -44,6 +44,8 @@ const BEREICH_SCHLUESSEL = BEREICHE.map(b => b[0]);
 const BEREICH_NAME = Object.fromEntries(BEREICHE);
 // Bei Regen gilt in diesen Bereichen das Zwiebelprinzip (eine Schicht weniger unter dem Regenzeug)
 const ZWIEBEL_BEREICHE = ["oberkoerper", "beine", "fuesse"];
+// Kommentar zur Rückmeldung (ab Version 13): höchstens so viele Zeichen, einzeilig
+const KOMMENTAR_MAX = 200;
 // Vorlaufzeit am Termin (Minuten für die Anfahrt): erlaubter Bereich
 const VORLAUF_MIN = 1, VORLAUF_MAX = 240;
 // Höchstens so viele Wegpunkte zwischen Wohn- und Arbeitsort
