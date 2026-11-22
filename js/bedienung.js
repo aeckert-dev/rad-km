@@ -148,6 +148,9 @@ const AKTIONEN = {
   "kleidung-standard": () => kleidungStandard(),
   "kleidung-grundlage": el => kleidungGrundlageSetzen(el.dataset.wert),
   "rueckmeldung": el => rueckmeldungGeben(el.dataset.id, el.dataset.fahrt, el.dataset.urteil, !!el.dataset.detail),
+  "rueckmeldung-bereich": el => rueckmeldungBereichSchalten(el.dataset.id, el.dataset.fahrt, el.dataset.bereich, !!el.dataset.detail),
+  "rueckmeldung-fertig": el => rueckmeldungFertig(el.dataset.id, el.dataset.fahrt),
+  "rueckmeldung-kommentar-fertig": el => el.blur(),
   "wetter-nachtragen": () => wetterNachtragen(),
 
   "rueckgaengig": () => rueckgaengig(),
@@ -180,6 +183,7 @@ const AENDERUNGEN = {
   "kleidung-rueckmeldung": el => kleidungRueckmeldungSchalten(el.checked),
   "kleidung-geschwindigkeit": el => geschwindigkeitGeaendert(el),
   "ampel-feld": el => ampelSpeichern(el),
+  "rueckmeldung-kommentar": el => rueckmeldungKommentarSetzen(el, true),
   "prognose-datum": () => prognoseAnzeigen(),
   "spaeter-zeit": () => spaeterAktualisieren()
 };
@@ -189,7 +193,8 @@ const EINGABEN = {
   "ort-eingabe": () => ortEingabe(),
   "protokoll-km": () => protokollKmEingabe(),
   "prognose-datum": () => prognoseAnzeigen(),
-  "spaeter-zeit": () => spaeterAktualisieren()
+  "spaeter-zeit": () => spaeterAktualisieren(),
+  "rueckmeldung-kommentar": el => rueckmeldungKommentarSetzen(el, false)
 };
 
 document.addEventListener("click", ev => {
@@ -207,7 +212,7 @@ document.addEventListener("keydown", ev => {
 });
 document.addEventListener("input", ev => {
   const name = ev.target.dataset && ev.target.dataset.input;
-  if (name) EINGABEN[name]();
+  if (name) EINGABEN[name](ev.target);
 });
 document.getElementById("importdatei").addEventListener("change", ev => importDateiGewaehlt(ev.target.files[0]));
 document.getElementById("pruefdatei").addEventListener("change", ev => pruefDateiGewaehlt(ev.target.files[0]));

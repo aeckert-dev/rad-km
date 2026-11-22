@@ -97,7 +97,10 @@ const eintragV11 = e => eintragV12(e.wetter ? Object.assign({}, e, { wetter: Obj
 // Zeitfenster und leerer Abfahrt. wetterV11/eintragV11 liefern den Stand nach allen Umwandlungen bis zur aktuellen Version.
 const ohneOrtAusserhalb = wt => { const { ortAusserhalb, ...rest } = wt; return rest; };
 const fahrtV12 = f => f && Object.assign({}, f, { von: null, bis: null, abfahrt: null, geplanteAbfahrt: null });
-const eintragV12 = e => e.wetter ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtV12(e.wetter.hin), rueck: fahrtV12(e.wetter.rueck) }) }) : e;
+const eintragV12 = e => eintragV13(e.wetter ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtV12(e.wetter.hin), rueck: fahrtV12(e.wetter.rueck) }) }) : e);
+// Ab Version 13 (Release 5f): gespeicherte Fahrten mit leeren Bereichen und leerem Kommentar zur Rückmeldung
+const fahrtV13 = f => f && Object.assign({}, f, { rueckmeldungBereiche: f.rueckmeldungBereiche ?? [], rueckmeldungKommentar: f.rueckmeldungKommentar ?? "" });
+const eintragV13 = e => e.wetter ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtV13(e.wetter.hin), rueck: fahrtV13(e.wetter.rueck) }) }) : e;
 
 // index.html im unsichtbaren Rahmen laden und auf den Start warten
 function appLaden() {
@@ -1104,9 +1107,10 @@ async function start() {
     // „gefuehlt“); die Tests für „gefühlt beim Fahren“ (ab Abschnitt 70) setzen die Grundlage selbst
     const wetterEinst = aend => Object.assign(kopie(STD_WETTER), { wohnort: MUSTERDORF, arbeitsort: BEISPIELSTADT,
       kleidung: Object.assign(kopie(STD_WETTER.kleidung), { grundlage: "gefuehlt" }) }, aend);
-    // Gespeichertes Wetter ohne die Werte ab 5d („beim Fahren“, Grundlage, Zeitpunkt der Empfehlung) und ab 5e (Zeitfenster, Abfahrt)
+    // Gespeichertes Wetter ohne die Werte ab 5d („beim Fahren“, Grundlage, Zeitpunkt der Empfehlung), ab 5e (Zeitfenster, Abfahrt)
+    // und ab 5f (Bereiche und Kommentar zur Rückmeldung)
     const NEU_5D = ["beimFahren", "luftfeuchte", "windRichtung", "windAnteil", "teilstrecken", "geschwindigkeit", "grundlage", "empfohlenAm",
-      "von", "bis", "abfahrt", "geplanteAbfahrt"];
+      "von", "bis", "abfahrt", "geplanteAbfahrt", "rueckmeldungBereiche", "rueckmeldungKommentar"];
     const bis5c = f => f && Object.fromEntries(Object.entries(f).filter(([k]) => !NEU_5D.includes(k)));
     const wetterBis5c = ew => ew && Object.assign({}, ew, { hin: bis5c(ew.hin), rueck: bis5c(ew.rueck) });
     const wetterDaten = (aend = {}, fahrtage = [1, 2, 5]) => setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage, wetter: wetterEinst(aend) } });
@@ -1187,7 +1191,7 @@ async function start() {
     const v3Text = await (await fetch("daten-v3.json", { cache: "no-store" })).text();
     const v3d = JSON.parse(v3Text);
     const pruefeV3 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten (alle Aufträge, Eigenleistung ergänzt), Protokoll und Termine (als Aufträge) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v3d.fahrrad, v3d.vorlagen, [...v3d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG],
@@ -1893,7 +1897,7 @@ async function start() {
     seite = ohneTags(ablageR.innerHTML);
     wahr("Reiter Wetter: Tag, Fahrten mit Ampel und Begründung, Werte, Kleidung, Wind, Abfahrt",
       ["Morgen, Di 27.10.", "Hinfahrt 06:00–07:00 grün: trocken", "Rückfahrt 16:00–17:00 rot: Gewitter ab 16:45",
-        "10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung gefühlt 9 °C · beim Fahren 7 °C (kaum Wind) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
+        "10 °C · Regen 0 %, 0 mm 🌅 Sonnenaufgang 07:24 · Fahrt im Dunkeln 👕 Kleidung gefühlt 9 °C · beim Fahren 7 °C (kaum Wind) Kopf leichte Mütze Hände Unterziehhandschuhe Oberkörper 2 T-Shirts, warmer Pullover Beine Hose Füße Socken",
         "🧭 Wind 5 km/h aus Süd (schwach), Böen bis 15 km/h Musterdorf → Beispielstadt",
         "🕒 Abfahrt 15:45 statt 16:00: trocken, Gewitter erst ab 16:45"].every(t => seite.includes(t)), seite);
     gleich("Zeitleiste: acht Viertelstunden 15:30–17:30, drei rot, die beste Fahrt (15:45–16:45) markiert",
@@ -1944,7 +1948,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5e, Datenversion 12 (Release 5e)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5e", 12]);
+    gleich("App-Version 5f, Datenversion 13 (Release 5f)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5f", 13]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -1957,7 +1961,7 @@ async function start() {
     // Erwartete Empfehlung einer Fahrt: Text, wie 4b ihn angezeigt hat (im Feld Oberkörper), und ob Regenkleidung galt
     const mitEmpfehlung = (f, text, regen) => f && Object.assign({}, f, { empfehlung: text === null ? null : OK(text), regenkleidung: regen });
     const pruefeV4 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v4d.fahrrad, v4d.vorlagen, [...v4d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v4d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -2015,7 +2019,7 @@ async function start() {
     const v5Text = await (await fetch("daten-v5.json", { cache: "no-store" })).text();
     const v5d = JSON.parse(v5Text);
     const pruefeV5 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartung (als Aufträge, Eigenleistung ergänzt) und Mängel erhalten",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel],
         [v5d.fahrrad, v5d.vorlagen, [...v5d.wartungsarten.map(a => artV8(a, "auftrag")), EIGENLEISTUNG], v5d.wartungsprotokoll.map(p => ausProtokoll(p)),
@@ -2075,7 +2079,7 @@ async function start() {
     const v6Text = await (await fetch("daten-v6.json", { cache: "no-store" })).text();
     const v6d = JSON.parse(v6Text);
     const pruefeV6 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge (mit Wetter, Empfehlung und Rückmeldung), Wartung, Termine und Mängel erhalten; der Termin der Aufgabe Kette (20.11.) " +
         "kommt in einen geplanten Auftrag der Großen Inspektion (Zeitfenster Oktober–November)",
         [d.fahrrad, d.vorlagen, d.eintraege, d.wartungsarten, d.auftraege, d.maengel],
@@ -2099,7 +2103,7 @@ async function start() {
     pruefeV6(kopie(w6d.eval("daten")), "Beim Laden");
     gleich("Beim Laden: Version-6-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v6Text);
     const exp6 = w6d.exportInhalt("2026-10-31T19:00:00.000Z");
-    gleich("Umgewandelte Daten: Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [12, kopie(w6d.eval("daten"))]);
+    gleich("Umgewandelte Daten: Export als Version 13, Export → Import verlustfrei", [JSON.parse(exp6).version, kopie(w6d.datenEinlesen(exp6))], [13, kopie(w6d.eval("daten"))]);
     const fr6 = "2026-10-23"; // Freitag, Fahrtag ohne Eintrag
     const fehltAm = minuten => w6d.fehlendeFahrtage(fr6, minuten).includes(fr6);
     const ausFr6 = [fehltAm(23 * 60 + 59), w6d.fehlendeFahrtage("2026-10-24", 0).includes(fr6)];
@@ -2373,11 +2377,12 @@ async function start() {
     // -------------------------------------------------------------
     abschnitt("40. Rückmeldung nach der Fahrt (C2): gespeichert und je Stufe ausgewertet, verschiebt keine Grenzen; Schalter „Rückmeldung zur Kleidung“");
     const EMPF_R1 = B("leichte Mütze", "", "Übergangshandschuhe", "T-Shirt, warmer Pullover, Regenjacke", "Hose", "Socken");
-    const rmDaten = () => setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [
+    // Neue Daten: auch die nach „zu warm“/„zu kalt“ in der Karte stehen gebliebenen Fahrten vergessen (ab 5f)
+    const rmDaten = () => (w.eval("rueckmeldungOffen.clear()"), setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [
       AE("r1", D, 14.2, EW(FW({ kleidung: "stufe4", empfehlung: EMPF_R1, regenkleidung: true }), FW({ kleidung: "stufe3", gefuehlt: 12 }))),
       AE("r2", "2026-10-23", 14.2, EW(FW({ kleidung: "stufe5", rueckmeldung: "passte" }), null)),
       AE("r3", "2026-10-25", 14.2, EW(FW({ kleidung: "stufe4" }), FW({ kleidung: "weg" }))),
-      AE("r4", "2026-10-24", 14.2, EW(FW(), FW()))] });
+      AE("r4", "2026-10-24", 14.2, EW(FW(), FW()))] }));
     rmDaten();
     w.speichern();
     const vorRm = localStorage.getItem(TEST_SCHLUESSEL);
@@ -2688,7 +2693,7 @@ async function start() {
     ablageB.innerHTML = w.bildWetter(ABEND);
     rk = rueckKarte();
     wahr("Gelb wegen Böen: Böen als Grund in der Ampelzeile und in der Zeile zum Wind, nicht bei den Werten",
-      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C (gefühlt 9 °C) · Regen 0 %, 0 mm 🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
+      rk.includes("gelb: Böen 45 km/h ab 16:15 10 °C · Regen 0 %, 0 mm 🌇 Sonnenuntergang 16:49 · ab 16:49 dunkel 👕") && rk.includes("🧭 Wind 5 km/h aus Süd (schwach), Böen bis 45 km/h"), rk);
     w.eval("aktiverTab = 'uebersicht'; zeichnen()");
     wetterLeeren();
 
@@ -3129,7 +3134,7 @@ async function start() {
         positionen: [pos("pos-termin-reifen-hinten", "aufgabe", "reifen-hinten", "offen")] })
     ];
     const pruefeV7 = (d, wo) => {
-      gleich(wo + ": version = 12, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [12, false, false]);
+      gleich(wo + ": version = 13, kein Protokoll und keine Termine mehr", [d.version, "wartungsprotokoll" in d, "termine" in d], [13, false, false]);
       gleichInhalt(wo + ": Fahrrad, Einstellungen (Wetter mit Standardwerten), Vorlagen und Einträge unverändert", [d.fahrrad, d.vorlagen, d.eintraege, d.einstellungen.jahresziele],
         [v7d.fahrrad, v7d.vorlagen, v7d.eintraege, v7d.einstellungen.jahresziele]);
       gleich(wo + ": Einordnung: Zeitfenster, einmalig, „Inspektion“ oder „Reparatur“ im Namen → Auftrag, sonst Aufgabe (ohne Bauteil, Standard „nächste Inspektion“); Eigenleistung ergänzt",
@@ -3182,10 +3187,10 @@ async function start() {
     wV7.document.getElementById("a-bauteil").value = "Bremse vorn";
     wV7.document.getElementById("a-zuordnung").value = "grosse-inspektion";
     wV7.artSpeichern("bremse");
-    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 12 gespeichert",
+    gleich("Gespeichert: zurück im Prüfbildschirm, Bauteil und Zuordnung geändert; Daten jetzt als Version 13 gespeichert",
       [wV7.document.querySelector("#fensterinhalt h2").textContent, wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").bauteil,
         wV7.eval("daten.wartungsarten.find(a => a.id === 'bremse')").zuordnung, JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version],
-      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 12]);
+      ["Bitte Wartungsarten prüfen", "Bremse vorn", "grosse-inspektion", 13]);
     wV7.document.querySelector('#fensterinhalt [data-action="fenster-zu"]').click();
     gleich("„Später“: Fenster zu, Hinweis bleibt", [wV7.eval("fenster.open"), inhalt7().textContent.includes("Bitte Wartungsarten prüfen")], [false, true]);
     inhalt7().querySelector('[data-action="pruefung-oeffnen"]').click();
@@ -3195,12 +3200,12 @@ async function start() {
     wV7.frameElement.remove();
     const wV7b = await appLaden();
     wV7b.eval("aktiverTab = 'wartung'; zeichnen()");
-    gleich("Nach erneutem Laden (Daten schon Version 12): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
+    gleich("Nach erneutem Laden (Daten schon Version 13): kein Hinweis", wV7b.document.getElementById("inhalt").textContent.includes("Bitte Wartungsarten prüfen"), false);
     wV7b.sicherungAuswerten(v7Text, wV7b.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit einer Version-7-Datei merkt nichts vor und ändert nichts", localStorage.getItem(PRUEF), null);
     wV7b.frage = async () => true;
     await wV7b.importDateiGewaehlt(new wV7b.File([v7Text], "alt.json", { type: "application/json" }));
-    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [12, "ja"]);
+    gleich("Import einer Version-7-Datei: umgewandelt, gespeichert, Hinweis vorgemerkt", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version, localStorage.getItem(PRUEF)], [13, "ja"]);
     wV7b.frameElement.remove();
     localStorage.removeItem(PRUEF);
 
@@ -3748,7 +3753,7 @@ async function start() {
     const nach56 = w.exportInhalt();
     const wieder56 = w.eval("datenEinlesen(" + JSON.stringify(nach56) + ")");
     gleichInhalt("Export → Import: Daten mit den neuen Positionen unverändert (Datenversion 11)",
-      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 12]);
+      [kopie(wieder56), JSON.parse(nach56).version], [kopie(w.eval("daten")), 13]);
     gleich("„Sicherung prüfen“: frische Sicherung identisch", w.sicherungAuswerten(nach56, w.eval("daten"), H5).status, "identisch");
     const alt56 = w.sicherungAuswerten(sich56, w.eval("daten"), H5);
     gleich("„Sicherung prüfen“: Sicherung von vorher weicht ab (Auftrag geändert, Mangel geändert)", [alt56.status, alt56.titel, alt56.details],
@@ -3855,7 +3860,7 @@ async function start() {
     const v8Text = await (await fetch("daten-v8.json", { cache: "no-store" })).text();
     const v8d = JSON.parse(v8Text);
     const pruefeV8 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Aufträge vollständig erhalten, jeweils mit terminZeit = null (ganztägig), ohne Vorlauf und Kalenderstand", d.auftraege,
         v8d.auftraege.map(a => Object.assign({}, a, { terminZeit: null, vorlauf: null, imKalender: null })));
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
@@ -3877,7 +3882,7 @@ async function start() {
     let erg8 = wV8.sicherungAuswerten(v8Text, wV8.eval("daten"), "2026-11-01");
     gleich("„Sicherung prüfen“ mit der Version-8-Datei: identisch, Kurzinfo passt", [erg8.status, erg8.kurzinfoPasst], ["identisch", true]);
     const exp8 = wV8.exportInhalt();
-    gleich("Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [12, kopie(wV8.eval("daten"))]);
+    gleich("Export als Version 13, Export → Import verlustfrei", [JSON.parse(exp8).version, kopie(wV8.datenEinlesen(exp8))], [13, kopie(wV8.eval("daten"))]);
     // Prüfung von terminZeit
     const basis9 = JSON.parse(exp8);
     const mitZeit = (id, aend) => JSON.stringify(Object.assign({}, basis9, { auftraege: basis9.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
@@ -3901,8 +3906,8 @@ async function start() {
     gleich("Gespeichert: Termin unverändert, terminZeit 09:30, Werkstatt und Notiz unverändert",
       [auftrag8("a-klein").termin, auftrag8("a-klein").terminZeit, auftrag8("a-klein").werkstatt, auftrag8("a-klein").notiz],
       ["2026-11-20", "09:30", "Rad & Co, Süd; Filiale", "Schlüssel abgeben\nRückruf erbeten"]);
-    gleich("… und im Speicher als Version 12", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
-      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [12, "09:30"]);
+    gleich("… und im Speicher als Version 13", [JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).version,
+      JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).auftraege.find(a => a.id === "a-klein").terminZeit], [13, "09:30"]);
     wV8.eval("aktiverTab = 'wartung'; zeichnen()");
     wahr("Reiter Wartung: „Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)“",
       wV8.document.getElementById("inhalt").textContent.includes("Termin am 20.11.2026 um 09:30 Uhr bei Rad & Co, Süd; Filiale (in 19 Tagen)"));
@@ -4169,7 +4174,7 @@ async function start() {
     const v9Text = await (await fetch("daten-v9.json", { cache: "no-store" })).text();
     const v9d = JSON.parse(v9Text);
     const pruefeV9 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Aufträge vollständig erhalten (auch die Uhrzeit 09:30), jeweils mit vorlauf = null und imKalender = null", d.auftraege,
         v9d.auftraege.map(a => Object.assign({}, a, { vorlauf: null, imKalender: null })));
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Einträge, Wartungsarten, Mängel, Fahrtage und Jahresziele unverändert",
@@ -4186,7 +4191,7 @@ async function start() {
     const erg9 = wV9.sicherungAuswerten(v9Text, wV9.eval("daten"), "2026-11-05");
     gleich("„Sicherung prüfen“ mit der Version-9-Datei: identisch, Kurzinfo passt", [erg9.status, erg9.kurzinfoPasst], ["identisch", true]);
     const exp9 = wV9.exportInhalt();
-    gleich("Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp9).version, kopie(wV9.datenEinlesen(exp9))], [12, kopie(wV9.eval("daten"))]);
+    gleich("Export als Version 13, Export → Import verlustfrei", [JSON.parse(exp9).version, kopie(wV9.datenEinlesen(exp9))], [13, kopie(wV9.eval("daten"))]);
     const basis10 = JSON.parse(exp9);
     const mit10 = (id, aend) => JSON.stringify(Object.assign({}, basis10, { auftraege: basis10.auftraege.map(a => a.id === id ? Object.assign({}, a, aend) : a) }));
     const auftrag10 = (text, id) => wV9.datenEinlesen(text).auftraege.find(a => a.id === id);
@@ -4671,7 +4676,7 @@ async function start() {
     const v10Text = await (await fetch("daten-v10.json", { cache: "no-store" })).text();
     const v10d = JSON.parse(v10Text);
     const pruefeV10 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Aufträge (mit Vorlauf und Kalenderstand), Mängel, Fahrtage, Jahresziele und Hinweis unverändert",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele, d.einstellungen.hinweisHeuteAn, d.einstellungen.hinweisHeuteAb],
         [v10d.fahrrad, v10d.vorlagen, v10d.wartungsarten, v10d.auftraege, v10d.maengel, v10d.einstellungen.fahrtage, v10d.einstellungen.jahresziele, true, "18:00"]);
@@ -4695,7 +4700,7 @@ async function start() {
     const erg10 = wV10.sicherungAuswerten(v10Text, wV10.eval("daten"), "2026-11-06");
     gleich("„Sicherung prüfen“ mit der Version-10-Datei: identisch, Kurzinfo passt", [erg10.status, erg10.kurzinfoPasst], ["identisch", true]);
     const exp10 = wV10.exportInhalt();
-    gleich("Export als Version 12, Export → Import verlustfrei", [JSON.parse(exp10).version, kopie(wV10.datenEinlesen(exp10))], [12, kopie(wV10.eval("daten"))]);
+    gleich("Export als Version 13, Export → Import verlustfrei", [JSON.parse(exp10).version, kopie(wV10.datenEinlesen(exp10))], [13, kopie(wV10.eval("daten"))]);
     const basis11 = JSON.parse(exp10);
     const mitWetter11 = aend => JSON.stringify(Object.assign({}, basis11, { einstellungen: Object.assign({}, basis11.einstellungen,
       { wetter: Object.assign({}, basis11.einstellungen.wetter, aend) }) }));
@@ -4770,7 +4775,7 @@ async function start() {
     const v11Text = await (await fetch("daten-v11.json", { cache: "no-store" })).text();
     const v11d = JSON.parse(v11Text);
     const pruefeV11 = (d, wo) => {
-      gleich(wo + ": version = 12", d.version, 12);
+      gleich(wo + ": version = 13", d.version, 13);
       gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Aufträge, Mängel, Fahrtage, Jahresziele und Hinweis unverändert",
         [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel, d.einstellungen.fahrtage, d.einstellungen.jahresziele, d.einstellungen.hinweisHeuteAn, d.einstellungen.hinweisHeuteAb],
         [v11d.fahrrad, v11d.vorlagen, v11d.wartungsarten, v11d.auftraege, v11d.maengel, v11d.einstellungen.fahrtage, v11d.einstellungen.jahresziele, true, "17:00"]);
@@ -4792,8 +4797,8 @@ async function start() {
     const erg11 = wV11.sicherungAuswerten(v11Text, wV11.eval("daten"), "2026-11-20");
     gleich("„Sicherung prüfen“ mit der Version-11-Datei: identisch, Kurzinfo passt", [erg11.status, erg11.kurzinfoPasst], ["identisch", true]);
     const exp11 = wV11.exportInhalt();
-    gleich("Export als Version 12 ohne „ortAusserhalb“, Export → Import verlustfrei",
-      [JSON.parse(exp11).version, exp11.includes("ortAusserhalb"), kopie(wV11.datenEinlesen(exp11))], [12, false, kopie(wV11.eval("daten"))]);
+    gleich("Export als Version 13 ohne „ortAusserhalb“, Export → Import verlustfrei",
+      [JSON.parse(exp11).version, exp11.includes("ortAusserhalb"), kopie(wV11.datenEinlesen(exp11))], [13, false, kopie(wV11.eval("daten"))]);
     // Alte Dateien mit jedem Wert für ortAusserhalb (auch einem, den 5d abgelehnt hätte) lassen sich importieren
     gleich("Import einer Version-11-Datei mit „ortAusserhalb“ „wohnort“, „standort“ oder einem unbekannten Wert: das Feld entfällt",
       ["wohnort", "standort", "irgendwo"].map(o => "ortAusserhalb" in kopie(wV11.datenEinlesen(JSON.stringify(Object.assign({}, v11d, { einstellungen: Object.assign({}, v11d.einstellungen,
@@ -4824,10 +4829,76 @@ async function start() {
       const fahrten = d.eintraege.filter(e => e.wetter).flatMap(e => [e.wetter.hin, e.wetter.rueck]).filter(Boolean);
       kette.push(datei + ": " + [d.version, "ortAusserhalb" in d.einstellungen.wetter, fahrten.every(f => f.von === null && f.bis === null && f.abfahrt === null && f.geplanteAbfahrt === null)].join("/"));
     }
-    gleich("Umwandlung aus allen älteren Versionen (Testdateien v1 bis v10): Version 12, kein „ortAusserhalb“, Zeitfenster und Abfahrt je Fahrt leer",
-      kette, ketteDateien.map(d => d + ": 12/false/true"));
+    gleich("Umwandlung aus allen älteren Versionen (Testdateien v1 bis v10): Version 13, kein „ortAusserhalb“, Zeitfenster und Abfahrt je Fahrt leer",
+      kette, ketteDateien.map(d => d + ": 13/false/true"));
     gleich("Prüfung und Umwandlung verändern die gespeicherten Daten nicht", localStorage.getItem(TEST_SCHLUESSEL), v11Text);
     wV11.frameElement.remove();
+
+    // -------------------------------------------------------------
+    // 69b. Datenversion 13 (Release 5f): Umwandlung 12 → 13 (tests/daten-v12.json)
+    // -------------------------------------------------------------
+    abschnitt("69b. Datenversion 13: Umwandlung 12 → 13 (tests/daten-v12.json), Bereiche und Kommentar zur Rückmeldung je Fahrt prüfen");
+    const v12Text = await (await fetch("daten-v12.json", { cache: "no-store" })).text();
+    const v12d = JSON.parse(v12Text);
+    const pruefeV12 = (d, wo) => {
+      gleich(wo + ": version = 13", d.version, 13);
+      gleichInhalt(wo + ": Fahrrad, Vorlagen, Wartungsarten, Aufträge, Mängel und alle Einstellungen (mit Wetter und Kleidung) unverändert",
+        [d.fahrrad, d.vorlagen, d.wartungsarten, d.auftraege, d.maengel, d.einstellungen],
+        [v12d.fahrrad, v12d.vorlagen, v12d.wartungsarten, v12d.auftraege, v12d.maengel, v12d.einstellungen]);
+      gleichInhalt(wo + ": Einträge vollständig erhalten (Werte, Zeitfenster, Rückmeldung); je Fahrt Bereiche und Kommentar leer",
+        d.eintraege, v12d.eintraege.map(eintragV13));
+      gleich(wo + ": neue Felder im Einzelnen (auch bei „zu warm“); fehlende Rückfahrt bleibt null",
+        [d.eintraege[0].wetter.rueck.rueckmeldung, d.eintraege[0].wetter.rueck.rueckmeldungBereiche, d.eintraege[0].wetter.rueck.rueckmeldungKommentar,
+          d.eintraege[1].wetter.hin.rueckmeldungBereiche, d.eintraege[1].wetter.rueck], ["zu-warm", [], "", [], null]);
+    };
+    pruefeV12(kopie(w.datenEinlesen(v12Text)), "Beim Import");
+    localStorage.setItem(TEST_SCHLUESSEL, v12Text);
+    const wV12 = await appLaden();
+    wV12.heute = () => "2026-11-22";
+    gleich("Beim Laden: kein Ladefehler", wV12.eval("ladeFehler"), null);
+    pruefeV12(kopie(wV12.eval("daten")), "Beim Laden");
+    gleich("Beim Laden: Version-12-Daten im Speicher bleiben bis zum nächsten Speichern unverändert", localStorage.getItem(TEST_SCHLUESSEL), v12Text);
+    const erg12 = wV12.sicherungAuswerten(v12Text, wV12.eval("daten"), "2026-11-22");
+    gleich("„Sicherung prüfen“ mit der Version-12-Datei: identisch, Kurzinfo passt", [erg12.status, erg12.kurzinfoPasst], ["identisch", true]);
+    const exp12 = wV12.exportInhalt();
+    gleich("Export als Version 13 mit den neuen Feldern, Export → Import verlustfrei",
+      [JSON.parse(exp12).version, JSON.parse(exp12).eintraege[0].wetter.hin.rueckmeldungKommentar, kopie(wV12.datenEinlesen(exp12))], [13, "", kopie(wV12.eval("daten"))]);
+    const basis13 = JSON.parse(exp12);
+    const mitHin13 = aend => JSON.stringify(Object.assign({}, basis13, { eintraege: basis13.eintraege.map(e => e.id === "e-tag1"
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: Object.assign({}, e.wetter.hin, aend) }) }) : e) }));
+    const hin13 = text => kopie(wV12.datenEinlesen(text)).eintraege.find(e => e.id === "e-tag1").wetter.hin;
+    const rm13 = { rueckmeldung: "zu-kalt", rueckmeldungBereiche: ["haende", "fuesse"], rueckmeldungKommentar: "Unterziehhandschuhe unterwegs angezogen" };
+    gleich("Fahrt „zu kalt“ mit Bereichen und Kommentar: Import → Export → Import verlustfrei",
+      (r => [r.rueckmeldung, r.rueckmeldungBereiche, r.rueckmeldungKommentar])(hin13(JSON.stringify(kopie(wV12.datenEinlesen(mitHin13(rm13)))))),
+      ["zu-kalt", ["haende", "fuesse"], "Unterziehhandschuhe unterwegs angezogen"]);
+    gleich("Bereinigt: Bereiche in der Reihenfolge Kopf … Füße, Kommentar ohne Leerzeichen am Rand; fehlende Felder leer",
+      [hin13(mitHin13(Object.assign({}, rm13, { rueckmeldungBereiche: ["fuesse", "kopf", "haende"], rueckmeldungKommentar: "  kalt  " }))).rueckmeldungBereiche,
+        hin13(mitHin13(Object.assign({}, rm13, { rueckmeldungKommentar: "  kalt  " }))).rueckmeldungKommentar,
+        (r => [r.rueckmeldungBereiche, r.rueckmeldungKommentar])(hin13(mitHin13({ rueckmeldungBereiche: undefined, rueckmeldungKommentar: undefined })))],
+      [["kopf", "haende", "fuesse"], "kalt", [[], ""]]);
+    gleich("Kommentar mit genau 200 Zeichen (auch mit Emoji) wird angenommen", hin13(mitHin13(Object.assign({}, rm13, { rueckmeldungKommentar: "🧤" + "x".repeat(199) }))).rueckmeldungKommentar.length, 201);
+    const rmFalsch = (aend, teil, text) => wirft("Rückmeldung: " + text + " wird abgelehnt", () => wV12.datenEinlesen(mitHin13(Object.assign({}, rm13, aend))), teil);
+    rmFalsch({ rueckmeldungBereiche: ["haende", "nase"] }, "rueckmeldungBereiche muss eine Liste", "unbekannter Bereich „nase“");
+    rmFalsch({ rueckmeldungBereiche: "haende" }, "rueckmeldungBereiche muss eine Liste", "Bereiche als Text");
+    rmFalsch({ rueckmeldungBereiche: ["haende", "haende"] }, "doppelt", "doppelter Bereich");
+    rmFalsch({ rueckmeldungKommentar: 5 }, "rueckmeldungKommentar muss ein Text sein", "Kommentar als Zahl");
+    rmFalsch({ rueckmeldungKommentar: "Zeile 1\nZeile 2" }, "einzeilig", "Kommentar mit Zeilenumbruch");
+    rmFalsch({ rueckmeldungKommentar: "x".repeat(201) }, "höchstens 200 Zeichen", "Kommentar mit 201 Zeichen");
+    rmFalsch({ rueckmeldung: "passte" }, "nur bei der Rückmeldung „zu-warm“ oder „zu-kalt“", "Bereiche und Kommentar bei „passte“");
+    rmFalsch({ rueckmeldung: null, rueckmeldungBereiche: [] }, "nur bei der Rückmeldung", "Kommentar ohne Rückmeldung");
+    gleich("„passte“ und keine Rückmeldung mit leeren Feldern sind gültig", [hin13(mitHin13({ rueckmeldung: "passte" })).rueckmeldung, hin13(mitHin13({ rueckmeldung: null })).rueckmeldung],
+      ["passte", null]);
+    const ketteDateien13 = ketteDateien.concat(["daten-v11.json", "daten-v12.json"]);
+    const kette13 = [];
+    for (const datei of ketteDateien13) {
+      const d = kopie(wV12.datenEinlesen(await (await fetch(datei, { cache: "no-store" })).text()));
+      const fahrten = d.eintraege.filter(e => e.wetter).flatMap(e => [e.wetter.hin, e.wetter.rueck]).filter(Boolean);
+      kette13.push(datei + ": " + [d.version, fahrten.every(f => JSON.stringify(f.rueckmeldungBereiche) === "[]" && f.rueckmeldungKommentar === "")].join("/"));
+    }
+    gleich("Umwandlung aus allen älteren Versionen (Testdateien v1 bis v12): Version 13, Bereiche und Kommentar je Fahrt leer",
+      kette13, ketteDateien13.map(d => d + ": 13/true"));
+    gleich("Prüfung und Umwandlung verändern die gespeicherten Daten nicht", localStorage.getItem(TEST_SCHLUESSEL), v12Text);
+    wV12.frameElement.remove();
 
     // -------------------------------------------------------------
     // 70. Gefühlt beim Fahren (N5, Release 5d): Formel, Luftstrom, Windprofil, Fahrgeschwindigkeit, Rechnung je Fahrt
@@ -5103,7 +5174,7 @@ async function start() {
       [2, { zeitpunkt: "2026-11-14T08:00:00.000Z", art: "stufe", stufe: "stufe5", vorher: S5_NACH,
         nachher: Object.assign(kopie(S5_NACH), { bereiche: Object.assign(kopie(S5_NACH.bereiche), { hals: "Schal, Tuch" }) }), auchBetroffen: [] }, 2]);
     gleich("… die Zählung beginnt neu („seit deiner Änderung am 14.11.: noch keine“), der Hinweis verschwindet",
-      [w.seitText(w.rueckmeldungenSeitAenderung().stufe5), w.kleidungHinweis("stufe5")], ["seit deiner Änderung am 14.11.: noch keine · vor 5d: 1× zu warm", null]);
+      [w.seitText("stufe5", w.rueckmeldungenSeitAenderung().stufe5), w.kleidungHinweis("stufe5")], ["seit deiner Änderung am 14.11.: noch keine · vor 5d: 1× zu warm", null]);
     uhrN4 = Date.parse("2026-11-14T08:05:00.000Z");
     w.kleidungStufeFormular(3);
     feld("ks-ab").value = "8";
@@ -5492,7 +5563,7 @@ async function start() {
     gleich("Ohne gespeichertes Zeitfenster (vor 5e) gelten die Einstellungen", zeitVon(w.fahrtenWetter(w.streckeWetter().orteDaten, "2026-10-26", "rueckblick", T75, T75,
       w.gespeicherteZeiten({ datum: "2026-10-26", wetter: { hin: { von: null, bis: null }, rueck: null } })).rueck), ["16:00", "17:00", "16:00", null]);
     // Eintrag schon gespeichert, danach eine andere Zeit: Rückfrage, Rückmeldung bleibt
-    w.eval("eintragAm('" + D + "').wetter.rueck.rueckmeldung = 'passte'; speichern()");
+    w.eval("Object.assign(eintragAm('" + D + "').wetter.rueck, { rueckmeldung: 'zu-kalt', rueckmeldungBereiche: ['haende'], rueckmeldungKommentar: 'Handschuhe vergessen' }); speichern()");
     const fragen75 = [];
     let antwort75 = false;
     w.frage = async text => { fragen75.push(ohneTags(text)); return antwort75; };
@@ -5509,16 +5580,16 @@ async function start() {
     setzeSp("18:00");
     await w.spaeterUebernehmen();
     const re75 = () => w.eval("eintragAm('" + D + "').wetter");
-    gleich("„Neu berechnen“: Rückfahrt 18:00–19:00 neu, Rückmeldung „passte“ bleibt, Hinfahrt unverändert; mit „Rückgängig“",
-      [zeitVon(re75().rueck), re75().rueck.rueckmeldung, zeitVon(re75().hin), toast()],
-      [["18:00", "19:00", "18:00", "16:00"], "passte", ["06:00", "07:00", "06:00", null], ["Gespeichertes Wetter der Rückfahrt neu berechnet", true]]);
+    gleich("„Neu berechnen“: Rückfahrt 18:00–19:00 neu, Rückmeldung „zu kalt“ mit Bereichen und Kommentar (ab 5f) bleibt, Hinfahrt unverändert; mit „Rückgängig“",
+      [zeitVon(re75().rueck), re75().rueck.rueckmeldung, re75().rueck.rueckmeldungBereiche, re75().rueck.rueckmeldungKommentar, zeitVon(re75().hin), toast()],
+      [["18:00", "19:00", "18:00", "16:00"], "zu-kalt", ["haende"], "Handschuhe vergessen", ["06:00", "07:00", "06:00", null], ["Gespeichertes Wetter der Rückfahrt neu berechnet", true]]);
     // zurücksetzen: zurück zur Planung, wieder mit Rückfrage
     fragen75.length = 0;
     await w.spaeterZuruecksetzen("rueckfahrt", T75);
     gleich("„zurücksetzen“: Planung 16:00–17:00, Hilfsspeicher leer, Knopf wieder „Heute später los …“, Rückfrage für den Eintrag",
       [localStorage.getItem(ABW), w.wetterAnsicht(T75).naechsterTag.fahrten[1].fahrt.von, !!karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]'),
-        ohneTags(karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]').innerHTML), fragen75.length, zeitVon(re75().rueck), re75().rueck.rueckmeldung],
-      [null, "16:00", true, "Heute später los …", 1, ["16:00", "17:00", "16:00", null], "passte"]);
+        ohneTags(karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]').innerHTML), fragen75.length, zeitVon(re75().rueck), re75().rueck.rueckmeldung, re75().rueck.rueckmeldungBereiche],
+      [null, "16:00", true, "Heute später los …", 1, ["16:00", "17:00", "16:00", null], "zu-kalt", ["haende"]]);
     w.frage = async () => true;
     // Nach der Fahrt (auch wenn ich doch später fahre): Knopf in der aufgeklappten Karte
     w.fahrtAufklappen(D + "|rueckfahrt");
@@ -5566,6 +5637,247 @@ async function start() {
     localStorage.removeItem(ABW);
     w.eval("daten.eintraege = daten.eintraege.filter(e => e.id !== 'e75')");
     wetterLeeren();
+
+    // -------------------------------------------------------------
+    // 77. Gefühlte Temperatur nicht doppelt (B15, Release 5f)
+    // -------------------------------------------------------------
+    abschnitt("77. Gefühlte Temperatur nicht doppelt (B15): Fahrt-Karten Heute und Nächster ohne „(gefühlt …)“, weiterer Ort und alte Fahrten mit, Eintragsansicht wie die Karte");
+    const W77 = { temperatur: -2, gefuehlt: -5, regenWahrscheinlichkeit: 0, niederschlag: 0 };
+    gleich("Wertezeile: ohne Kleidungszeile mit Klammer, sonst ohne", [w.werteText(W77), w.werteText(W77, false)],
+      ["−2 °C (gefühlt −5 °C) · Regen 0 %, 0 mm", "−2 °C · Regen 0 %, 0 mm"]);
+    setze7({ fahrrad: F("2026-01-01", 0), vorlagen: [{ id: "v-arbeit", name: "Arbeit", km: 34, arbeitsweg: true }], einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt() } });
+    await laden(kopie(gfRoh), fx["wetter-dwd-leer"], SO);
+    const karten77 = jetzt => { const d = w.document.createElement("div"); d.innerHTML = w.bildWetter(jetzt); return [...d.querySelectorAll(".karte")].filter(k => k.querySelector("h3")).map(k => ohneTags(k.innerHTML)); };
+    const naechste77 = karten77(SO);
+    gleich("Nächster (Mo 09.11.): Hin- und Rückfahrt ohne „(gefühlt“, die Kleidungszeile mit „gefühlt … · beim Fahren …“",
+      [w.wetterAnsicht(SO).auswahl.wert, naechste77.length, naechste77.some(t => t.includes("(gefühlt")), naechste77.every(t => /👕 Kleidung gefühlt −?\d+ °C · beim Fahren/.test(t))],
+      ["naechster", 2, false, true]);
+    const MO = zeit("2026-11-09", "17:30");
+    w.eval("fahrtAufgeklappt.add('2026-11-09|hinfahrt'); fahrtAufgeklappt.add('2026-11-09|rueckfahrt')");
+    const heute77 = karten77(MO);
+    w.eval("fahrtAufgeklappt.clear()");
+    gleich("Heute (Mo 17:30, beide Fahrten aufgeklappt): ebenso", [w.wetterAnsicht(MO).auswahl.wert, heute77.length, heute77.some(t => t.includes("(gefühlt")),
+      heute77.every(t => /👕 Kleidung gefühlt −?\d+ °C · beim Fahren/.test(t))], ["heute", 2, false, true]);
+    wetterLeeren();
+    gleich("Weiterer Ort (ohne Kleidung): Tageswerte mit „(gefühlt … bis …)“", w.tageswerteText({ tmin: -2, tmax: 3, gefuehltMin: -5, gefuehltMax: 1, regenWahrscheinlichkeit: 0, niederschlag: 0,
+      wind: 10, boeen: 20, gewitter: false }).includes("−2 °C bis 3 °C (gefühlt −5 °C bis 1 °C)"), true);
+    setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: mitFahrt() }, eintraege: [
+      AE("g1", "2026-11-09", 34, EW(FW({ temperatur: -2, gefuehlt: -5, regenWahrscheinlichkeit: 0, beimFahren: -8, luftfeuchte: 80, windRichtung: 90, windAnteil: null, teilstrecken: null,
+        geschwindigkeit: 18, grundlage: "fahrt", empfohlenAm: "2026-11-09T05:00:00.000Z" }), FW({ temperatur: 4, gefuehlt: 2 })))] });
+    w.eintragAnsicht("g1");
+    const detail77 = ohneTags(fensterInhaltHtml());
+    wahr("Eintragsansicht mit „beim Fahren“: „−2 °C · Regen …“ und „gefühlt −5 °C · beim Fahren −8 °C bei 18 km/h · Stufe nach „beim Fahren““",
+      detail77.includes("−2 °C · Regen 0 %, 0 mm · Wind 8 km/h") && detail77.includes("gefühlt −5 °C · beim Fahren −8 °C bei 18 km/h · Stufe nach „beim Fahren“") &&
+      (detail77.match(/gefühlt −5 °C/g) || []).length === 1, detail77);
+    wahr("… alte Fahrt ohne „beim Fahren“ (vor 5d): Klammer bleibt", detail77.includes("4 °C (gefühlt 2 °C) · Regen 10 %, 0 mm"), detail77);
+    w.fensterSchliessen();
+
+    // -------------------------------------------------------------
+    // 78. Zählertext ab der letzten Änderung auch ohne Rückmeldung (B16, Release 5f)
+    // -------------------------------------------------------------
+    abschnitt("78. Zählertext „seit deiner Änderung am …: noch keine“ bei geänderten Stufen ohne Rückmeldung (B16)");
+    const T78 = "2026-11-21T09:00:00.000Z";
+    const kleidung78 = (mitUmschalter = false) => { const k = kleidungN4();
+      k.protokoll = [{ zeitpunkt: T78, art: "stufe", stufe: "stufe5", vorher: S5_VOR, nachher: S5_NACH, auchBetroffen: ["stufe6"] }].concat(mitUmschalter
+        ? [{ zeitpunkt: "2026-11-22T08:00:00.000Z", art: "grundlage", stufe: null, vorher: "gefuehlt", nachher: "fahrt", auchBetroffen: [] }] : []);
+      return k; };
+    n4Daten([], kleidung78());
+    const zeile78 = i => ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="' + i + '"] .text').innerHTML).split("Rückmeldungen ")[1];
+    w.kleidungFormular();
+    gleich("Seite Kleidung: geänderte Stufe und die Nachbarstufe, deren Bereich sich verschoben hat, „seit deiner Änderung am 21.11.: noch keine“; unveränderte „seit 5d“",
+      [zeile78(4), zeile78(5), zeile78(0), w.seitText("stufe5", undefined), w.seitText("stufe1", undefined)],
+      ["seit deiner Änderung am 21.11.: noch keine", "seit deiner Änderung am 21.11.: noch keine", "seit 5d: noch keine",
+        "seit deiner Änderung am 21.11.: noch keine", "seit 5d: noch keine"]);
+    w.kleidungStufeFormular(4);
+    wahr("Unterseite der Stufe: „Rückmeldungen seit deiner Änderung am 21.11.: noch keine“ (auch ohne Rückmeldung)",
+      ohneTags(inhaltHtml()).includes("Rückmeldungen seit deiner Änderung am 21.11.: noch keine"), ohneTags(inhaltHtml()));
+    w.kleidungStufeFormular(null);
+    wahr("Neue Stufe: ohne Zeile „Rückmeldungen“", !ohneTags(inhaltHtml()).includes("Rückmeldungen seit"), ohneTags(inhaltHtml()));
+    n4Daten([], kleidung78(true));
+    w.kleidungFormular();
+    gleich("Nach dem Umschalter (22.11.): alle Stufen „seit deiner Änderung am 22.11.: noch keine“", [zeile78(0), zeile78(4), zeile78(5)],
+      ["seit deiner Änderung am 22.11.: noch keine", "seit deiner Änderung am 22.11.: noch keine", "seit deiner Änderung am 22.11.: noch keine"]);
+    n4Daten([AE("h1", "2026-11-23", 34, EW(FN("zu-kalt", "2026-11-23T05:00:00.000Z", { kleidung: "stufe6" }), FN("zu-kalt", "2026-11-23T05:00:00.000Z", { kleidung: "stufe6" })))], kleidung78());
+    const k78 = w.eval("daten.einstellungen.wetter.kleidung");
+    gleich("Hinweistext mit derselben Prüfung: Nachbarstufe „seit deiner Änderung am 21.11.“", w.kleidungHinweis("stufe6").text,
+      "Stufe " + w.stufeBereich(k78, 5) + ": seit deiner Änderung am 21.11. 2× zu kalt (beide bei Gegenwind)");
+
+    // -------------------------------------------------------------
+    // 79. Bereiche und Kommentar zur Rückmeldung (B17, Release 5f): Oberfläche
+    // -------------------------------------------------------------
+    abschnitt("79. Rückmeldung mit „Wo?“ und Kommentar (B17): Karte im Reiter Wetter bis „Fertig“, Eintragsansicht, still gespeichert, Wechsel des Urteils, VoiceOver");
+    const echtNow79 = w.Date.now;
+    const T79 = zeit("2026-11-20", "18:00");
+    w.Date.now = () => T79;
+    w.eval("rueckmeldungOffen.clear()");
+    setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [
+      AE("b1", "2026-11-20", 14.2, EW(FW({ kleidung: "stufe4" }), FW({ kleidung: "stufe4" }))),
+      AE("b2", "2026-11-19", 14.2, EW(FW({ kleidung: "stufe4" }), null))] });
+    w.speichern();
+    w.eval("aktiverTab = 'wetter'; zeichnen()");
+    const karte79 = () => [...w.document.querySelectorAll("#inhalt .karte")].find(k => (k.querySelector("h3") || {}).textContent === "Wie war die Kleidung?") || null;
+    const knopf79 = (sel, wurzel = karte79()) => wurzel && wurzel.querySelector(sel);
+    const gesp79 = (id, art) => JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.find(e => e.id === id).wetter[art];
+    const rmWerte = (id, art) => { const f = eintrag(id).wetter[art]; return [f.rueckmeldung, f.rueckmeldungBereiche, f.rueckmeldungKommentar]; };
+    const offen79 = () => w.offeneRueckmeldungen(T79).map(x => x.e.id + " " + x.art);
+    gleich("Ohne Rückmeldung: zwei Fahrten in der Karte, noch ohne „Wo?“", [offen79(), !!knopf79(".rueckmeldung-wo")], [["b1 hin", "b1 rueck"], false]);
+    knopf79('[data-action="rueckmeldung"][data-id="b1"][data-fahrt="hin"][data-urteil="zu-kalt"]').click();
+    const wo79 = () => knopf79('.rueckmeldung-wo');
+    const gruppe79 = () => wo79() && wo79().querySelector('[role="group"]');
+    gleich("„zu kalt“: gespeichert, Meldung mit „Rückgängig“; die Fahrt bleibt in der Karte, darunter „Wo war es zu kalt?“ mit sechs Schaltern, Kommentar und „Fertig“",
+      [rmWerte("b1", "hin"), toast()[1], offen79(), ohneTags(wo79().querySelector(".klein").innerHTML),
+        [...gruppe79().querySelectorAll("button")].map(b => b.textContent + "/" + b.getAttribute("aria-pressed")), !!wo79().querySelector('[data-action="rueckmeldung-fertig"]')],
+      [["zu-kalt", [], ""], true, ["b1 hin", "b1 rueck"], "Wo war es zu kalt?",
+        ["Kopf/false", "Hals/false", "Hände/false", "Oberkörper/false", "Beine/false", "Füße/false"], true]);
+    const kom79 = () => wo79().querySelector("input");
+    const labelFuer = el => el && w.document.querySelector('label[for="' + el.id + '"]');
+    gleich("VoiceOver: Gruppe mit Beschriftung „Wo war es zu kalt? (Hinfahrt)“, Schalter mit aria-pressed, Kommentarfeld mit Beschriftung, einzeilig, höchstens 200 Zeichen",
+      [gruppe79().getAttribute("aria-label"), [...gruppe79().querySelectorAll("button")].every(b => b.type === "button" && b.hasAttribute("aria-pressed")),
+        labelFuer(kom79()) && labelFuer(kom79()).textContent, kom79().type, kom79().maxLength, kom79().getAttribute("enterkeyhint")],
+      ["Wo war es zu kalt? (Hinfahrt)", true, "Kommentar (optional)", "text", 200, "done"]);
+    const schalter79 = name => [...gruppe79().querySelectorAll("button")].find(b => b.textContent === name);
+    w.document.getElementById("toast-text").textContent = "unverändert";
+    schalter79("Hände").click();
+    schalter79("Füße").click();
+    schalter79("Kopf").click();
+    gleich("Bereiche antippen: Mehrfachauswahl in der Reihenfolge der Stufen, still gespeichert (ohne Meldung), Schalter gedrückt",
+      [rmWerte("b1", "hin")[1], gesp79("b1", "hin").rueckmeldungBereiche, toast()[0], [...gruppe79().querySelectorAll('[aria-pressed="true"]')].map(b => b.textContent)],
+      [["kopf", "haende", "fuesse"], ["kopf", "haende", "fuesse"], "unverändert", ["Kopf", "Hände", "Füße"]]);
+    schalter79("Kopf").click();
+    gleich("Erneutes Antippen wählt ab", [rmWerte("b1", "hin")[1], schalter79("Kopf").getAttribute("aria-pressed"), toast()[0]], [["haende", "fuesse"], "false", "unverändert"]);
+    const tippen79 = (el, text, fertig) => { el.value = text; el.dispatchEvent(new w.Event("input", { bubbles: true })); if (fertig) el.dispatchEvent(new w.Event("change", { bubbles: true })); };
+    tippen79(kom79(), "  Unterziehhandschuhe unterwegs angezogen", false);
+    const beimTippen = gesp79("b1", "hin").rueckmeldungKommentar;
+    tippen79(kom79(), "  Unterziehhandschuhe unterwegs angezogen  ", true);
+    gleich("Kommentar: schon beim Tippen gespeichert, am Ende ohne Leerzeichen am Rand; still (ohne Meldung)",
+      [beimTippen, gesp79("b1", "hin").rueckmeldungKommentar, kom79().value, toast()[0]],
+      ["  Unterziehhandschuhe unterwegs angezogen", "Unterziehhandschuhe unterwegs angezogen", "Unterziehhandschuhe unterwegs angezogen", "unverändert"]);
+    const k2 = kom79();
+    // Ein Textfeld nimmt keinen Zeilenumbruch an; die Funktion selbst macht ihn zum Leerzeichen (z. B. aus eingefügtem Text)
+    w.rueckmeldungKommentarSetzen({ value: "Zeile 1\nZeile 2", dataset: { id: "b1", fahrt: "hin" } }, true);
+    const einzeilig = eintrag("b1").wetter.hin.rueckmeldungKommentar;
+    tippen79(k2, "x".repeat(250), true);
+    gleich("Zeilenumbruch wird zum Leerzeichen, mehr als 200 Zeichen werden gekürzt", [einzeilig, eintrag("b1").wetter.hin.rueckmeldungKommentar.length], ["Zeile 1 Zeile 2", 200]);
+    tippen79(k2, "Unterziehhandschuhe unterwegs angezogen", true);
+    w.document.querySelector('#inhalt [data-action="rueckmeldung"][data-id="b1"][data-fahrt="rueck"][data-urteil="zu-warm"]').click();
+    const woRueck = () => [...karte79().querySelectorAll(".rueckmeldung-wo")].map(x => x.querySelector('[role="group"]').getAttribute("aria-label"));
+    gleich("Rückfahrt getrennt: „zu warm“ fragt „Wo war es zu warm? (Rückfahrt)“; die Hinfahrt behält ihre Bereiche",
+      [woRueck(), rmWerte("b1", "rueck"), rmWerte("b1", "hin")[1]],
+      [["Wo war es zu kalt? (Hinfahrt)", "Wo war es zu warm? (Rückfahrt)"], ["zu-warm", [], ""], ["haende", "fuesse"]]);
+    w.document.querySelector('#inhalt [data-action="rueckmeldung"][data-id="b1"][data-fahrt="hin"][data-urteil="zu-warm"]').click();
+    gleich("Gegenrichtung (zu kalt → zu warm): Bereiche und Kommentar bleiben, Meldung nennt sie, „Wo war es zu warm?“",
+      [rmWerte("b1", "hin"), toast()[0].split(" · Stufe")[0], toast()[1], woRueck()[0]],
+      [["zu-warm", ["haende", "fuesse"], "Unterziehhandschuhe unterwegs angezogen"], "Rückmeldung „zu warm“ gespeichert · Bereiche (Hände, Füße) und Kommentar übernommen", true,
+        "Wo war es zu warm? (Hinfahrt)"]);
+    w.document.querySelector('#inhalt [data-action="rueckmeldung"][data-id="b1"][data-fahrt="hin"][data-urteil="passte"]').click();
+    gleich("Wechsel auf „passte“: Bereiche und Kommentar geleert, Meldung mit „Rückgängig“; die Fahrt verschwindet aus der Karte",
+      [rmWerte("b1", "hin"), toast()[0].split(" · Stufe")[0], toast()[1], offen79()],
+      [["passte", [], ""], "Rückmeldung „passte“ gespeichert · Bereiche und Kommentar entfernt", true, ["b1 rueck", "b2 hin"]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“: zu warm mit Bereichen und Kommentar zurück, die Fahrt steht wieder in der Karte",
+      [rmWerte("b1", "hin"), offen79()], [["zu-warm", ["haende", "fuesse"], "Unterziehhandschuhe unterwegs angezogen"], ["b1 hin", "b1 rueck"]]);
+    knopf79('[data-action="rueckmeldung-fertig"][data-id="b1"][data-fahrt="hin"]').click();
+    gleich("„Fertig“: die Fahrt verschwindet aus der Karte, die nächste offene rückt nach; gespeichert bleibt alles",
+      [offen79(), rmWerte("b1", "hin")[0], ohneTags(karte79().innerHTML).includes("Do 19.11.") || ohneTags(karte79().innerHTML).includes("Gestern")],
+      [["b1 rueck", "b2 hin"], "zu-warm", true]);
+    knopf79('[data-action="rueckmeldung"][data-id="b2"][data-fahrt="hin"][data-urteil="zu-kalt"]').click();
+    const vorBereich = toast()[1];
+    knopf79('[data-action="rueckmeldung-bereich"][data-id="b2"][data-bereich="haende"]').click();
+    w.rueckgaengig();
+    gleich("Ein Bereich danach ist eine weitere Änderung: sie beendet das Angebot „Rückgängig“ (wie jede Änderung), nichts wird überschrieben",
+      [vorBereich, w.document.getElementById("toast-knopf").hidden, rmWerte("b2", "hin")], [true, true, ["zu-kalt", ["haende"], ""]]);
+    // Eintragsansicht: nachträglich änderbar, Kommentar bei der Fahrt
+    w.eintragAnsicht("b1");
+    const fe = () => w.document.getElementById("fensterinhalt");
+    const woFe = art => [...fe().querySelectorAll('.rueckmeldung-wo [role="group"]')].find(g => g.querySelector('[data-fahrt="' + art + '"]'));
+    gleich("Eintragsansicht: je Fahrt „Wo?“ mit den gespeicherten Bereichen und dem Kommentar im Feld, ohne „Fertig“",
+      [woFe("hin").getAttribute("aria-label"), [...woFe("hin").querySelectorAll('[aria-pressed="true"]')].map(b => b.textContent),
+        fe().querySelector('input[data-fahrt="hin"]').value, woFe("rueck").getAttribute("aria-label"), !!fe().querySelector('[data-action="rueckmeldung-fertig"]'),
+        labelFuer(fe().querySelector('input[data-fahrt="hin"]')).textContent],
+      ["Wo war es zu warm? (Hinfahrt)", ["Hände", "Füße"], "Unterziehhandschuhe unterwegs angezogen", "Wo war es zu warm? (Rückfahrt)", false, "Kommentar (optional)"]);
+    woFe("rueck").querySelector('[data-bereich="beine"]').click();
+    tippen79(fe().querySelector('input[data-fahrt="rueck"]'), "Regenhose zu warm", true);
+    gleich("… Bereich und Kommentar nachträglich, still gespeichert; das Fenster bleibt offen",
+      [rmWerte("b1", "rueck"), gesp79("b1", "rueck").rueckmeldungKommentar, w.eval("fenster.open"), woFe("rueck").querySelector('[data-bereich="beine"]').getAttribute("aria-pressed")],
+      [["zu-warm", ["beine"], "Regenhose zu warm"], "Regenhose zu warm", true, "true"]);
+    fe().querySelector('[data-action="rueckmeldung"][data-fahrt="rueck"][data-urteil="passte"]').click();
+    gleich("… „passte“ in der Eintragsansicht leert Bereiche und Kommentar (mit „Rückgängig“), „Wo?“ verschwindet",
+      [rmWerte("b1", "rueck"), toast()[1], !!woFe("rueck"), w.eval("fenster.open")], [["passte", [], ""], true, false, true]);
+    w.rueckgaengig();
+    w.eval("daten.einstellungen.wetter.kleidung.rueckmeldung = false");
+    w.eintragAnsicht("b1");
+    const nurText = ohneTags(fe().innerHTML);
+    wahr("Rückmeldung ausgeschaltet: nur Text „Rückmeldung: zu warm · Hände, Füße“ und der Kommentar bei der jeweiligen Fahrt",
+      nurText.includes("Rückmeldung: zu warm · Hände, Füße 💬 „Unterziehhandschuhe unterwegs angezogen“") && nurText.includes("Rückmeldung: zu warm · Beine 💬 „Regenhose zu warm“") &&
+      !fe().querySelector(".rueckmeldung-wo"), nurText);
+    w.eval("daten.einstellungen.wetter.kleidung.rueckmeldung = true");
+    w.fensterSchliessen();
+    // „Wetter nachtragen“ behält Bereiche und Kommentar
+    const altRb = EW(FW({ kleidung: "stufe4", rueckmeldung: "zu-kalt", rueckmeldungBereiche: ["haende"], rueckmeldungKommentar: "Handschuhe vergessen", grundlage: "fahrt",
+      empfohlenAm: "2026-11-20T05:00:00.000Z" }), null);
+    const rb79 = w.rueckblickUebernehmen(altRb, EW(FW({ temperatur: 1, rueckmeldungBereiche: [], rueckmeldungKommentar: "" }), null, "rueckblick"));
+    gleich("„Wetter nachtragen“ (Wetter aus der Vorhersage → Rückblick): Rückmeldung mit Bereichen und Kommentar bleibt",
+      [rb79.hin.temperatur, rb79.hin.rueckmeldung, rb79.hin.rueckmeldungBereiche, rb79.hin.rueckmeldungKommentar], [1, "zu-kalt", ["haende"], "Handschuhe vergessen"]);
+    gleich("Neue Fahrt aus der Vorhersage: Bereiche und Kommentar leer", (() => { const f = w.fahrtenWetter(w.vorhersageLesen(kopie(gfRoh), 2), "2026-11-09", "vorhersage", SO, SO).hin;
+      return [f.rueckmeldungBereiche, f.rueckmeldungKommentar]; })(), [[], ""]);
+    w.Date.now = echtNow79;
+    w.eval("rueckmeldungOffen.clear(); aktiverTab = 'uebersicht'; zeichnen()");
+
+    // -------------------------------------------------------------
+    // 80. Auswertung mit Bereichen (B17/N4, Release 5f): Hinweis, Übersicht je Stufe, letzte Kommentare
+    // -------------------------------------------------------------
+    abschnitt("80. Auswertung der Bereiche (B17): Hinweis nennt die Bereiche, Übersicht „Wo“ je Stufe, letzte 5 Kommentare auf der Stufen-Unterseite");
+    const RM80 = (urteil, tag, bereiche, kommentar = "", aend = {}) => FN(urteil, "2026-11-" + tag + "T05:00:00.000Z",
+      Object.assign({ rueckmeldungBereiche: bereiche, rueckmeldungKommentar: kommentar }, aend));
+    const TITEL5 = "Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. ";
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), null)), AE("w2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", ["haende"]), null))]);
+    gleich("Beide Male dieselben Bereiche: „2× zu kalt (beide Male Hände; beide bei Gegenwind)“", w.kleidungHinweis("stufe5").text, TITEL5 + "2× zu kalt (beide Male Hände; beide bei Gegenwind)");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), RM80("zu-kalt", "09", ["haende"], "", SEITE)))]);
+    gleich("Gemischter Wind: „(beide Male Hände; 1× bei Gegenwind, 1× bei Seitenwind)“", w.kleidungHinweis("stufe5").text,
+      TITEL5 + "2× zu kalt (beide Male Hände; 1× bei Gegenwind, 1× bei Seitenwind)");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["fuesse", "haende"]), RM80("zu-kalt", "09", ["haende", "fuesse"]))),
+      AE("w2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", ["haende", "fuesse"]), null))]);
+    gleich("Drei Fahrten, alle mit Händen und Füßen: „alle 3 Male Hände und Füße“", w.kleidungHinweis("stufe5").text,
+      TITEL5 + "3× zu kalt (alle 3 Male Hände und Füße; alle bei Gegenwind)");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), RM80("zu-kalt", "09", ["haende", "fuesse"]))),
+      AE("w2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", []), RM80("zu-warm", "10", ["kopf"])))]);
+    gleich("Verschiedene Bereiche, eine Fahrt ohne Bereich: gezählt „2× Hände, 1× Füße“; die Fahrt „zu warm“ zählt dort nicht", w.kleidungHinweis("stufe5").text,
+      TITEL5 + "3× zu kalt (2× Hände, 1× Füße; alle bei Gegenwind)");
+    gleich("Übersicht „Wo“ je Stufe nach Bereichen, beide Richtungen", w.bereicheUebersicht(w.rueckmeldungenSeitAenderung().stufe5), "Kopf 1× zu warm · Hände 2× zu kalt · Füße 1× zu kalt");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", []), RM80("zu-kalt", "09", [])))]);
+    gleich("Ohne Bereiche: Hinweis wie bisher, keine Übersicht", [w.kleidungHinweis("stufe5").text, w.bereicheUebersicht(w.rueckmeldungenSeitAenderung().stufe5)],
+      [TITEL5 + "2× zu kalt (beide bei Gegenwind)", ""]);
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), RM80("zu-kalt", "09", ["haende"]))),
+      AE("w2", "2026-11-10", 34, EW(RM80("passte", "10", []), RM80("passte", "10", []))), AE("w3", "2026-11-11", 34, EW(RM80("passte", "11", []), null))]);
+    gleich("Die Regel bleibt: 2× zu kalt (Hände), aber 3× passte – kein Hinweis; die Übersicht zählt trotzdem",
+      [w.kleidungHinweis("stufe5"), w.bereicheUebersicht(w.rueckmeldungenSeitAenderung().stufe5)], [null, "Hände 2× zu kalt"]);
+    // Seite Kleidung und Unterseite der Stufe: nur Rückmeldungen ab der letzten Änderung
+    n4Daten([
+      AE("x0", "2026-11-06", 34, EW(RM80("zu-kalt", "06", ["haende"], "vor der Änderung"), null)),                                         // vor der Änderung
+      AE("x9", "2026-10-20", 34, EW(FW({ kleidung: "stufe5", rueckmeldung: "zu-kalt", rueckmeldungBereiche: ["beine"], rueckmeldungKommentar: "vor 5d" }), null)), // vor 5d
+      AE("x1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"], "Erster Kommentar"), RM80("zu-kalt", "09", ["haende"], "Zweiter Kommentar"))),
+      AE("x2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", ["haende"], "Dritter Kommentar"), RM80("zu-warm", "10", ["oberkoerper"], "Vierter Kommentar"))),
+      AE("x3", "2026-11-11", 34, EW(RM80("zu-kalt", "11", ["fuesse"], "Fünfter Kommentar"), RM80("zu-kalt", "11", ["haende"], "Sechster Kommentar"))),
+      AE("x4", "2026-11-12", 34, EW(RM80("passte", "12", []), null))]);
+    w.kleidungFormular();
+    const zeile80 = ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="4"] .text').innerHTML);
+    wahr("Seite Kleidung: unter der Zählung „Wo: Hände 4× zu kalt · Oberkörper 1× zu warm · Füße 1× zu kalt“ (ohne die Fahrten vor der Änderung und vor 5d)",
+      zeile80.endsWith("Wo: Hände 4× zu kalt · Oberkörper 1× zu warm · Füße 1× zu kalt"), zeile80);
+    gleich("Stufe ohne genannte Bereiche: keine Zeile „Wo“", ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="3"] .text').innerHTML).includes("Wo:"), false);
+    wahr("Hinweis oben mit den Bereichen", ohneTags(w.document.querySelector("#inhalt .hinweis.warn").innerHTML).includes(TITEL5 + "5× zu kalt (4× Hände, 1× Füße; alle bei Gegenwind)"),
+      ohneTags(w.document.querySelector("#inhalt .hinweis.warn").innerHTML));
+    w.kleidungStufeFormular(4);
+    const liste80 = [...w.document.querySelectorAll("#inhalt ul.kommentare li")].map(li => li.textContent);
+    gleich("Unterseite der Stufe: „Wo“ und die letzten 5 Kommentare ab der Änderung, neueste zuerst (Rückfahrt vor Hinfahrt), mit Datum, Fahrt und Urteil",
+      [ohneTags(inhaltHtml()).includes("Wo: Hände 4× zu kalt · Oberkörper 1× zu warm · Füße 1× zu kalt"), ohneTags(inhaltHtml()).includes("Letzte Kommentare"), liste80],
+      [true, true, ["11.11. Rückfahrt, zu kalt: „Sechster Kommentar“", "11.11. Hinfahrt, zu kalt: „Fünfter Kommentar“", "10.11. Rückfahrt, zu warm: „Vierter Kommentar“",
+        "10.11. Hinfahrt, zu kalt: „Dritter Kommentar“", "09.11. Rückfahrt, zu kalt: „Zweiter Kommentar“"]]);
+    n4Daten([AE("y1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"], "<b>fett</b>"), null))]);
+    w.kleidungStufeFormular(4);
+    gleich("Kommentar wird als Text gezeigt (kein HTML)", [w.document.querySelector("#inhalt ul.kommentare li").textContent, !!w.document.querySelector("#inhalt ul.kommentare b")],
+      ["09.11. Hinfahrt, zu kalt: „<b>fett</b>“", false]);
+    w.kleidungStufeFormular(3);
+    gleich("Stufe ohne Kommentare: keine Liste", !!w.document.querySelector("#inhalt ul.kommentare"), false);
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
@@ -5586,7 +5898,7 @@ async function start() {
 
 // Prüft, dass alle Angaben aus Version 1 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV1(d, v1) {
-  gleich("version = 12", d.version, 12);
+  gleich("version = 13", d.version, 13);
   gleich("Fahrrad: alte Felder erhalten, neue Felder leer", d.fahrrad,
     Object.assign({}, v1.fahrrad, { rahmennummer: "", beschreibung: "" }));
   gleich("Einstellungen: Standardwerte (Fahrtage Mo, Di, Fr; keine Jahresziele; Wetter ohne Orte)", d.einstellungen, stdEinstellungen());
@@ -5614,7 +5926,7 @@ function pruefeUmwandlungV1(d, v1) {
 
 // Prüft, dass alle Angaben aus Version 2 erhalten sind und die neuen Felder ergänzt wurden
 function pruefeUmwandlungV2(d, v2, wo) {
-  gleich(wo + ": version = 12", d.version, 12);
+  gleich(wo + ": version = 13", d.version, 13);
   gleichInhalt(wo + ": Fahrrad unverändert (mit Rahmennummer und mehrzeiliger Beschreibung)", d.fahrrad, v2.fahrrad);
   gleich(wo + ": Einstellungen mit Standardwerten ergänzt (auch Wetter)", d.einstellungen, stdEinstellungen());
   gleichInhalt(wo + ": Vorlagen erhalten, Arbeitsweg aus", d.vorlagen, v2.vorlagen.map(v => Object.assign({}, v, { arbeitsweg: false })));
