@@ -273,7 +273,7 @@ function eintragAnsicht(id, hinweis) {
     '<button type="button" class="primaer" data-action="eintrag-aendern" data-id="' + e.id + '">Ändern</button></div>'
   );
 }
-// Gespeichertes Wetter eines Eintrags mit Rückmeldung zur Kleidung je Fahrt
+// Gespeichertes Wetter eines Eintrags mit Rückmeldung zur Kleidung je Fahrt (ab 5f mit Bereichen und Kommentar)
 function eintragWetterHtml(e) {
   const w = e.wetter;
   if (!w) return mitWetter(e) ? '<p class="klein">Noch kein Wetter gespeichert. In der Statistik lässt es sich mit „Wetter nachtragen …“ holen.</p>' : "";
@@ -282,7 +282,7 @@ function eintragWetterHtml(e) {
     if (!f) return '<div class="eintrag-wetter"><strong>' + name + '</strong> <span class="klein">ohne Wetter</span></div>';
     const rueckmeldung = !f.kleidung ? ""
       : rueckmeldungAn() ? '<div class="klein">Wie war die Kleidung?</div>' + rueckmeldungKnoepfe(e, art, f, true)
-      : f.rueckmeldung ? '<div class="klein">Rückmeldung: ' + RUECKMELDUNG_TEXT[f.rueckmeldung] + '</div>' : "";
+      : rueckmeldungText(f);
     // Ab 5e: Zeitfenster und tatsächliche Abfahrt („Abfahrt 18:30 statt 16:00“ nach „Heute später los“)
     const zeit = f.von ? ' <span class="klein">' + f.von + '–' + f.bis + (f.geplanteAbfahrt ? ' · Abfahrt ' + f.abfahrt + ' statt ' + f.geplanteAbfahrt : '') + '</span>' : "";
     return '<div class="eintrag-wetter"><div><strong>' + name + '</strong>' + zeit + ' ' + ampelHtml(f.ampel) + FARBWORT[f.ampel] + '</div>' +

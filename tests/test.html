@@ -2377,11 +2377,12 @@ async function start() {
     // -------------------------------------------------------------
     abschnitt("40. Rückmeldung nach der Fahrt (C2): gespeichert und je Stufe ausgewertet, verschiebt keine Grenzen; Schalter „Rückmeldung zur Kleidung“");
     const EMPF_R1 = B("leichte Mütze", "", "Übergangshandschuhe", "T-Shirt, warmer Pullover, Regenjacke", "Hose", "Socken");
-    const rmDaten = () => setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [
+    // Neue Daten: auch die nach „zu warm“/„zu kalt“ in der Karte stehen gebliebenen Fahrten vergessen (ab 5f)
+    const rmDaten = () => (w.eval("rueckmeldungOffen.clear()"), setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [
       AE("r1", D, 14.2, EW(FW({ kleidung: "stufe4", empfehlung: EMPF_R1, regenkleidung: true }), FW({ kleidung: "stufe3", gefuehlt: 12 }))),
       AE("r2", "2026-10-23", 14.2, EW(FW({ kleidung: "stufe5", rueckmeldung: "passte" }), null)),
       AE("r3", "2026-10-25", 14.2, EW(FW({ kleidung: "stufe4" }), FW({ kleidung: "weg" }))),
-      AE("r4", "2026-10-24", 14.2, EW(FW(), FW()))] });
+      AE("r4", "2026-10-24", 14.2, EW(FW(), FW()))] }));
     rmDaten();
     w.speichern();
     const vorRm = localStorage.getItem(TEST_SCHLUESSEL);
@@ -5562,7 +5563,7 @@ async function start() {
     gleich("Ohne gespeichertes Zeitfenster (vor 5e) gelten die Einstellungen", zeitVon(w.fahrtenWetter(w.streckeWetter().orteDaten, "2026-10-26", "rueckblick", T75, T75,
       w.gespeicherteZeiten({ datum: "2026-10-26", wetter: { hin: { von: null, bis: null }, rueck: null } })).rueck), ["16:00", "17:00", "16:00", null]);
     // Eintrag schon gespeichert, danach eine andere Zeit: Rückfrage, Rückmeldung bleibt
-    w.eval("eintragAm('" + D + "').wetter.rueck.rueckmeldung = 'passte'; speichern()");
+    w.eval("Object.assign(eintragAm('" + D + "').wetter.rueck, { rueckmeldung: 'zu-kalt', rueckmeldungBereiche: ['haende'], rueckmeldungKommentar: 'Handschuhe vergessen' }); speichern()");
     const fragen75 = [];
     let antwort75 = false;
     w.frage = async text => { fragen75.push(ohneTags(text)); return antwort75; };
@@ -5579,16 +5580,16 @@ async function start() {
     setzeSp("18:00");
     await w.spaeterUebernehmen();
     const re75 = () => w.eval("eintragAm('" + D + "').wetter");
-    gleich("„Neu berechnen“: Rückfahrt 18:00–19:00 neu, Rückmeldung „passte“ bleibt, Hinfahrt unverändert; mit „Rückgängig“",
-      [zeitVon(re75().rueck), re75().rueck.rueckmeldung, zeitVon(re75().hin), toast()],
-      [["18:00", "19:00", "18:00", "16:00"], "passte", ["06:00", "07:00", "06:00", null], ["Gespeichertes Wetter der Rückfahrt neu berechnet", true]]);
+    gleich("„Neu berechnen“: Rückfahrt 18:00–19:00 neu, Rückmeldung „zu kalt“ mit Bereichen und Kommentar (ab 5f) bleibt, Hinfahrt unverändert; mit „Rückgängig“",
+      [zeitVon(re75().rueck), re75().rueck.rueckmeldung, re75().rueck.rueckmeldungBereiche, re75().rueck.rueckmeldungKommentar, zeitVon(re75().hin), toast()],
+      [["18:00", "19:00", "18:00", "16:00"], "zu-kalt", ["haende"], "Handschuhe vergessen", ["06:00", "07:00", "06:00", null], ["Gespeichertes Wetter der Rückfahrt neu berechnet", true]]);
     // zurücksetzen: zurück zur Planung, wieder mit Rückfrage
     fragen75.length = 0;
     await w.spaeterZuruecksetzen("rueckfahrt", T75);
     gleich("„zurücksetzen“: Planung 16:00–17:00, Hilfsspeicher leer, Knopf wieder „Heute später los …“, Rückfrage für den Eintrag",
       [localStorage.getItem(ABW), w.wetterAnsicht(T75).naechsterTag.fahrten[1].fahrt.von, !!karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]'),
-        ohneTags(karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]').innerHTML), fragen75.length, zeitVon(re75().rueck), re75().rueck.rueckmeldung],
-      [null, "16:00", true, "Heute später los …", 1, ["16:00", "17:00", "16:00", null], "passte"]);
+        ohneTags(karteVon(T75, "Rückfahrt").querySelector('[data-action="spaeter-los"]').innerHTML), fragen75.length, zeitVon(re75().rueck), re75().rueck.rueckmeldung, re75().rueck.rueckmeldungBereiche],
+      [null, "16:00", true, "Heute später los …", 1, ["16:00", "17:00", "16:00", null], "zu-kalt", ["haende"]]);
     w.frage = async () => true;
     // Nach der Fahrt (auch wenn ich doch später fahre): Knopf in der aufgeklappten Karte
     w.fahrtAufklappen(D + "|rueckfahrt");
@@ -5700,6 +5701,127 @@ async function start() {
     const k78 = w.eval("daten.einstellungen.wetter.kleidung");
     gleich("Hinweistext mit derselben Prüfung: Nachbarstufe „seit deiner Änderung am 21.11.“", w.kleidungHinweis("stufe6").text,
       "Stufe " + w.stufeBereich(k78, 5) + ": seit deiner Änderung am 21.11. 2× zu kalt (beide bei Gegenwind)");
+
+    // -------------------------------------------------------------
+    // 79. Bereiche und Kommentar zur Rückmeldung (B17, Release 5f): Oberfläche
+    // -------------------------------------------------------------
+    abschnitt("79. Rückmeldung mit „Wo?“ und Kommentar (B17): Karte im Reiter Wetter bis „Fertig“, Eintragsansicht, still gespeichert, Wechsel des Urteils, VoiceOver");
+    const echtNow79 = w.Date.now;
+    const T79 = zeit("2026-11-20", "18:00");
+    w.Date.now = () => T79;
+    w.eval("rueckmeldungOffen.clear()");
+    setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [
+      AE("b1", "2026-11-20", 14.2, EW(FW({ kleidung: "stufe4" }), FW({ kleidung: "stufe4" }))),
+      AE("b2", "2026-11-19", 14.2, EW(FW({ kleidung: "stufe4" }), null))] });
+    w.speichern();
+    w.eval("aktiverTab = 'wetter'; zeichnen()");
+    const karte79 = () => [...w.document.querySelectorAll("#inhalt .karte")].find(k => (k.querySelector("h3") || {}).textContent === "Wie war die Kleidung?") || null;
+    const knopf79 = (sel, wurzel = karte79()) => wurzel && wurzel.querySelector(sel);
+    const gesp79 = (id, art) => JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).eintraege.find(e => e.id === id).wetter[art];
+    const rmWerte = (id, art) => { const f = eintrag(id).wetter[art]; return [f.rueckmeldung, f.rueckmeldungBereiche, f.rueckmeldungKommentar]; };
+    const offen79 = () => w.offeneRueckmeldungen(T79).map(x => x.e.id + " " + x.art);
+    gleich("Ohne Rückmeldung: zwei Fahrten in der Karte, noch ohne „Wo?“", [offen79(), !!knopf79(".rueckmeldung-wo")], [["b1 hin", "b1 rueck"], false]);
+    knopf79('[data-action="rueckmeldung"][data-id="b1"][data-fahrt="hin"][data-urteil="zu-kalt"]').click();
+    const wo79 = () => knopf79('.rueckmeldung-wo');
+    const gruppe79 = () => wo79() && wo79().querySelector('[role="group"]');
+    gleich("„zu kalt“: gespeichert, Meldung mit „Rückgängig“; die Fahrt bleibt in der Karte, darunter „Wo war es zu kalt?“ mit sechs Schaltern, Kommentar und „Fertig“",
+      [rmWerte("b1", "hin"), toast()[1], offen79(), ohneTags(wo79().querySelector(".klein").innerHTML),
+        [...gruppe79().querySelectorAll("button")].map(b => b.textContent + "/" + b.getAttribute("aria-pressed")), !!wo79().querySelector('[data-action="rueckmeldung-fertig"]')],
+      [["zu-kalt", [], ""], true, ["b1 hin", "b1 rueck"], "Wo war es zu kalt?",
+        ["Kopf/false", "Hals/false", "Hände/false", "Oberkörper/false", "Beine/false", "Füße/false"], true]);
+    const kom79 = () => wo79().querySelector("input");
+    const labelFuer = el => el && w.document.querySelector('label[for="' + el.id + '"]');
+    gleich("VoiceOver: Gruppe mit Beschriftung „Wo war es zu kalt? (Hinfahrt)“, Schalter mit aria-pressed, Kommentarfeld mit Beschriftung, einzeilig, höchstens 200 Zeichen",
+      [gruppe79().getAttribute("aria-label"), [...gruppe79().querySelectorAll("button")].every(b => b.type === "button" && b.hasAttribute("aria-pressed")),
+        labelFuer(kom79()) && labelFuer(kom79()).textContent, kom79().type, kom79().maxLength, kom79().getAttribute("enterkeyhint")],
+      ["Wo war es zu kalt? (Hinfahrt)", true, "Kommentar (optional)", "text", 200, "done"]);
+    const schalter79 = name => [...gruppe79().querySelectorAll("button")].find(b => b.textContent === name);
+    w.document.getElementById("toast-text").textContent = "unverändert";
+    schalter79("Hände").click();
+    schalter79("Füße").click();
+    schalter79("Kopf").click();
+    gleich("Bereiche antippen: Mehrfachauswahl in der Reihenfolge der Stufen, still gespeichert (ohne Meldung), Schalter gedrückt",
+      [rmWerte("b1", "hin")[1], gesp79("b1", "hin").rueckmeldungBereiche, toast()[0], [...gruppe79().querySelectorAll('[aria-pressed="true"]')].map(b => b.textContent)],
+      [["kopf", "haende", "fuesse"], ["kopf", "haende", "fuesse"], "unverändert", ["Kopf", "Hände", "Füße"]]);
+    schalter79("Kopf").click();
+    gleich("Erneutes Antippen wählt ab", [rmWerte("b1", "hin")[1], schalter79("Kopf").getAttribute("aria-pressed"), toast()[0]], [["haende", "fuesse"], "false", "unverändert"]);
+    const tippen79 = (el, text, fertig) => { el.value = text; el.dispatchEvent(new w.Event("input", { bubbles: true })); if (fertig) el.dispatchEvent(new w.Event("change", { bubbles: true })); };
+    tippen79(kom79(), "  Unterziehhandschuhe unterwegs angezogen", false);
+    const beimTippen = gesp79("b1", "hin").rueckmeldungKommentar;
+    tippen79(kom79(), "  Unterziehhandschuhe unterwegs angezogen  ", true);
+    gleich("Kommentar: schon beim Tippen gespeichert, am Ende ohne Leerzeichen am Rand; still (ohne Meldung)",
+      [beimTippen, gesp79("b1", "hin").rueckmeldungKommentar, kom79().value, toast()[0]],
+      ["  Unterziehhandschuhe unterwegs angezogen", "Unterziehhandschuhe unterwegs angezogen", "Unterziehhandschuhe unterwegs angezogen", "unverändert"]);
+    const k2 = kom79();
+    // Ein Textfeld nimmt keinen Zeilenumbruch an; die Funktion selbst macht ihn zum Leerzeichen (z. B. aus eingefügtem Text)
+    w.rueckmeldungKommentarSetzen({ value: "Zeile 1\nZeile 2", dataset: { id: "b1", fahrt: "hin" } }, true);
+    const einzeilig = eintrag("b1").wetter.hin.rueckmeldungKommentar;
+    tippen79(k2, "x".repeat(250), true);
+    gleich("Zeilenumbruch wird zum Leerzeichen, mehr als 200 Zeichen werden gekürzt", [einzeilig, eintrag("b1").wetter.hin.rueckmeldungKommentar.length], ["Zeile 1 Zeile 2", 200]);
+    tippen79(k2, "Unterziehhandschuhe unterwegs angezogen", true);
+    w.document.querySelector('#inhalt [data-action="rueckmeldung"][data-id="b1"][data-fahrt="rueck"][data-urteil="zu-warm"]').click();
+    const woRueck = () => [...karte79().querySelectorAll(".rueckmeldung-wo")].map(x => x.querySelector('[role="group"]').getAttribute("aria-label"));
+    gleich("Rückfahrt getrennt: „zu warm“ fragt „Wo war es zu warm? (Rückfahrt)“; die Hinfahrt behält ihre Bereiche",
+      [woRueck(), rmWerte("b1", "rueck"), rmWerte("b1", "hin")[1]],
+      [["Wo war es zu kalt? (Hinfahrt)", "Wo war es zu warm? (Rückfahrt)"], ["zu-warm", [], ""], ["haende", "fuesse"]]);
+    w.document.querySelector('#inhalt [data-action="rueckmeldung"][data-id="b1"][data-fahrt="hin"][data-urteil="zu-warm"]').click();
+    gleich("Gegenrichtung (zu kalt → zu warm): Bereiche und Kommentar bleiben, Meldung nennt sie, „Wo war es zu warm?“",
+      [rmWerte("b1", "hin"), toast()[0].split(" · Stufe")[0], toast()[1], woRueck()[0]],
+      [["zu-warm", ["haende", "fuesse"], "Unterziehhandschuhe unterwegs angezogen"], "Rückmeldung „zu warm“ gespeichert · Bereiche (Hände, Füße) und Kommentar übernommen", true,
+        "Wo war es zu warm? (Hinfahrt)"]);
+    w.document.querySelector('#inhalt [data-action="rueckmeldung"][data-id="b1"][data-fahrt="hin"][data-urteil="passte"]').click();
+    gleich("Wechsel auf „passte“: Bereiche und Kommentar geleert, Meldung mit „Rückgängig“; die Fahrt verschwindet aus der Karte",
+      [rmWerte("b1", "hin"), toast()[0].split(" · Stufe")[0], toast()[1], offen79()],
+      [["passte", [], ""], "Rückmeldung „passte“ gespeichert · Bereiche und Kommentar entfernt", true, ["b1 rueck", "b2 hin"]]);
+    w.rueckgaengig();
+    gleich("„Rückgängig“: zu warm mit Bereichen und Kommentar zurück, die Fahrt steht wieder in der Karte",
+      [rmWerte("b1", "hin"), offen79()], [["zu-warm", ["haende", "fuesse"], "Unterziehhandschuhe unterwegs angezogen"], ["b1 hin", "b1 rueck"]]);
+    knopf79('[data-action="rueckmeldung-fertig"][data-id="b1"][data-fahrt="hin"]').click();
+    gleich("„Fertig“: die Fahrt verschwindet aus der Karte, die nächste offene rückt nach; gespeichert bleibt alles",
+      [offen79(), rmWerte("b1", "hin")[0], ohneTags(karte79().innerHTML).includes("Do 19.11.") || ohneTags(karte79().innerHTML).includes("Gestern")],
+      [["b1 rueck", "b2 hin"], "zu-warm", true]);
+    knopf79('[data-action="rueckmeldung"][data-id="b2"][data-fahrt="hin"][data-urteil="zu-kalt"]').click();
+    const vorBereich = toast()[1];
+    knopf79('[data-action="rueckmeldung-bereich"][data-id="b2"][data-bereich="haende"]').click();
+    w.rueckgaengig();
+    gleich("Ein Bereich danach ist eine weitere Änderung: sie beendet das Angebot „Rückgängig“ (wie jede Änderung), nichts wird überschrieben",
+      [vorBereich, w.document.getElementById("toast-knopf").hidden, rmWerte("b2", "hin")], [true, true, ["zu-kalt", ["haende"], ""]]);
+    // Eintragsansicht: nachträglich änderbar, Kommentar bei der Fahrt
+    w.eintragAnsicht("b1");
+    const fe = () => w.document.getElementById("fensterinhalt");
+    const woFe = art => [...fe().querySelectorAll('.rueckmeldung-wo [role="group"]')].find(g => g.querySelector('[data-fahrt="' + art + '"]'));
+    gleich("Eintragsansicht: je Fahrt „Wo?“ mit den gespeicherten Bereichen und dem Kommentar im Feld, ohne „Fertig“",
+      [woFe("hin").getAttribute("aria-label"), [...woFe("hin").querySelectorAll('[aria-pressed="true"]')].map(b => b.textContent),
+        fe().querySelector('input[data-fahrt="hin"]').value, woFe("rueck").getAttribute("aria-label"), !!fe().querySelector('[data-action="rueckmeldung-fertig"]'),
+        labelFuer(fe().querySelector('input[data-fahrt="hin"]')).textContent],
+      ["Wo war es zu warm? (Hinfahrt)", ["Hände", "Füße"], "Unterziehhandschuhe unterwegs angezogen", "Wo war es zu warm? (Rückfahrt)", false, "Kommentar (optional)"]);
+    woFe("rueck").querySelector('[data-bereich="beine"]').click();
+    tippen79(fe().querySelector('input[data-fahrt="rueck"]'), "Regenhose zu warm", true);
+    gleich("… Bereich und Kommentar nachträglich, still gespeichert; das Fenster bleibt offen",
+      [rmWerte("b1", "rueck"), gesp79("b1", "rueck").rueckmeldungKommentar, w.eval("fenster.open"), woFe("rueck").querySelector('[data-bereich="beine"]').getAttribute("aria-pressed")],
+      [["zu-warm", ["beine"], "Regenhose zu warm"], "Regenhose zu warm", true, "true"]);
+    fe().querySelector('[data-action="rueckmeldung"][data-fahrt="rueck"][data-urteil="passte"]').click();
+    gleich("… „passte“ in der Eintragsansicht leert Bereiche und Kommentar (mit „Rückgängig“), „Wo?“ verschwindet",
+      [rmWerte("b1", "rueck"), toast()[1], !!woFe("rueck"), w.eval("fenster.open")], [["passte", [], ""], true, false, true]);
+    w.rueckgaengig();
+    w.eval("daten.einstellungen.wetter.kleidung.rueckmeldung = false");
+    w.eintragAnsicht("b1");
+    const nurText = ohneTags(fe().innerHTML);
+    wahr("Rückmeldung ausgeschaltet: nur Text „Rückmeldung: zu warm · Hände, Füße“ und der Kommentar bei der jeweiligen Fahrt",
+      nurText.includes("Rückmeldung: zu warm · Hände, Füße 💬 „Unterziehhandschuhe unterwegs angezogen“") && nurText.includes("Rückmeldung: zu warm · Beine 💬 „Regenhose zu warm“") &&
+      !fe().querySelector(".rueckmeldung-wo"), nurText);
+    w.eval("daten.einstellungen.wetter.kleidung.rueckmeldung = true");
+    w.fensterSchliessen();
+    // „Wetter nachtragen“ behält Bereiche und Kommentar
+    const altRb = EW(FW({ kleidung: "stufe4", rueckmeldung: "zu-kalt", rueckmeldungBereiche: ["haende"], rueckmeldungKommentar: "Handschuhe vergessen", grundlage: "fahrt",
+      empfohlenAm: "2026-11-20T05:00:00.000Z" }), null);
+    const rb79 = w.rueckblickUebernehmen(altRb, EW(FW({ temperatur: 1, rueckmeldungBereiche: [], rueckmeldungKommentar: "" }), null, "rueckblick"));
+    gleich("„Wetter nachtragen“ (Wetter aus der Vorhersage → Rückblick): Rückmeldung mit Bereichen und Kommentar bleibt",
+      [rb79.hin.temperatur, rb79.hin.rueckmeldung, rb79.hin.rueckmeldungBereiche, rb79.hin.rueckmeldungKommentar], [1, "zu-kalt", ["haende"], "Handschuhe vergessen"]);
+    gleich("Neue Fahrt aus der Vorhersage: Bereiche und Kommentar leer", (() => { const f = w.fahrtenWetter(w.vorhersageLesen(kopie(gfRoh), 2), "2026-11-09", "vorhersage", SO, SO).hin;
+      return [f.rueckmeldungBereiche, f.rueckmeldungKommentar]; })(), [[], ""]);
+    w.Date.now = echtNow79;
+    w.eval("rueckmeldungOffen.clear(); aktiverTab = 'uebersicht'; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
