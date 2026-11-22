@@ -871,7 +871,8 @@ function kleidungSeite() {
     '), von warm nach kalt. ' +
     'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
     '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
-      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen " + seitText(s.id, seit[s.id])])).join("") + '</div>' +
+      [esc(bereicheKurz(s.bereiche)) + (s.haendeBeiRegen ? " · bei Regen Hände " + esc(s.haendeBeiRegen) : ""), "Rückmeldungen " + seitText(s.id, seit[s.id])]
+        .concat(bereicheUebersicht(seit[s.id]) ? ["Wo: " + bereicheUebersicht(seit[s.id])] : []))).join("") + '</div>' +
     (frueher ? '<p class="klein">' + (frueher === 1 ? "1 Rückmeldung" : frueher + " Rückmeldungen") + ' zu früheren Stufen (gibt es nicht mehr, werden nicht zugeordnet).</p>' : "") +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-stufe-neu">+ Stufe</button></div>' +
     '<h3 style="margin-top:16px">Regenzusatz</h3><p class="klein" style="margin-top:0">Ab dieser Regenwahrscheinlichkeit kommt das Regenzeug in seinem Bereich dazu. ' +
@@ -885,7 +886,8 @@ function kleidungSeite() {
       k.protokoll.length ? (k.protokoll.length === 1 ? "1 Änderung" : k.protokoll.length + " Änderungen") + ", zuletzt am " +
         datumText(isoAusDate(new Date(k.protokoll[k.protokoll.length - 1].zeitpunkt))) : "noch keine") + '</div>' +
     '<p class="klein">Die App protokolliert jede Änderung an einer Stufe, am Regenzusatz und am Umschalter „Stufe wählen nach“. Die Rückmeldungen zählen je Stufe ab ihrer ' +
-    'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt, und des Umschalters). Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „gefühlt“).</p>'
+    'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt, und des Umschalters), darunter „Wo“ nach Körperbereichen. ' +
+    'Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „gefühlt“).</p>'
   );
 }
 // Fahrgeschwindigkeit für „beim Fahren“: automatisch (Vorlage und Dauer) oder ein eigener Wert
@@ -974,7 +976,9 @@ function kleidungStufeSeite(i) {
     '<label for="ks-haende-regen">Hände bei Regen (optional)</label>' +
     '<input type="text" id="ks-haende-regen" autocomplete="off" placeholder="leer = wie bei Hände" value="' + esc(s.haendeBeiRegen || "") + '">' +
     '<div class="feldhinweis">Gilt statt „Hände“, sobald ein Regenzusatz greift, z. B. regenfeste Handschuhe. Mehrere Teile mit Komma trennen.</div>' +
-    (neu ? "" : '<p class="klein">Rückmeldungen ' + seitText(s.id, z) + '</p>') +
+    (neu ? "" : '<p class="klein">Rückmeldungen ' + seitText(s.id, z) + '</p>' + (bereicheUebersicht(z) ? '<p class="klein">Wo: ' + bereicheUebersicht(z) + '</p>' : "") +
+      (kommentareDerStufe(z).length ? '<h3 style="margin-top:12px">Letzte Kommentare</h3><ul class="kommentare klein">' +
+        kommentareDerStufe(z).map(k => '<li>' + esc(k) + '</li>').join("") + '</ul>' : "")) +
     '<div class="knopfreihe"><button type="button" data-action="kleidung-bearbeiten">Abbrechen</button>' +
     '<button type="button" class="primaer" data-action="kleidung-stufe-speichern" data-i="' + (neu ? "" : i) + '">Speichern</button></div>' +
     (!neu && n > 2 ? '<div class="knopfreihe"><button type="button" class="gefahr voll" data-action="kleidung-stufe-weg" data-i="' + i + '">Stufe entfernen</button></div>' : "")
@@ -1268,7 +1272,7 @@ function letzteAenderung(id, k = daten.einstellungen.wetter.kleidung) {
 // Empfehlung nach der aktuellen Grundlage und nach der Änderung berechnet wurde
 // und die nach der Änderung lagen. Rückmeldungen von vor 5d (empfohlenAm null)
 // stehen getrennt in "vor5d". { id: { seit, anzahl, "zu-warm", passte, "zu-kalt",
-// regen: {…}, fahrten: [{ urteil, lage, regen }], vor5d: {…} } }
+// regen: {…}, fahrten: [{ urteil, lage, regen, datum, art, bereiche, kommentar }], vor5d: {…} } }
 function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w = daten.einstellungen.wetter) {
   const leer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0 });
   const erg = {};
@@ -1282,7 +1286,8 @@ function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w 
     if (f.grundlage !== k.grundlage) return;
     if (z.seit !== null && (Date.parse(f.empfohlenAm) < z.seit || zeitpunktAm(e.datum, minutenAus(w[fahrt].bis)) < z.seit)) return;
     zaehle(z);
-    z.fahrten.push({ urteil: f.rueckmeldung, lage: windLageGespeichert(f), regen: !!f.regenkleidung });
+    z.fahrten.push({ urteil: f.rueckmeldung, lage: windLageGespeichert(f), regen: !!f.regenkleidung, datum: e.datum, art,
+      bereiche: f.rueckmeldungBereiche || [], kommentar: f.rueckmeldungKommentar || "" });
   }));
   return erg;
 }
@@ -1319,7 +1324,41 @@ function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.ein
   const regen = fahrten.filter(f => f.regen).length;
   if (regen === n) teile.push(teile.length ? "bei Regen" : alle + "bei Regen");
   else if (regen) teile.push("davon " + regen + "× bei Regen");
-  return { id, richtung: u, text: titel + z[u] + "× " + RUECKMELDUNG_TEXT[u] + (teile.length ? " (" + teile.join(", ") + ")" : "") };
+  // Ab 5f vorneweg die Bereiche: "beide Male Hände; beide bei Gegenwind"
+  const klammer = [bereicheHinweis(fahrten), teile.join(", ")].filter(Boolean).join("; ");
+  return { id, richtung: u, text: titel + z[u] + "× " + RUECKMELDUNG_TEXT[u] + (klammer ? " (" + klammer + ")" : "") };
+}
+// "Hände und Füße", "Kopf, Hände und Füße"
+function bereicheUnd(liste) {
+  const namen = BEREICHE.filter(([b]) => liste.includes(b)).map(([, name]) => name);
+  return namen.length < 2 ? namen.join("") : namen.slice(0, -1).join(", ") + " und " + namen[namen.length - 1];
+}
+// Bereiche der abweichenden Fahrten im Hinweis: bei allen dieselben „beide Male
+// Hände“ bzw. „alle 3 Male Hände und Füße“, sonst gezählt „2× Hände, 1× Füße“.
+// Fahrten ohne Bereiche zählen nicht mit; ohne jeden Bereich "".
+function bereicheHinweis(fahrten) {
+  const mit = fahrten.filter(f => f.bereiche && f.bereiche.length);
+  if (!mit.length) return "";
+  const zahl = b => fahrten.filter(f => f.bereiche.includes(b)).length;
+  const genannt = BEREICH_SCHLUESSEL.filter(b => zahl(b));
+  if (genannt.every(b => zahl(b) === fahrten.length)) return (fahrten.length === 2 ? "beide Male " : "alle " + fahrten.length + " Male ") + bereicheUnd(genannt);
+  return genannt.map(b => zahl(b) + "× " + BEREICH_NAME[b]).join(", ");
+}
+// Übersicht je Stufe nach Bereichen (ab der letzten Änderung): "Hände 2× zu kalt ·
+// Füße 1× zu kalt, 1× zu warm"; "" ohne genannte Bereiche
+function bereicheUebersicht(z) {
+  if (!z) return "";
+  return BEREICHE.map(([b, name]) => {
+    const teile = ["zu-kalt", "zu-warm"].map(u => [u, z.fahrten.filter(f => f.urteil === u && f.bereiche.includes(b)).length]).filter(([, c]) => c);
+    return teile.length ? name + " " + teile.map(([u, c]) => c + "× " + RUECKMELDUNG_TEXT[u]).join(", ") : "";
+  }).filter(Boolean).join(" · ");
+}
+// Die letzten (höchstens 5) Kommentare zu einer Stufe ab ihrer letzten Änderung, neueste zuerst:
+// "21.11. Hinfahrt, zu kalt: „Unterziehhandschuhe unterwegs angezogen“"
+function kommentareDerStufe(z, max = 5) {
+  if (!z) return [];
+  return z.fahrten.filter(f => f.kommentar).sort((a, b) => b.datum.localeCompare(a.datum) || (b.art === "rueck") - (a.art === "rueck"))
+    .slice(0, max).map(f => kurzDatum(f.datum) + " " + (f.art === "hin" ? "Hinfahrt" : "Rückfahrt") + ", " + RUECKMELDUNG_TEXT[f.urteil] + ": „" + f.kommentar + "“");
 }
 function kleidungHinweisHtml(h, i) {
   return '<div class="hinweis warn">💡 ' + esc(h.text) +

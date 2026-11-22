@@ -5822,6 +5822,62 @@ async function start() {
       return [f.rueckmeldungBereiche, f.rueckmeldungKommentar]; })(), [[], ""]);
     w.Date.now = echtNow79;
     w.eval("rueckmeldungOffen.clear(); aktiverTab = 'uebersicht'; zeichnen()");
+
+    // -------------------------------------------------------------
+    // 80. Auswertung mit Bereichen (B17/N4, Release 5f): Hinweis, Übersicht je Stufe, letzte Kommentare
+    // -------------------------------------------------------------
+    abschnitt("80. Auswertung der Bereiche (B17): Hinweis nennt die Bereiche, Übersicht „Wo“ je Stufe, letzte 5 Kommentare auf der Stufen-Unterseite");
+    const RM80 = (urteil, tag, bereiche, kommentar = "", aend = {}) => FN(urteil, "2026-11-" + tag + "T05:00:00.000Z",
+      Object.assign({ rueckmeldungBereiche: bereiche, rueckmeldungKommentar: kommentar }, aend));
+    const TITEL5 = "Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. ";
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), null)), AE("w2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", ["haende"]), null))]);
+    gleich("Beide Male dieselben Bereiche: „2× zu kalt (beide Male Hände; beide bei Gegenwind)“", w.kleidungHinweis("stufe5").text, TITEL5 + "2× zu kalt (beide Male Hände; beide bei Gegenwind)");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), RM80("zu-kalt", "09", ["haende"], "", SEITE)))]);
+    gleich("Gemischter Wind: „(beide Male Hände; 1× bei Gegenwind, 1× bei Seitenwind)“", w.kleidungHinweis("stufe5").text,
+      TITEL5 + "2× zu kalt (beide Male Hände; 1× bei Gegenwind, 1× bei Seitenwind)");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["fuesse", "haende"]), RM80("zu-kalt", "09", ["haende", "fuesse"]))),
+      AE("w2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", ["haende", "fuesse"]), null))]);
+    gleich("Drei Fahrten, alle mit Händen und Füßen: „alle 3 Male Hände und Füße“", w.kleidungHinweis("stufe5").text,
+      TITEL5 + "3× zu kalt (alle 3 Male Hände und Füße; alle bei Gegenwind)");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), RM80("zu-kalt", "09", ["haende", "fuesse"]))),
+      AE("w2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", []), RM80("zu-warm", "10", ["kopf"])))]);
+    gleich("Verschiedene Bereiche, eine Fahrt ohne Bereich: gezählt „2× Hände, 1× Füße“; die Fahrt „zu warm“ zählt dort nicht", w.kleidungHinweis("stufe5").text,
+      TITEL5 + "3× zu kalt (2× Hände, 1× Füße; alle bei Gegenwind)");
+    gleich("Übersicht „Wo“ je Stufe nach Bereichen, beide Richtungen", w.bereicheUebersicht(w.rueckmeldungenSeitAenderung().stufe5), "Kopf 1× zu warm · Hände 2× zu kalt · Füße 1× zu kalt");
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", []), RM80("zu-kalt", "09", [])))]);
+    gleich("Ohne Bereiche: Hinweis wie bisher, keine Übersicht", [w.kleidungHinweis("stufe5").text, w.bereicheUebersicht(w.rueckmeldungenSeitAenderung().stufe5)],
+      [TITEL5 + "2× zu kalt (beide bei Gegenwind)", ""]);
+    n4Daten([AE("w1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"]), RM80("zu-kalt", "09", ["haende"]))),
+      AE("w2", "2026-11-10", 34, EW(RM80("passte", "10", []), RM80("passte", "10", []))), AE("w3", "2026-11-11", 34, EW(RM80("passte", "11", []), null))]);
+    gleich("Die Regel bleibt: 2× zu kalt (Hände), aber 3× passte – kein Hinweis; die Übersicht zählt trotzdem",
+      [w.kleidungHinweis("stufe5"), w.bereicheUebersicht(w.rueckmeldungenSeitAenderung().stufe5)], [null, "Hände 2× zu kalt"]);
+    // Seite Kleidung und Unterseite der Stufe: nur Rückmeldungen ab der letzten Änderung
+    n4Daten([
+      AE("x0", "2026-11-06", 34, EW(RM80("zu-kalt", "06", ["haende"], "vor der Änderung"), null)),                                         // vor der Änderung
+      AE("x9", "2026-10-20", 34, EW(FW({ kleidung: "stufe5", rueckmeldung: "zu-kalt", rueckmeldungBereiche: ["beine"], rueckmeldungKommentar: "vor 5d" }), null)), // vor 5d
+      AE("x1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"], "Erster Kommentar"), RM80("zu-kalt", "09", ["haende"], "Zweiter Kommentar"))),
+      AE("x2", "2026-11-10", 34, EW(RM80("zu-kalt", "10", ["haende"], "Dritter Kommentar"), RM80("zu-warm", "10", ["oberkoerper"], "Vierter Kommentar"))),
+      AE("x3", "2026-11-11", 34, EW(RM80("zu-kalt", "11", ["fuesse"], "Fünfter Kommentar"), RM80("zu-kalt", "11", ["haende"], "Sechster Kommentar"))),
+      AE("x4", "2026-11-12", 34, EW(RM80("passte", "12", []), null))]);
+    w.kleidungFormular();
+    const zeile80 = ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="4"] .text').innerHTML);
+    wahr("Seite Kleidung: unter der Zählung „Wo: Hände 4× zu kalt · Oberkörper 1× zu warm · Füße 1× zu kalt“ (ohne die Fahrten vor der Änderung und vor 5d)",
+      zeile80.endsWith("Wo: Hände 4× zu kalt · Oberkörper 1× zu warm · Füße 1× zu kalt"), zeile80);
+    gleich("Stufe ohne genannte Bereiche: keine Zeile „Wo“", ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="3"] .text').innerHTML).includes("Wo:"), false);
+    wahr("Hinweis oben mit den Bereichen", ohneTags(w.document.querySelector("#inhalt .hinweis.warn").innerHTML).includes(TITEL5 + "5× zu kalt (4× Hände, 1× Füße; alle bei Gegenwind)"),
+      ohneTags(w.document.querySelector("#inhalt .hinweis.warn").innerHTML));
+    w.kleidungStufeFormular(4);
+    const liste80 = [...w.document.querySelectorAll("#inhalt ul.kommentare li")].map(li => li.textContent);
+    gleich("Unterseite der Stufe: „Wo“ und die letzten 5 Kommentare ab der Änderung, neueste zuerst (Rückfahrt vor Hinfahrt), mit Datum, Fahrt und Urteil",
+      [ohneTags(inhaltHtml()).includes("Wo: Hände 4× zu kalt · Oberkörper 1× zu warm · Füße 1× zu kalt"), ohneTags(inhaltHtml()).includes("Letzte Kommentare"), liste80],
+      [true, true, ["11.11. Rückfahrt, zu kalt: „Sechster Kommentar“", "11.11. Hinfahrt, zu kalt: „Fünfter Kommentar“", "10.11. Rückfahrt, zu warm: „Vierter Kommentar“",
+        "10.11. Hinfahrt, zu kalt: „Dritter Kommentar“", "09.11. Rückfahrt, zu kalt: „Zweiter Kommentar“"]]);
+    n4Daten([AE("y1", "2026-11-09", 34, EW(RM80("zu-kalt", "09", ["haende"], "<b>fett</b>"), null))]);
+    w.kleidungStufeFormular(4);
+    gleich("Kommentar wird als Text gezeigt (kein HTML)", [w.document.querySelector("#inhalt ul.kommentare li").textContent, !!w.document.querySelector("#inhalt ul.kommentare b")],
+      ["09.11. Hinfahrt, zu kalt: „<b>fett</b>“", false]);
+    w.kleidungStufeFormular(3);
+    gleich("Stufe ohne Kommentare: keine Liste", !!w.document.querySelector("#inhalt ul.kommentare"), false);
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

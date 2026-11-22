@@ -288,6 +288,8 @@ button.link { background: transparent; color: var(--akzent); padding: 0 2px; min
 .bereich-wahl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 8px; }
 .bereich-wahl button { min-height: 44px; padding: 6px 2px; font-size: 15px; }
 .rueckmeldung-wo label { margin-top: 4px; }
+.kommentare { margin: 4px 0 8px; padding-left: 18px; }
+.kommentare li { margin: 2px 0; overflow-wrap: anywhere; }
 .eintrag-wetter { border-top: 1px solid var(--linie); padding: 8px 0; }
 /* Kleidung je Körperbereich im Reiter Wetter */
 .bereiche { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; }
