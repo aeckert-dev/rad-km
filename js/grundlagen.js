@@ -19,7 +19,7 @@ const LETZTE_ORTE_SCHLUESSEL = TESTMODUS ? "radkm-test-letzte-orte" : "radkm-let
 // Verschobene Abfahrt von heute („Heute später los“, ab 5e): nur auf dem Gerät, nicht in der Sicherung
 const ABWEICHUNG_SCHLUESSEL = TESTMODUS ? "radkm-test-heute-abfahrt" : "radkm-heute-abfahrt";
 // Version der App (wird in den Einstellungen und in der Sicherung angezeigt)
-const APP_VERSION = "5g";
+const APP_VERSION = "5h";
 // Aktuelle Version des Datenmodells. Bei Änderungen am Aufbau erhöhen
 // und unten in MIGRATIONEN eine Umwandlung ergänzen.
 const DATEN_VERSION = 14;
