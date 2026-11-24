@@ -42,7 +42,7 @@ const server = http.createServer((req, res) => {
       console.log((titel.startsWith("OK") ? "✓ " : "✗ ") + zone + " (" + (schema === "light" ? "hell" : "dunkel") + "): " + titel);
       if (!titel.startsWith("OK")) {
         fehler++;
-        const liste = await seite.$$eval(".fehler", els => els.map(e => e.textContent.slice(0, 400) + (e.nextElementSibling && e.nextElementSibling.tagName === "PRE" ? "\n     " + e.nextElementSibling.textContent.slice(0, 600).replace(/\n/g, "\n     ") : "")));
+        const liste = await seite.$$eval(".fehler", els => els.map(e => e.textContent.slice(0, 400) + (e.nextElementSibling && e.nextElementSibling.tagName === "PRE" ? "\n     " + e.nextElementSibling.textContent.slice(0, 3000).replace(/\n/g, "\n     ") : "")));
         liste.forEach(t => console.log("   " + t));
       }
       await ctx.close();

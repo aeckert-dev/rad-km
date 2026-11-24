@@ -1,0 +1,539 @@
+{
+  "version": 13,
+  "kurzinfo": {
+    "zeitpunkt": "2026-11-23T18:00:00.000Z",
+    "appVersion": "5f",
+    "eintraege": 4,
+    "kmSumme": 52.6,
+    "kmStand": 1253.1,
+    "wartungen": 1,
+    "maengel": 1
+  },
+  "fahrrad": {
+    "name": "Test-Rad",
+    "startdatum": "2025-03-01",
+    "startKm": 1200.5,
+    "rahmennummer": "TST 0013",
+    "beschreibung": "Grau, 28 Zoll"
+  },
+  "einstellungen": {
+    "fahrtage": [
+      1,
+      2,
+      5
+    ],
+    "jahresziele": [
+      {
+        "jahr": 2026,
+        "km": 3000
+      }
+    ],
+    "hinweisHeuteAn": true,
+    "hinweisHeuteAb": "17:00",
+    "wetter": {
+      "wohnort": {
+        "name": "Musterdorf",
+        "lat": 51.0,
+        "lon": 10.0
+      },
+      "arbeitsort": {
+        "name": "Beispielstadt",
+        "lat": 51.1,
+        "lon": 10.2
+      },
+      "weitererOrt": {
+        "name": "Ferienort",
+        "lat": 50.5,
+        "lon": 9.5,
+        "aktiv": false
+      },
+      "wegpunkte": [
+        {
+          "name": "Brücke",
+          "lat": 51.03,
+          "lon": 10.07
+        }
+      ],
+      "windTeilstrecken": [
+        true,
+        false
+      ],
+      "hinfahrt": {
+        "von": "06:15",
+        "bis": "07:15",
+        "abfahrtAn": true,
+        "abfahrt": "06:30",
+        "dauer": 50
+      },
+      "rueckfahrt": {
+        "von": "16:00",
+        "bis": "17:00",
+        "abfahrtAn": false,
+        "abfahrt": "16:00",
+        "dauer": 55
+      },
+      "geschwindigkeit": 18.5,
+      "ampel": {
+        "rotBoeen": 55,
+        "rotStarkregen": 5,
+        "rotWarnstufe": 2,
+        "gelbRegenWahrscheinlichkeit": 50,
+        "gelbNiederschlag": 0.5,
+        "gelbBoeen": 40,
+        "gelbTemperatur": 0,
+        "glaetteTemperatur": 1
+      },
+      "kleidung": {
+        "stufen": [
+          {
+            "id": "stufe1",
+            "ab": 16,
+            "bereiche": {
+              "kopf": "",
+              "hals": "",
+              "haende": "",
+              "oberkoerper": "T-Shirt",
+              "beine": "kurze Hose",
+              "fuesse": "Socken"
+            },
+            "haendeBeiRegen": null
+          },
+          {
+            "id": "stufe2",
+            "ab": 8,
+            "bereiche": {
+              "kopf": "",
+              "hals": "",
+              "haende": "",
+              "oberkoerper": "T-Shirt, Pullover",
+              "beine": "Hose",
+              "fuesse": "Socken"
+            },
+            "haendeBeiRegen": null
+          },
+          {
+            "id": "s-eigen",
+            "ab": 2,
+            "bereiche": {
+              "kopf": "Mütze",
+              "hals": "Schal",
+              "haende": "Winterhandschuhe",
+              "oberkoerper": "T-Shirt, Pullover, Jacke",
+              "beine": "Hose",
+              "fuesse": "Socken"
+            },
+            "haendeBeiRegen": "Regenhandschuhe"
+          },
+          {
+            "id": "stufe8",
+            "ab": null,
+            "bereiche": {
+              "kopf": "warme Mütze",
+              "hals": "Schal, Tuch",
+              "haende": "Winterhandschuhe",
+              "oberkoerper": "2 T-Shirts, Pullover, Jacke",
+              "beine": "Hose, Regenhose",
+              "fuesse": "2 Paar Socken"
+            },
+            "haendeBeiRegen": null
+          }
+        ],
+        "regen": [
+          {
+            "ab": 45,
+            "bereiche": {
+              "kopf": "",
+              "hals": "",
+              "haende": "",
+              "oberkoerper": "Regenjacke",
+              "beine": "",
+              "fuesse": ""
+            }
+          }
+        ],
+        "rueckmeldung": true,
+        "grundlage": "fahrt",
+        "protokoll": [
+          {
+            "zeitpunkt": "2026-11-08T07:30:00.000Z",
+            "art": "stufe",
+            "stufe": "s-eigen",
+            "vorher": {
+              "ab": 2,
+              "bereiche": {
+                "kopf": "Mütze",
+                "hals": "Schal",
+                "haende": "Handschuhe",
+                "oberkoerper": "T-Shirt, Pullover, Jacke",
+                "beine": "Hose",
+                "fuesse": "Socken"
+              },
+              "haendeBeiRegen": "Regenhandschuhe"
+            },
+            "nachher": {
+              "ab": 2,
+              "bereiche": {
+                "kopf": "Mütze",
+                "hals": "Schal",
+                "haende": "Winterhandschuhe",
+                "oberkoerper": "T-Shirt, Pullover, Jacke",
+                "beine": "Hose",
+                "fuesse": "Socken"
+              },
+              "haendeBeiRegen": "Regenhandschuhe"
+            },
+            "auchBetroffen": []
+          }
+        ]
+      }
+    }
+  },
+  "vorlagen": [
+    {
+      "id": "v-einkauf",
+      "name": "Einkauf",
+      "km": 3.5,
+      "arbeitsweg": false
+    },
+    {
+      "id": "v-arbeit",
+      "name": "Arbeit hin und zurück",
+      "km": 14.2,
+      "arbeitsweg": true
+    }
+  ],
+  "eintraege": [
+    {
+      "id": "e-tag1",
+      "datum": "2026-11-09",
+      "km": 14.2,
+      "vorlage": "Arbeit hin und zurück",
+      "notiz": "",
+      "typ": "tag",
+      "arbeitsweg": true,
+      "wetter": {
+        "quelle": "vorhersage",
+        "stand": "2026-11-09T04:45:00.000Z",
+        "hin": {
+          "temperatur": 4.5,
+          "gefuehlt": 1.5,
+          "niederschlag": 0,
+          "regenWahrscheinlichkeit": 10,
+          "wind": 14,
+          "boeen": 30,
+          "ampel": "gruen",
+          "kleidung": "s-eigen",
+          "empfehlung": {
+            "kopf": "Mütze",
+            "hals": "Schal",
+            "haende": "Winterhandschuhe",
+            "oberkoerper": "T-Shirt, Pullover, Jacke",
+            "beine": "Hose",
+            "fuesse": "Socken"
+          },
+          "regenkleidung": false,
+          "rueckmeldung": "zu-kalt",
+          "beimFahren": -0.4,
+          "luftfeuchte": 82,
+          "windRichtung": 248,
+          "windAnteil": {
+            "gegen": 0.38,
+            "seite": 0.62,
+            "ruecken": 0
+          },
+          "teilstrecken": [
+            {
+              "laenge": 3.6,
+              "kurs": 54,
+              "zaehlt": true,
+              "wind": 14,
+              "richtung": 248,
+              "luftstrom": 27.4,
+              "beimFahren": -0.4
+            },
+            {
+              "laenge": 8.9,
+              "kurs": 61,
+              "zaehlt": false,
+              "wind": 13.5,
+              "richtung": 250,
+              "luftstrom": 18.5,
+              "beimFahren": 0.9
+            }
+          ],
+          "geschwindigkeit": 18.5,
+          "grundlage": "fahrt",
+          "empfohlenAm": "2026-11-09T04:45:00.000Z",
+          "von": "06:15",
+          "bis": "07:15",
+          "abfahrt": "06:30",
+          "geplanteAbfahrt": null,
+          "rueckmeldungBereiche": [
+            "haende",
+            "fuesse"
+          ],
+          "rueckmeldungKommentar": "Unterziehhandschuhe unterwegs angezogen"
+        },
+        "rueck": {
+          "temperatur": 9,
+          "gefuehlt": 7.5,
+          "niederschlag": 0.2,
+          "regenWahrscheinlichkeit": 50,
+          "wind": 18,
+          "boeen": 35,
+          "ampel": "gelb",
+          "kleidung": "stufe2",
+          "empfehlung": {
+            "kopf": "",
+            "hals": "",
+            "haende": "",
+            "oberkoerper": "T-Shirt, Regenjacke",
+            "beine": "Hose",
+            "fuesse": "Socken"
+          },
+          "regenkleidung": true,
+          "rueckmeldung": "zu-warm",
+          "beimFahren": 6.1,
+          "luftfeuchte": 75,
+          "windRichtung": 240,
+          "windAnteil": {
+            "gegen": 0,
+            "seite": 0.62,
+            "ruecken": 0.38
+          },
+          "teilstrecken": null,
+          "geschwindigkeit": 18.5,
+          "grundlage": "fahrt",
+          "empfohlenAm": "2026-11-09T04:45:00.000Z",
+          "von": "17:30",
+          "bis": "18:30",
+          "abfahrt": "17:30",
+          "geplanteAbfahrt": "16:00",
+          "rueckmeldungBereiche": [],
+          "rueckmeldungKommentar": "Regenjacke war zu viel"
+        }
+      }
+    },
+    {
+      "id": "e-tag2",
+      "datum": "2026-10-27",
+      "km": 14.2,
+      "vorlage": "Arbeit hin und zurück",
+      "notiz": "",
+      "typ": "tag",
+      "arbeitsweg": true,
+      "wetter": {
+        "quelle": "rueckblick",
+        "stand": "2026-11-01T10:00:00.000Z",
+        "hin": {
+          "temperatur": 3,
+          "gefuehlt": 0.5,
+          "niederschlag": 0,
+          "regenWahrscheinlichkeit": null,
+          "wind": 9,
+          "boeen": 22,
+          "ampel": "gruen",
+          "kleidung": "s-eigen",
+          "empfehlung": null,
+          "regenkleidung": false,
+          "rueckmeldung": "passte",
+          "beimFahren": null,
+          "luftfeuchte": null,
+          "windRichtung": null,
+          "windAnteil": null,
+          "teilstrecken": null,
+          "geschwindigkeit": null,
+          "grundlage": "gefuehlt",
+          "empfohlenAm": null,
+          "von": null,
+          "bis": null,
+          "abfahrt": null,
+          "geplanteAbfahrt": null,
+          "rueckmeldungBereiche": [],
+          "rueckmeldungKommentar": ""
+        },
+        "rueck": null
+      }
+    },
+    {
+      "id": "e-tag3",
+      "datum": "2026-10-30",
+      "km": 10,
+      "vorlage": null,
+      "notiz": "Runde „Süd“",
+      "typ": "tag",
+      "arbeitsweg": false,
+      "wetter": null
+    },
+    {
+      "id": "e-tag4",
+      "datum": "2026-11-16",
+      "km": 14.2,
+      "vorlage": "Arbeit hin und zurück",
+      "notiz": "ohne Wetter",
+      "typ": "tag",
+      "arbeitsweg": true,
+      "wetter": {
+        "quelle": "vorhersage",
+        "stand": "2026-11-16T04:50:00.000Z",
+        "hin": {
+          "temperatur": 4.5,
+          "gefuehlt": 1.5,
+          "niederschlag": 0,
+          "regenWahrscheinlichkeit": 10,
+          "wind": 14,
+          "boeen": 30,
+          "ampel": "gruen",
+          "kleidung": "s-eigen",
+          "empfehlung": {
+            "kopf": "Mütze",
+            "hals": "Schal",
+            "haende": "Winterhandschuhe",
+            "oberkoerper": "T-Shirt, Pullover, Jacke",
+            "beine": "Hose",
+            "fuesse": "Socken"
+          },
+          "regenkleidung": false,
+          "rueckmeldung": "zu-warm",
+          "beimFahren": -0.4,
+          "luftfeuchte": 82,
+          "windRichtung": 248,
+          "windAnteil": {
+            "gegen": 0.38,
+            "seite": 0.62,
+            "ruecken": 0
+          },
+          "teilstrecken": [
+            {
+              "laenge": 3.6,
+              "kurs": 54,
+              "zaehlt": true,
+              "wind": 14,
+              "richtung": 248,
+              "luftstrom": 27.4,
+              "beimFahren": -0.4
+            },
+            {
+              "laenge": 8.9,
+              "kurs": 61,
+              "zaehlt": false,
+              "wind": 13.5,
+              "richtung": 250,
+              "luftstrom": 18.5,
+              "beimFahren": 0.9
+            }
+          ],
+          "geschwindigkeit": 18.5,
+          "grundlage": "fahrt",
+          "empfohlenAm": "2026-11-16T04:50:00.000Z",
+          "von": "06:15",
+          "bis": "07:15",
+          "abfahrt": "06:30",
+          "geplanteAbfahrt": null,
+          "rueckmeldungBereiche": [
+            "oberkoerper",
+            "beine"
+          ],
+          "rueckmeldungKommentar": ""
+        },
+        "rueck": null
+      }
+    }
+  ],
+  "wartungsarten": [
+    {
+      "id": "kleine-inspektion",
+      "name": "Kleine Inspektion",
+      "typ": "auftrag",
+      "intervallMonate": null,
+      "intervallKm": null,
+      "fensterVon": 10,
+      "fensterBis": 11,
+      "gueltigAbJahr": 2026,
+      "einmalig": false,
+      "bauteil": null,
+      "zuordnung": null
+    },
+    {
+      "id": "reparatur",
+      "name": "Reparatur",
+      "typ": "auftrag",
+      "intervallMonate": null,
+      "intervallKm": null,
+      "fensterVon": null,
+      "fensterBis": null,
+      "gueltigAbJahr": null,
+      "einmalig": false,
+      "bauteil": null,
+      "zuordnung": null
+    },
+    {
+      "id": "kette",
+      "name": "Kette wechseln",
+      "typ": "aufgabe",
+      "intervallMonate": null,
+      "intervallKm": 3000,
+      "fensterVon": null,
+      "fensterBis": null,
+      "gueltigAbJahr": null,
+      "einmalig": false,
+      "bauteil": "Kette",
+      "zuordnung": "naechste-inspektion"
+    }
+  ],
+  "auftraege": [
+    {
+      "id": "a-rep",
+      "wartungsartId": "reparatur",
+      "status": "erledigt",
+      "termin": null,
+      "terminZeit": null,
+      "vorlauf": null,
+      "imKalender": null,
+      "werkstatt": "Beispiel-Werkstatt",
+      "datum": "2026-05-10",
+      "kmStand": null,
+      "kmManuell": false,
+      "notiz": "Schlauch geflickt",
+      "positionen": [],
+      "ausgeschlossen": []
+    },
+    {
+      "id": "a-klein",
+      "wartungsartId": "kleine-inspektion",
+      "status": "geplant",
+      "termin": "2026-11-27",
+      "terminZeit": "09:30",
+      "vorlauf": 20,
+      "imKalender": {
+        "termin": "2026-11-27",
+        "terminZeit": "09:30",
+        "vorlauf": 20
+      },
+      "werkstatt": "Beispiel-Werkstatt",
+      "datum": null,
+      "kmStand": null,
+      "kmManuell": false,
+      "notiz": "",
+      "positionen": [
+        {
+          "id": "pos-m-2",
+          "art": "mangel",
+          "mangelId": "m-2",
+          "status": "offen",
+          "notiz": ""
+        }
+      ],
+      "ausgeschlossen": []
+    }
+  ],
+  "maengel": [
+    {
+      "id": "m-2",
+      "datum": "2026-11-12",
+      "beschreibung": "Licht flackert",
+      "status": "offen",
+      "erledigtAm": null
+    }
+  ]
+}

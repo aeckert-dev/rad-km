@@ -853,7 +853,7 @@ function bereicheLesen(praefix) {
 function kleidungFormular() { unterseiteZeigen("kleidung"); }
 function kleidungSeite() {
   const k = daten.einstellungen.wetter.kleidung, aus = rueckmeldungenAuswerten(), seit = rueckmeldungenSeitAenderung();
-  const hinweise = k.stufen.map((st, i) => ({ i, h: kleidungHinweis(st.id, seit) })).filter(x => x.h);
+  const hinweise = k.stufen.map((st, i) => ({ i, h: kleidungHinweise(st.id, seit) })).filter(x => x.h.length);
   const frueher = Object.keys(aus).filter(id => !k.stufen.some(s => s.id === id)).reduce((x, id) => x + aus[id].anzahl, 0);
   const zeile = (aktion, i, titel, unten) => '<div class="zeile"><button type="button" class="inhalt" data-action="' + aktion + '" data-i="' + i + '">' +
     '<div class="text"><div>' + titel + '</div>' + unten.map(u => '<div class="klein umbrechen">' + u + '</div>').join("") + '</div>' +
@@ -1080,123 +1080,153 @@ async function kleidungStandard() {
 
 // ---------- Rückmeldung nach einer Fahrt ----------
 
-const RUECKMELDUNG_TEXT = { "zu-warm": "zu warm", "passte": "passte", "zu-kalt": "zu kalt" };
+const RUECKMELDUNG_TEXT = { "zu-warm": "zu warm", "passte": "passte", "zu-kalt": "zu kalt", "gemischt": "gemischt" };
+// Zählung je Urteil (ab 5g mit „gemischt“)
+const zaehlungLeer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0, gemischt: 0 });
 // Rückmeldungen aus allen Einträgen je Kleidungsstufe (id), getrennt auch die
-// Fahrten mit Regenkleidung: { id: { anzahl, "zu-warm", passte, "zu-kalt", regen: { … } } }
+// Fahrten mit Regenkleidung: { id: { anzahl, "zu-warm", passte, "zu-kalt", gemischt, regen: { … } } }
 function rueckmeldungenAuswerten() {
-  const leer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0 });
   const erg = {};
   daten.eintraege.forEach(e => e.wetter && ["hin", "rueck"].forEach(art => {
     const f = e.wetter[art];
     if (!f || !f.kleidung || !f.rueckmeldung) return;
-    const z = erg[f.kleidung] || (erg[f.kleidung] = Object.assign(leer(), { regen: leer() }));
+    const z = erg[f.kleidung] || (erg[f.kleidung] = Object.assign(zaehlungLeer(), { regen: zaehlungLeer() }));
     z.anzahl++; z[f.rueckmeldung]++;
     if (f.regenkleidung) { z.regen.anzahl++; z.regen[f.rueckmeldung]++; }
   }));
   return erg;
 }
-// "3× zu kalt, 1× passte (bei Regen: 1× zu kalt)"
+// "3× zu kalt, 1× passte, 1× gemischt (bei Regen: 1× zu kalt)"
 function auswertungText(z) {
   if (!z || !z.anzahl) return "noch keine";
-  const teil = x => ["zu-kalt", "passte", "zu-warm"].filter(u => x[u]).map(u => x[u] + "× " + RUECKMELDUNG_TEXT[u]).join(", ");
+  const teil = x => ["zu-kalt", "passte", "zu-warm", "gemischt"].filter(u => x[u]).map(u => x[u] + "× " + RUECKMELDUNG_TEXT[u]).join(", ");
   return teil(z) + (z.regen.anzahl ? " (bei Regen: " + teil(z.regen) + ")" : "");
-}
-// Rückmeldung zu einer Fahrt eines Eintrags (mit "Rückgängig"). Sie wird nur
-// gespeichert und ausgewertet; die Grenzen der Stufen bleiben, wie sie sind.
-// Ab 5f: Bei „passte“ entfallen Bereiche und Kommentar, in die Gegenrichtung
-// (zu kalt ↔ zu warm) bleiben sie. Nach „zu warm“/„zu kalt“ bleibt die Fahrt in
-// der Karte „Wie war die Kleidung?“ stehen (mit „Wo?“), bis „Fertig“.
-function rueckmeldungGeben(id, fahrt, urteil, ausDetail) {
-  const e = daten.eintraege.find(x => x.id === id);
-  const fw = e && e.wetter && e.wetter[fahrt];
-  if (!fw || !(urteil in RUECKMELDUNG_TEXT) || fw.rueckmeldung === urteil) return;
-  const bereiche = fw.rueckmeldungBereiche || [], kommentar = fw.rueckmeldungKommentar || "";
-  const zusatz = !bereiche.length && !kommentar ? ""
-    : urteil === "passte" ? " · Bereiche und Kommentar entfernt"
-    : fw.rueckmeldung ? " · " + [bereiche.length ? "Bereiche (" + bereicheText(bereiche) + ")" : "", kommentar ? "Kommentar" : ""].filter(Boolean).join(" und ") + " übernommen" : "";
-  mitRueckgaengig(() => {
-    fw.rueckmeldung = urteil;
-    if (urteil === "passte") { fw.rueckmeldungBereiche = []; fw.rueckmeldungKommentar = ""; }
-    // Stehen bleiben nur „zu warm“/„zu kalt“ (nach „Rückgängig“ von „passte“ also wieder)
-    if (!ausDetail && urteil !== "passte") rueckmeldungOffen.add(id + "|" + fahrt);
-  }, () => {
-    const k = daten.einstellungen.wetter.kleidung, i = k.stufen.findIndex(s => s.id === fw.kleidung);
-    const z = rueckmeldungenSeitAenderung()[fw.kleidung];
-    const stand = !z ? "" : fw.empfohlenAm === null ? "vor 5d: " + auswertungText(z.vor5d) : seitText(fw.kleidung, z, false);
-    return "Rückmeldung „" + RUECKMELDUNG_TEXT[urteil] + "“ gespeichert" + zusatz + (i < 0 || !stand ? "" : " · Stufe " + stufeBereich(k, i) + " " + stand);
-  }, ausDetail ? () => eintragNeuZeigen(id) : null);
 }
 // Eintragsansicht neu zeichnen, an derselben Stelle
 function eintragNeuZeigen(id) { const y = fenster.scrollTop; eintragAnsicht(id); fenster.scrollTop = y; }
-function rueckmeldungKnoepfe(e, fahrt, fw, ausDetail) {
-  return '<div class="rueckmeldung" role="group" aria-label="Kleidung bei der ' + (fahrt === "hin" ? "Hinfahrt" : "Rückfahrt") + '">' +
-    ["zu-warm", "passte", "zu-kalt"].map(u => '<button type="button" data-action="rueckmeldung" data-id="' + esc(e.id) + '" data-fahrt="' + fahrt + '" data-urteil="' + u + '"' +
-      (ausDetail ? ' data-detail="1"' : "") + ' aria-pressed="' + (fw.rueckmeldung === u) + '"' + (fw.rueckmeldung === u ? ' class="primaer"' : "") + '>' +
-      RUECKMELDUNG_TEXT[u] + '</button>').join("") + '</div>' + rueckmeldungWoHtml(e, fahrt, fw, ausDetail);
-}
 
-// ---------- Bereiche und Kommentar zur Rückmeldung (B17, ab 5f) ----------
+// ---------- Rückmeldung je Körperbereich (B18, ab 5g) ----------
+// Sechs Felder (Kopf … Füße); jeder Tipp wechselt zyklisch: keine Angabe (grau) →
+// passte ✓ → zu kalt ❄︎ → zu warm ☀︎ → keine Angabe. „✓ Alles passte“ setzt alle
+// sechs auf „passte“ (Meldung mit „Rückgängig“). Das Gesamturteil (rueckmeldung)
+// ergibt sich aus den Feldern (urteilAusBereiche). Felder und Kommentar werden still
+// gespeichert; in der Karte im Reiter Wetter bleibt die Fahrt bis „Fertig“ bzw. bis
+// zum Wechsel des Reiters stehen.
 
-// Fahrten, die nach „zu warm“/„zu kalt“ in der Karte stehen bleiben ("id|hin"), nur im Arbeitsspeicher
+const FELD_SYMBOL = { passte: "✓", "zu-kalt": "❄︎", "zu-warm": "☀︎" };
+const FELD_NAECHSTER = { leer: "passte", passte: "zu-kalt", "zu-kalt": "zu-warm", "zu-warm": null };
+const FELD_ERKLAERUNG = "Tippen wechselt: ✓ passte · ❄︎ zu kalt · ☀︎ zu warm · grau = keine Angabe";
+// Fahrten, die nach einer Angabe in der Karte stehen bleiben ("id|hin"), nur im Arbeitsspeicher
 const rueckmeldungOffen = new Set();
-const mitAbweichung = fw => !!fw && (fw.rueckmeldung === "zu-warm" || fw.rueckmeldung === "zu-kalt");
-// "Hände, Füße"
-function bereicheText(liste) { return BEREICHE.filter(([b]) => liste.includes(b)).map(([, name]) => name).join(", "); }
-// Unter den Knöpfen nach „zu warm“/„zu kalt“: „Wo war es zu kalt?“ mit sechs Schaltern
-// (Mehrfachauswahl, erneutes Antippen wählt ab) und ein optionaler Kommentar.
-// Beides wird still gespeichert (ohne Meldung); in der Karte im Reiter Wetter dazu „Fertig“.
-function rueckmeldungWoHtml(e, fahrt, fw, ausDetail) {
-  if (!mitAbweichung(fw)) return "";
-  const frage = "Wo war es " + RUECKMELDUNG_TEXT[fw.rueckmeldung] + "?", name = fahrt === "hin" ? "Hinfahrt" : "Rückfahrt";
+function rueckmeldungFahrt(id, fahrt) {
+  const e = daten.eintraege.find(x => x.id === id);
+  return e && e.wetter && e.wetter[fahrt] || null;
+}
+const fahrtBereiche = fw => fw && fw.rueckmeldungBereiche && typeof fw.rueckmeldungBereiche === "object" ? fw.rueckmeldungBereiche : {};
+// Abweichende Bereiche: "Füße zu kalt · Oberkörper zu warm" (erst „zu kalt“, dann „zu warm“, je in der Reihenfolge der Bereiche)
+function abweichungenText(rb) {
+  return ["zu-kalt", "zu-warm"].flatMap(u => BEREICHE.filter(([b]) => rb[b] === u).map(([, name]) => name + " " + RUECKMELDUNG_TEXT[u])).join(" · ");
+}
+// "Gesamt: gemischt – Füße zu kalt · Oberkörper zu warm"; vor 5g ohne Bereiche "Gesamt: zu kalt (ohne Bereiche)"
+function gesamtText(fw) {
+  const rb = fahrtBereiche(fw), ab = abweichungenText(rb);
+  if (!Object.keys(rb).length) return fw.rueckmeldung ? "Gesamt: " + RUECKMELDUNG_TEXT[fw.rueckmeldung] + " (ohne Bereiche)" : "Gesamt: noch keine Angabe";
+  return "Gesamt: " + RUECKMELDUNG_TEXT[fw.rueckmeldung] + (ab ? " – " + ab : "");
+}
+// Inhalt und Beschriftung eines Felds
+const feldZustand = u => u ? RUECKMELDUNG_TEXT[u] : "keine Angabe";
+function feldInnen(name, u) {
+  return '<span class="rm-symbol" aria-hidden="true">' + (u ? FELD_SYMBOL[u] : "") + '</span><span class="rm-name">' + name + '</span>' +
+    '<span class="rm-zustand" aria-hidden="true">' + (u ? RUECKMELDUNG_TEXT[u] : "–") + '</span>';
+}
+const allesPasste = rb => BEREICH_SCHLUESSEL.every(b => rb[b] === "passte");
+// Karte bzw. Eintragsansicht: „✓ Alles passte“, sechs Felder, Erklärzeile, Gesamtzeile, Kommentar, (Karte:) „Fertig“
+function rueckmeldungKnoepfe(e, fahrt, fw, ausDetail) {
+  const name = fahrt === "hin" ? "Hinfahrt" : "Rückfahrt", rb = fahrtBereiche(fw);
   const daten_ = ' data-id="' + esc(e.id) + '" data-fahrt="' + fahrt + '"' + (ausDetail ? ' data-detail="1"' : "");
-  const feld = "rk-" + (ausDetail ? "d" : "w") + "-" + esc(e.id) + "-" + fahrt, bereiche = fw.rueckmeldungBereiche || [];
-  return '<div class="rueckmeldung-wo"><div class="klein">' + frage + '</div>' +
-    '<div class="bereich-wahl" role="group" aria-label="' + frage + ' (' + name + ')">' + BEREICHE.map(([b, n]) => {
-      const an = bereiche.includes(b);
-      return '<button type="button" data-action="rueckmeldung-bereich" data-bereich="' + b + '"' + daten_ + ' aria-pressed="' + an + '"' + (an ? ' class="primaer"' : "") + '>' + n + '</button>';
-    }).join("") + '</div>' +
+  const feld = "rk-" + (ausDetail ? "d" : "w") + "-" + esc(e.id) + "-" + fahrt;
+  return '<div class="rueckmeldung">' +
+    '<button type="button" class="rm-alle" data-action="rueckmeldung-alle"' + daten_ + ' aria-pressed="' + allesPasste(rb) + '">✓ Alles passte</button>' +
+    '<div class="rm-felder" role="group" aria-label="Kleidung bei der ' + name + ' je Körperbereich">' + BEREICHE.map(([b, n]) =>
+      '<button type="button" class="rm-feld" data-action="rueckmeldung-feld" data-bereich="' + b + '"' + daten_ + ' data-zustand="' + (rb[b] || "leer") + '"' +
+        ' aria-label="' + n + ': ' + feldZustand(rb[b]) + '" aria-describedby="' + feld + '-erkl">' + feldInnen(n, rb[b]) + '</button>').join("") + '</div>' +
+    '<div class="feldhinweis" id="' + feld + '-erkl">' + FELD_ERKLAERUNG + '</div>' +
+    '<div class="rm-gesamt">' + esc(gesamtText(fw)) + '</div>' +
+    '<span class="unsichtbar rm-ansage" aria-live="polite"></span>' +
     '<label for="' + feld + '" class="klein">Kommentar (optional)</label>' +
     '<input type="text" id="' + feld + '" maxlength="' + KOMMENTAR_MAX + '" autocomplete="off" enterkeyhint="done" placeholder="z. B. Unterziehhandschuhe unterwegs angezogen"' +
       daten_ + ' data-input="rueckmeldung-kommentar" data-change="rueckmeldung-kommentar" data-enter="rueckmeldung-kommentar-fertig" value="' + esc(fw.rueckmeldungKommentar || "") + '">' +
     (ausDetail ? "" : '<div class="knopfreihe"><button type="button" data-action="rueckmeldung-fertig"' + daten_ + '>Fertig</button></div>') + '</div>';
 }
-function rueckmeldungFahrt(id, fahrt) {
-  const e = daten.eintraege.find(x => x.id === id);
-  return e && e.wetter && e.wetter[fahrt] || null;
+// Stand der Stufe nach einer Rückmeldung (für die Meldung)
+function stufenStandText(fw) {
+  const k = daten.einstellungen.wetter.kleidung, i = k.stufen.findIndex(s => s.id === fw.kleidung);
+  const z = rueckmeldungenSeitAenderung()[fw.kleidung];
+  const stand = !z ? "" : fw.empfohlenAm === null ? "vor 5d: " + auswertungText(z.vor5d) : seitText(fw.kleidung, z, false);
+  return i < 0 || !stand ? "" : " · Stufe " + stufeBereich(k, i) + " " + stand;
 }
-// Bereich an- bzw. abwählen (still gespeichert)
-function rueckmeldungBereichSchalten(id, fahrt, bereich, ausDetail) {
+// „✓ Alles passte“: alle sechs Bereiche „passte“ (mit „Rückgängig“). Die Fahrt
+// bleibt in der Karte stehen, damit z. B. ein Tipp auf „Füße“ direkt „zu kalt“ ergibt.
+function rueckmeldungAllesPasste(id, fahrt, ausDetail) {
   const fw = rueckmeldungFahrt(id, fahrt);
-  if (!mitAbweichung(fw) || !BEREICH_SCHLUESSEL.includes(bereich)) return;
-  const alt = fw.rueckmeldungBereiche || [], an = !alt.includes(bereich);
-  fw.rueckmeldungBereiche = BEREICH_SCHLUESSEL.filter(b => b === bereich ? an : alt.includes(b));
-  if (!speichern()) return;
-  if (ausDetail) eintragNeuZeigen(id); else zeichnen();
+  if (!fw || !fw.kleidung || allesPasste(fahrtBereiche(fw))) return;
+  mitRueckgaengig(() => {
+    fw.rueckmeldungBereiche = Object.fromEntries(BEREICH_SCHLUESSEL.map(b => [b, "passte"]));
+    fw.rueckmeldung = "passte";
+    if (!ausDetail) rueckmeldungOffen.add(id + "|" + fahrt);
+  }, () => "Rückmeldung „passte“ (alle Bereiche) gespeichert" + stufenStandText(fw), ausDetail ? () => eintragNeuZeigen(id) : null);
+}
+// Ein Feld weiterschalten (still gespeichert). Die Seite wird nicht neu gezeichnet:
+// Nur das Feld, „Alles passte“ und die Gesamtzeile ändern sich (VoiceOver-Fokus und
+// Scrollstand bleiben); die Ansage nennt den neuen Zustand.
+function rueckmeldungFeldSchalten(el) {
+  const { id, fahrt, bereich } = el.dataset, ausDetail = !!el.dataset.detail;
+  const fw = rueckmeldungFahrt(id, fahrt);
+  if (!fw || !fw.kleidung || !BEREICH_SCHLUESSEL.includes(bereich)) return;
+  const vorher = { rb: fw.rueckmeldungBereiche, rm: fw.rueckmeldung };
+  const rb = Object.assign({}, fahrtBereiche(fw)), neu = FELD_NAECHSTER[rb[bereich] || "leer"];
+  if (neu) rb[bereich] = neu; else delete rb[bereich];
+  fw.rueckmeldungBereiche = Object.fromEntries(BEREICH_SCHLUESSEL.filter(b => rb[b]).map(b => [b, rb[b]]));
+  fw.rueckmeldung = urteilAusBereiche(fw.rueckmeldungBereiche);
+  if (!speichern()) { fw.rueckmeldungBereiche = vorher.rb; fw.rueckmeldung = vorher.rm; return; }
+  if (!ausDetail) rueckmeldungOffen.add(id + "|" + fahrt);
+  const box = el.closest(".rueckmeldung");
+  if (!box) { zeichnen(); return; }
+  el.dataset.zustand = neu || "leer";
+  el.setAttribute("aria-label", BEREICH_NAME[bereich] + ": " + feldZustand(neu));
+  el.innerHTML = feldInnen(BEREICH_NAME[bereich], neu);
+  box.querySelector(".rm-alle").setAttribute("aria-pressed", String(allesPasste(fw.rueckmeldungBereiche)));
+  box.querySelector(".rm-gesamt").textContent = gesamtText(fw);
+  box.querySelector(".rm-ansage").textContent = BEREICH_NAME[bereich] + ": " + feldZustand(neu);
 }
 // Kommentar still speichern: schon beim Tippen (falls die Seite neu gezeichnet
-// wird), einzeilig und höchstens KOMMENTAR_MAX Zeichen; am Ende ohne Leerzeichen am Rand
+// wird), einzeilig und höchstens KOMMENTAR_MAX Zeichen; am Ende ohne Leerzeichen am Rand.
+// Ab 5g bei jedem Urteil (auch ohne).
 function rueckmeldungKommentarSetzen(el, fertig) {
   const fw = rueckmeldungFahrt(el.dataset.id, el.dataset.fahrt);
-  if (!mitAbweichung(fw)) return;
+  if (!fw || !fw.kleidung) return;
   let text = Array.from(el.value.replace(/[\r\n]+/g, " ")).slice(0, KOMMENTAR_MAX).join("");
   if (fertig) text = text.trim();
   if (fertig && el.value !== text) el.value = text;
   if ((fw.rueckmeldungKommentar || "") === text) return;
   fw.rueckmeldungKommentar = text;
+  if (!el.dataset.detail && fw.rueckmeldung) rueckmeldungOffen.add(el.dataset.id + "|" + el.dataset.fahrt);
   speichern();
 }
-// „Fertig“ in der Karte: die Fahrt verschwindet aus „Wie war die Kleidung?“
+// „Fertig“ in der Karte: die Fahrt verschwindet aus „Wie war die Kleidung?“; mit
+// Rückmeldung eine kurze Meldung mit dem Stand der Stufe (ohne „Rückgängig“)
 function rueckmeldungFertig(id, fahrt) {
   rueckmeldungOffen.delete(id + "|" + fahrt);
   zeichnen();
+  const fw = rueckmeldungFahrt(id, fahrt);
+  if (fw && fw.rueckmeldung) meldung("Rückmeldung „" + RUECKMELDUNG_TEXT[fw.rueckmeldung] + "“ gespeichert" + stufenStandText(fw));
 }
 // Ohne eingeschaltete Rückmeldung zeigt die Eintragsansicht nur den Text:
-// „Rückmeldung: zu kalt · Hände, Füße“ und den Kommentar
+// „Rückmeldung: gemischt – Füße zu kalt · Oberkörper zu warm“ und den Kommentar
 function rueckmeldungText(fw) {
-  if (!fw.rueckmeldung) return "";
-  const b = mitAbweichung(fw) && fw.rueckmeldungBereiche && fw.rueckmeldungBereiche.length ? " · " + bereicheText(fw.rueckmeldungBereiche) : "";
-  return '<div class="klein">Rückmeldung: ' + RUECKMELDUNG_TEXT[fw.rueckmeldung] + b + '</div>' +
-    (mitAbweichung(fw) && fw.rueckmeldungKommentar ? '<div class="klein">💬 „' + esc(fw.rueckmeldungKommentar) + '“</div>' : "");
+  const ab = abweichungenText(fahrtBereiche(fw));
+  return (fw.rueckmeldung ? '<div class="klein">Rückmeldung: ' + RUECKMELDUNG_TEXT[fw.rueckmeldung] + (ab ? " – " + esc(ab) : "") + '</div>' : "") +
+    (fw.rueckmeldungKommentar ? '<div class="klein">💬 „' + esc(fw.rueckmeldungKommentar) + '“</div>' : "");
 }
 // Kleidung einer Stufe in einer Zeile (für Fahrten ohne festgehaltene Empfehlung)
 function stufeText(id, k = daten.einstellungen.wetter.kleidung) {
@@ -1208,10 +1238,10 @@ function fahrtKleidungText(fw) {
   return fw.empfehlung && empfehlungText(fw.empfehlung) ? empfehlungText(fw.empfehlung) : stufeText(fw.kleidung);
 }
 // Fahrten von heute und den zwei Tagen davor, die vorbei sind und noch keine
-// Rückmeldung haben (nur, wenn die Rückmeldung eingeschaltet ist); ab 5f auch die
-// nach „zu warm“/„zu kalt“ stehen gebliebenen (bis „Fertig“). Vorbei ist eine
-// Fahrt am Ende ihres gespeicherten Zeitfensters (ab 5e), heute am Ende des
-// tatsächlichen (ggf. verschobenen), sonst am Ende der Fahrzeit aus den Einstellungen.
+// Rückmeldung haben (nur, wenn die Rückmeldung eingeschaltet ist), dazu die nach
+// einer Angabe stehen gebliebenen (bis „Fertig“ bzw. zum Wechsel des Reiters).
+// Vorbei ist eine Fahrt am Ende ihres gespeicherten Zeitfensters (ab 5e), heute am
+// Ende des tatsächlichen (ggf. verschobenen), sonst am Ende der Fahrzeit aus den Einstellungen.
 function offeneRueckmeldungen(jetzt) {
   if (!rueckmeldungAn()) return [];
   const h = isoAusDate(new Date(jetzt)), w = daten.einstellungen.wetter, abw = abweichungFuer(jetzt, w);
@@ -1219,15 +1249,16 @@ function offeneRueckmeldungen(jetzt) {
   daten.eintraege.filter(e => e.wetter && e.datum <= h && e.datum >= plusTage(h, -2))
     .sort((a, b) => b.datum.localeCompare(a.datum)).forEach(e => {
       [["hin", "hinfahrt"], ["rueck", "rueckfahrt"]].forEach(([art, fahrt]) => {
-        const fw = e.wetter[art];
-        if (!fw || !fw.kleidung || (fw.rueckmeldung && !(mitAbweichung(fw) && rueckmeldungOffen.has(e.id + "|" + art)))) return;
+        const fw = e.wetter[art], offen = rueckmeldungOffen.has(e.id + "|" + art);
+        if (!fw || !fw.kleidung || (fw.rueckmeldung && !offen)) return;
         const heutig = fahrtZeitfenster(fahrt, e.datum, w, abw);
         const ende = e.datum === h && heutig.verschoben ? heutig.bisMs : fw.bis ? zeitpunktAm(e.datum, minutenAus(fw.bis)) : heutig.bisMs;
-        if (ende <= jetzt) liste.push({ e, art, name: FAHRT_NAME[fahrt], fw, h });
+        if (ende <= jetzt) liste.push({ e, art, name: FAHRT_NAME[fahrt], fw, h, offen });
       });
     });
-  // Höchstens zwei, dazu die nach „zu warm“/„zu kalt“ stehen gebliebenen
-  return liste.filter((x, i) => i < 2 || x.fw.rueckmeldung);
+  // Höchstens zwei ohne Angabe, dazu alle stehen gebliebenen
+  let ohne = 0;
+  return liste.filter(x => x.offen || ohne++ < 2);
 }
 function rueckmeldungKarte(jetzt) {
   const liste = offeneRueckmeldungen(jetzt);
@@ -1235,7 +1266,7 @@ function rueckmeldungKarte(jetzt) {
   return '<div class="karte" style="margin-top:8px"><h3>Wie war die Kleidung?</h3>' + liste.map(x =>
     '<div class="klein" style="margin-top:8px">' + tagTitel(x.e.datum, x.h) + ', ' + x.name + ': ' + esc(fahrtKleidungText(x.fw)) + '</div>' +
     rueckmeldungKnoepfe(x.e, x.art, x.fw, false)).join("") +
-    '<div class="feldhinweis">Bei „zu warm“ oder „zu kalt“ kannst du angeben, wo, und einen Kommentar schreiben; beides wird sofort gespeichert und lässt sich im Eintrag ändern. ' +
+    '<div class="feldhinweis">Gib je Körperbereich an, wie es war, und schreib bei Bedarf einen Kommentar; alles wird sofort gespeichert und lässt sich im Eintrag ändern. ' +
     'Die Auswertung je Stufe steht unter Einstellungen → Wetter → Kleidung. Die Grenzen ändern sich dadurch nicht.</div></div>';
 }
 
@@ -1274,10 +1305,10 @@ function letzteAenderung(id, k = daten.einstellungen.wetter.kleidung) {
 // Rückmeldungen je Stufe ab ihrer letzten Änderung: gezählt werden Fahrten, deren
 // Empfehlung nach der aktuellen Grundlage und nach der Änderung berechnet wurde
 // und die nach der Änderung lagen. Rückmeldungen von vor 5d (empfohlenAm null)
-// stehen getrennt in "vor5d". { id: { seit, anzahl, "zu-warm", passte, "zu-kalt",
-// regen: {…}, fahrten: [{ urteil, lage, regen, datum, art, bereiche, kommentar }], vor5d: {…} } }
+// stehen getrennt in "vor5d". { id: { seit, anzahl, "zu-warm", passte, "zu-kalt", gemischt,
+// regen: {…}, fahrten: [{ urteil, lage, regen, datum, art, bereiche: { bereich: Urteil }, kommentar }], vor5d: {…} } }
 function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w = daten.einstellungen.wetter) {
-  const leer = () => ({ anzahl: 0, "zu-warm": 0, passte: 0, "zu-kalt": 0 });
+  const leer = zaehlungLeer;
   const erg = {};
   const fuer = id => erg[id] || (erg[id] = Object.assign(leer(), { seit: letzteAenderung(id, k), regen: leer(), fahrten: [], vor5d: Object.assign(leer(), { regen: leer() }) }));
   daten.eintraege.forEach(e => e.wetter && [["hin", "hinfahrt"], ["rueck", "rueckfahrt"]].forEach(([art, fahrt]) => {
@@ -1290,7 +1321,7 @@ function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w 
     if (z.seit !== null && (Date.parse(f.empfohlenAm) < z.seit || zeitpunktAm(e.datum, minutenAus(w[fahrt].bis)) < z.seit)) return;
     zaehle(z);
     z.fahrten.push({ urteil: f.rueckmeldung, lage: windLageGespeichert(f), regen: !!f.regenkleidung, datum: e.datum, art,
-      bereiche: f.rueckmeldungBereiche || [], kommentar: f.rueckmeldungKommentar || "" });
+      bereiche: Object.assign({}, fahrtBereiche(f)), kommentar: f.rueckmeldungKommentar || "" });
   }));
   return erg;
 }
@@ -1303,22 +1334,9 @@ function seitText(id, z, mitVor5d = true) {
     (mitVor5d && z && z.vor5d.anzahl ? " · vor 5d: " + auswertungText(z.vor5d) : "");
 }
 const LAGE_BEI = { Gegenwind: "bei Gegenwind", Seitenwind: "bei Seitenwind", Rückenwind: "bei Rückenwind", wechselnd: "bei wechselndem Wind", "kaum Wind": "bei wenig Wind" };
-// Hinweis zu einer Stufe: ab 2 gleichen Abweichungen seit der letzten Änderung,
-// wenn sie häufiger sind als „passte“ (2× zu kalt, 5× passte: kein Hinweis). Gibt
-// es beide Richtungen gleich oft, heißt der Hinweis „uneinheitlich“. null = keiner.
-function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.einstellungen.wetter.kleidung) {
-  const z = seit[id], i = k.stufen.findIndex(s => s.id === id);
-  if (!z || i < 0) return null;
-  const richtungen = ["zu-kalt", "zu-warm"].filter(u => z[u] >= 2 && z[u] > z.passte);
-  if (!richtungen.length) return null;
-  const titel = "Stufe " + stufeBereich(k, i) + ": " + seitTitel(z.seit) + " ";
-  if (richtungen.length === 2 && z["zu-kalt"] === z["zu-warm"]) {
-    return { id, richtung: null, text: titel + z["zu-kalt"] + "× zu kalt und " + z["zu-warm"] + "× zu warm – uneinheitlich" };
-  }
-  const u = richtungen.length === 2 ? (z["zu-kalt"] > z["zu-warm"] ? "zu-kalt" : "zu-warm") : richtungen[0];
-  const fahrten = z.fahrten.filter(f => f.urteil === u), n = fahrten.length;
-  // Wind und Regen der abweichenden Fahrten: "beide bei Gegenwind", "1× bei Gegenwind, 1× bei Seitenwind", "alle bei Regen"
-  const lagen = fahrten.map(f => f.lage).filter(Boolean);
+// Wind und Regen der abweichenden Fahrten: "beide bei Gegenwind", "1× bei Gegenwind, 1× bei Seitenwind", "alle bei Regen"
+function lageTeile(fahrten) {
+  const n = fahrten.length, lagen = fahrten.map(f => f.lage).filter(Boolean);
   const zaehl = [...new Set(lagen)].map(l => [l, lagen.filter(x => x === l).length]);
   const alle = n === 2 ? "beide " : "alle ";
   const teile = [];
@@ -1327,32 +1345,76 @@ function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.ein
   const regen = fahrten.filter(f => f.regen).length;
   if (regen === n) teile.push(teile.length ? "bei Regen" : alle + "bei Regen");
   else if (regen) teile.push("davon " + regen + "× bei Regen");
+  return teile;
+}
+// Richtung eines Hinweises nach der Regel: ab 2 gleichen Abweichungen, häufiger als
+// „passte“; beide gleich oft: null mit uneinheitlich = true; keine: undefined
+function hinweisRichtung(z) {
+  const richtungen = ["zu-kalt", "zu-warm"].filter(u => z[u] >= 2 && z[u] > z.passte);
+  if (!richtungen.length) return undefined;
+  if (richtungen.length === 2 && z["zu-kalt"] === z["zu-warm"]) return null;
+  return richtungen.length === 2 ? (z["zu-kalt"] > z["zu-warm"] ? "zu-kalt" : "zu-warm") : richtungen[0];
+}
+// Hinweis zu einer Stufe: ab 2 gleichen Abweichungen seit der letzten Änderung,
+// wenn sie häufiger sind als „passte“ (2× zu kalt, 5× passte: kein Hinweis). Gibt
+// es beide Richtungen gleich oft, heißt der Hinweis „uneinheitlich“. „gemischt“
+// (ab 5g) zählt weder als „passte“ noch als Abweichung. null = keiner.
+function kleidungHinweis(id, seit = rueckmeldungenSeitAenderung(), k = daten.einstellungen.wetter.kleidung) {
+  const z = seit[id], i = k.stufen.findIndex(s => s.id === id);
+  if (!z || i < 0) return null;
+  const u = hinweisRichtung(z);
+  if (u === undefined) return null;
+  const titel = "Stufe " + stufeBereich(k, i) + ": " + seitTitel(z.seit) + " ";
+  if (u === null) return { id, richtung: null, text: titel + z["zu-kalt"] + "× zu kalt und " + z["zu-warm"] + "× zu warm – uneinheitlich" };
+  const fahrten = z.fahrten.filter(f => f.urteil === u);
   // Ab 5f vorneweg die Bereiche: "beide Male Hände; beide bei Gegenwind"
-  const klammer = [bereicheHinweis(fahrten), teile.join(", ")].filter(Boolean).join("; ");
+  const klammer = [bereicheHinweis(fahrten, u), lageTeile(fahrten).join(", ")].filter(Boolean).join("; ");
   return { id, richtung: u, text: titel + z[u] + "× " + RUECKMELDUNG_TEXT[u] + (klammer ? " (" + klammer + ")" : "") };
+}
+// Hinweise je Körperbereich (ab 5g, B18), nach derselben Regel wie für die ganze Stufe,
+// gezählt aus den Feldern ab der letzten Änderung der Stufe (ohne Angabe zählt nicht,
+// auch nicht die Rückmeldungen vor 5g ohne Bereiche): "Stufe −10 bis −5 °C: Füße 2× zu
+// kalt (1× bei Gegenwind, 1× bei wenig Wind)". Bereiche in der Richtung des Hinweises
+// zur ganzen Stufe stehen schon dort und entfallen hier.
+function bereichHinweise(id, seit = rueckmeldungenSeitAenderung(), k = daten.einstellungen.wetter.kleidung) {
+  const z = seit[id], i = k.stufen.findIndex(s => s.id === id);
+  if (!z || i < 0) return [];
+  const stufe = kleidungHinweis(id, seit, k), titel = "Stufe " + stufeBereich(k, i) + ": ";
+  return BEREICHE.map(([b, name]) => {
+    const zb = Object.assign(zaehlungLeer(), ...BEREICH_URTEILE.map(u => ({ [u]: z.fahrten.filter(f => f.bereiche[b] === u).length })));
+    const u = hinweisRichtung(zb);
+    if (u === undefined || (stufe && stufe.richtung && stufe.richtung === u)) return null;
+    if (u === null) return { id, bereich: b, richtung: null, text: titel + name + " " + zb["zu-kalt"] + "× zu kalt und " + zb["zu-warm"] + "× zu warm – uneinheitlich" };
+    const teile = lageTeile(z.fahrten.filter(f => f.bereiche[b] === u));
+    return { id, bereich: b, richtung: u, text: titel + name + " " + zb[u] + "× " + RUECKMELDUNG_TEXT[u] + (teile.length ? " (" + teile.join(", ") + ")" : "") };
+  }).filter(Boolean);
+}
+// Alle Hinweise einer Stufe: zur ganzen Stufe und je Bereich
+function kleidungHinweise(id, seit = rueckmeldungenSeitAenderung(), k = daten.einstellungen.wetter.kleidung) {
+  const h = kleidungHinweis(id, seit, k);
+  return (h ? [h] : []).concat(bereichHinweise(id, seit, k));
 }
 // "Hände und Füße", "Kopf, Hände und Füße"
 function bereicheUnd(liste) {
   const namen = BEREICHE.filter(([b]) => liste.includes(b)).map(([, name]) => name);
   return namen.length < 2 ? namen.join("") : namen.slice(0, -1).join(", ") + " und " + namen[namen.length - 1];
 }
-// Bereiche der abweichenden Fahrten im Hinweis: bei allen dieselben „beide Male
-// Hände“ bzw. „alle 3 Male Hände und Füße“, sonst gezählt „2× Hände, 1× Füße“.
-// Fahrten ohne Bereiche zählen nicht mit; ohne jeden Bereich "".
-function bereicheHinweis(fahrten) {
-  const mit = fahrten.filter(f => f.bereiche && f.bereiche.length);
-  if (!mit.length) return "";
-  const zahl = b => fahrten.filter(f => f.bereiche.includes(b)).length;
+// Bereiche der abweichenden Fahrten (Urteil u) im Hinweis: bei allen dieselben „beide
+// Male Hände“ bzw. „alle 3 Male Hände und Füße“, sonst gezählt „2× Hände, 1× Füße“.
+// Gezählt werden die Bereiche mit demselben Urteil; Fahrten ohne zählen nicht; ohne jeden Bereich "".
+function bereicheHinweis(fahrten, u) {
+  const zahl = b => fahrten.filter(f => f.bereiche[b] === u).length;
   const genannt = BEREICH_SCHLUESSEL.filter(b => zahl(b));
+  if (!genannt.length) return "";
   if (genannt.every(b => zahl(b) === fahrten.length)) return (fahrten.length === 2 ? "beide Male " : "alle " + fahrten.length + " Male ") + bereicheUnd(genannt);
   return genannt.map(b => zahl(b) + "× " + BEREICH_NAME[b]).join(", ");
 }
-// Übersicht je Stufe nach Bereichen (ab der letzten Änderung): "Hände 2× zu kalt ·
-// Füße 1× zu kalt, 1× zu warm"; "" ohne genannte Bereiche
+// Übersicht je Stufe nach Bereichen (ab der letzten Änderung, ab 5g mit „passte“):
+// "Füße 2× zu kalt, 1× passte · Oberkörper 1× zu warm"; "" ohne Angaben je Bereich
 function bereicheUebersicht(z) {
   if (!z) return "";
   return BEREICHE.map(([b, name]) => {
-    const teile = ["zu-kalt", "zu-warm"].map(u => [u, z.fahrten.filter(f => f.urteil === u && f.bereiche.includes(b)).length]).filter(([, c]) => c);
+    const teile = ["zu-kalt", "passte", "zu-warm"].map(u => [u, z.fahrten.filter(f => f.bereiche[b] === u).length]).filter(([, c]) => c);
     return teile.length ? name + " " + teile.map(([u, c]) => c + "× " + RUECKMELDUNG_TEXT[u]).join(", ") : "";
   }).filter(Boolean).join(" · ");
 }
@@ -1363,15 +1425,18 @@ function kommentareDerStufe(z, max = 5) {
   return z.fahrten.filter(f => f.kommentar).sort((a, b) => b.datum.localeCompare(a.datum) || (b.art === "rueck") - (a.art === "rueck"))
     .slice(0, max).map(f => kurzDatum(f.datum) + " " + (f.art === "hin" ? "Hinfahrt" : "Rückfahrt") + ", " + RUECKMELDUNG_TEXT[f.urteil] + ": „" + f.kommentar + "“");
 }
-function kleidungHinweisHtml(h, i) {
-  return '<div class="hinweis warn">💡 ' + esc(h.text) +
-    '<br><button type="button" data-action="kleidung-stufe" data-i="' + i + '">Stufe bearbeiten</button></div>';
+// Seite Kleidung: die Hinweise einer Stufe in einem Kasten, je Hinweis eine Zeile
+function kleidungHinweisHtml(liste, i) {
+  return '<div class="hinweis warn">' + liste.map(h => '<div>💡 ' + esc(h.text) + '</div>').join("") +
+    '<button type="button" data-action="kleidung-stufe" data-i="' + i + '">Stufe bearbeiten</button></div>';
 }
-// In der Fahrt-Karte: Hinweis zur empfohlenen Stufe (nur, wenn die Rückmeldung eingeschaltet ist)
+// In der Fahrt-Karte: Hinweise zur empfohlenen Stufe (nur, wenn die Rückmeldung eingeschaltet ist),
+// je Hinweis eine Zeile, „Stufe bearbeiten ›“ am Ende
 function fahrtHinweisHtml(kl) {
   if (!kl || !rueckmeldungAn()) return "";
-  const h = kleidungHinweis(kl.stufe.id);
-  return h ? '<div class="klein">💡 ' + esc(h.text) + ' <button type="button" class="leise" data-action="kleidung-stufe" data-i="' + kl.index + '">Stufe bearbeiten ›</button></div>' : "";
+  const liste = kleidungHinweise(kl.stufe.id);
+  return liste.map((h, j) => '<div class="klein">💡 ' + esc(h.text) + (j === liste.length - 1
+    ? ' <button type="button" class="leise" data-action="kleidung-stufe" data-i="' + kl.index + '">Stufe bearbeiten ›</button>' : "") + '</div>').join("");
 }
 
 // Unterseite „Änderungen der Kleidung“: das Protokoll, neueste zuerst

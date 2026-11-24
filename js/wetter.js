@@ -890,8 +890,8 @@ function fahrtenWetter(orteDaten, datum, quelle, stand, berechnet = Date.now(), 
       fahrtGefuehltSpeichern(g), { grundlage: sg.grundlage, empfohlenAm: new Date(berechnet).toISOString() },
       // Ab 5e: Zeitfenster, für das das Wetter berechnet wurde, die tatsächliche und ggf. die geplante Abfahrt
       { von: zf.von, bis: zf.bis, abfahrt: zf.abfahrt, geplanteAbfahrt: zf.geplanteAbfahrt },
-      // Ab 5f: Bereiche und Kommentar zur Rückmeldung (erst nach der Fahrt)
-      { rueckmeldungBereiche: [], rueckmeldungKommentar: "" });
+      // Ab 5f: Bereiche und Kommentar zur Rückmeldung (erst nach der Fahrt; ab 5g je Bereich ein Urteil)
+      { rueckmeldungBereiche: {}, rueckmeldungKommentar: "" });
   };
   const hin = fahrt("hinfahrt"), rueck = fahrt("rueckfahrt");
   return hin || rueck ? { quelle, stand: new Date(stand).toISOString(), hin, rueck } : null;
