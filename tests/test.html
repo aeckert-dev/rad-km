@@ -6047,6 +6047,104 @@ async function start() {
     gleich("Stufe ohne Kommentare: keine Liste", !!w.document.querySelector("#inhalt ul.kommentare"), false);
 
     // -------------------------------------------------------------
+    // 82. Rückmeldung je Körperbereich (B18, Release 5g): Auswertung, Hinweise je Bereich, Darstellung, Kontrast
+    // -------------------------------------------------------------
+    abschnitt("82. Auswertung je Körperbereich (B18): „gemischt“, „Wo“ mit „passte“, Hinweise je Bereich ab der letzten Änderung, 3×2 auf 375 pt, Kontrast hell und dunkel");
+    const RB82 = (urteil, tag, bereiche, aend = {}) => FN(urteil, "2026-11-" + tag + "T05:00:00.000Z", Object.assign({ rueckmeldungBereiche: bereiche }, aend));
+    const WENIG = { windAnteil: { gegen: 1, seite: 0, ruecken: 0 }, teilstrecken: [{ laenge: 14, kurs: 90, zaehlt: true, wind: 2, richtung: 90, luftstrom: 19, beimFahren: 2 }] };
+    const TITEL82 = "Stufe 3 bis 7 °C: ";
+    const hw82 = () => w.kleidungHinweise("stufe5").map(h => h.text);
+    // Beispiel aus dem Plan: gemischt, Füße 2× zu kalt (Gegenwind, wenig Wind), 1× passte
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("gemischt", "09", { kopf: "passte", oberkoerper: "zu-warm", fuesse: "zu-kalt" }), RB82("zu-kalt", "09", { fuesse: "zu-kalt" }, WENIG))),
+      AE("g2", "2026-11-10", 34, EW(RB82("passte", "10", { oberkoerper: "passte", fuesse: "passte" }), null))]);
+    let z82 = w.rueckmeldungenSeitAenderung().stufe5;
+    gleich("Zählung mit „gemischt“: „1× zu kalt, 1× passte, 1× gemischt“; kein Hinweis zur ganzen Stufe („gemischt“ zählt weder als passte noch als Abweichung)",
+      [w.auswertungText(z82), z82.gemischt, w.kleidungHinweis("stufe5")], ["1× zu kalt, 1× passte, 1× gemischt", 1, null]);
+    gleich("„Wo“ je Stufe mit „passte“: „Kopf 1× passte · Oberkörper 1× passte, 1× zu warm · Füße 2× zu kalt, 1× passte“", w.bereicheUebersicht(z82),
+      "Kopf 1× passte · Oberkörper 1× passte, 1× zu warm · Füße 2× zu kalt, 1× passte");
+    gleich("Hinweis je Bereich: „Stufe 3 bis 7 °C: Füße 2× zu kalt (1× bei Gegenwind, 1× bei wenig Wind)“", hw82(), [TITEL82 + "Füße 2× zu kalt (1× bei Gegenwind, 1× bei wenig Wind)"]);
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("zu-kalt", "09", { fuesse: "zu-kalt" }), RB82("zu-kalt", "09", { fuesse: "zu-kalt", hals: "passte" }))),
+      AE("g2", "2026-11-10", 34, EW(RB82("passte", "10", { fuesse: "passte" }), RB82("passte", "10", { fuesse: "passte" })))]);
+    gleich("Regel je Bereich wie für die Stufe: 2× zu kalt und 2× passte – kein Hinweis (auch nicht zur Stufe)", [hw82(), w.kleidungHinweis("stufe5")], [[], null]);
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("zu-kalt", "09", { fuesse: "zu-kalt" }), RB82("zu-kalt", "09", { fuesse: "zu-kalt" }))),
+      AE("g2", "2026-11-10", 34, EW(RB82("passte", "10", { fuesse: "passte" }), RB82("passte", "10", { fuesse: "passte" }))),
+      AE("g3", "2026-11-11", 34, EW(RB82("passte", "11", { fuesse: "passte" }), null))]);
+    gleich("… 2× zu kalt und 3× passte – kein Hinweis", hw82(), []);
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("zu-kalt", "09", { haende: "zu-kalt" }), RB82("zu-kalt", "09", { haende: "zu-kalt" }))),
+      AE("g2", "2026-11-10", 34, EW(RB82("passte", "10", {}), RB82("passte", "10", {}))), AE("g3", "2026-11-11", 34, EW(RB82("passte", "11", {}), null))]);
+    gleich("Alte Rückmeldungen ohne Bereiche zählen je Bereich als „keine Angabe“: Hände 2× zu kalt gegen 0× passte → Hinweis; zur Stufe (2× gegen 3× passte) keiner",
+      [w.kleidungHinweis("stufe5"), hw82()], [null, [TITEL82 + "Hände 2× zu kalt (beide bei Gegenwind)"]]);
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("zu-kalt", "09", { fuesse: "zu-kalt" }), RB82("zu-kalt", "09", { fuesse: "zu-kalt" }))),
+      AE("g2", "2026-11-10", 34, EW(RB82("passte", "10", { kopf: "passte" }), null)),
+      AE("g3", "2026-11-11", 34, EW(RB82("gemischt", "11", { oberkoerper: "zu-warm", haende: "zu-kalt" }), RB82("gemischt", "11", { oberkoerper: "zu-warm", fuesse: "zu-kalt" }, SEITE))),
+      AE("g4", "2026-11-12", 34, EW(RB82("gemischt", "12", { oberkoerper: "zu-warm", fuesse: "zu-kalt" }), null))]);
+    gleich("„gemischt“ zählt nicht als passte: 2× zu kalt, 1× passte, 3× gemischt → Hinweis zur Stufe; Füße (zu kalt wie die Stufe) stehen dort, Oberkörper 3× zu warm eigens",
+      hw82(), ["Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide Male Füße; beide bei Gegenwind)",
+        TITEL82 + "Oberkörper 3× zu warm (2× bei Gegenwind, 1× bei Seitenwind)"]);
+    n4Daten([AE("g0", "2026-11-06", 34, EW(RB82("zu-kalt", "06", { fuesse: "zu-kalt" }), RB82("zu-kalt", "06", { fuesse: "zu-kalt" }))),
+      AE("g1", "2026-11-09", 34, EW(RB82("zu-kalt", "09", { fuesse: "zu-kalt" }), null))]);
+    gleich("Gezählt ab der letzten Änderung der Stufe (08.11.): zwei Fahrten davor zählen nicht – kein Hinweis", hw82(), []);
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("zu-warm", "09", { kopf: "zu-warm" }), RB82("zu-kalt", "09", { kopf: "zu-kalt" }))),
+      AE("g2", "2026-11-10", 34, EW(RB82("zu-warm", "10", { kopf: "zu-warm" }), RB82("zu-kalt", "10", { kopf: "zu-kalt" })))]);
+    gleich("Beide Richtungen gleich oft (Kopf 2× zu kalt, 2× zu warm): „uneinheitlich“", hw82(),
+      ["Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt und 2× zu warm – uneinheitlich", TITEL82 + "Kopf 2× zu kalt und 2× zu warm – uneinheitlich"]);
+    // Anzeige: Seite Kleidung (ein Kasten je Stufe) und Fahrt-Karte (je Hinweis eine Zeile)
+    n4Daten([AE("g1", "2026-11-09", 34, EW(RB82("zu-kalt", "09", { fuesse: "zu-kalt" }), RB82("zu-kalt", "09", { fuesse: "zu-kalt" }))),
+      AE("g3", "2026-11-11", 34, EW(RB82("gemischt", "11", { oberkoerper: "zu-warm", haende: "zu-kalt" }), RB82("gemischt", "11", { oberkoerper: "zu-warm", fuesse: "zu-kalt" })))]);
+    w.kleidungFormular();
+    const kasten82 = [...w.document.querySelectorAll("#inhalt .hinweis.warn")];
+    gleich("Seite Kleidung: ein Kasten für die Stufe mit beiden Hinweisen und „Stufe bearbeiten“; die Zeile der Stufe mit „Wo“",
+      [kasten82.length, [...kasten82[0].querySelectorAll("div")].map(d => d.textContent), kasten82[0].querySelector("button").dataset.i,
+        ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="4"] .text').innerHTML).split("Wo: ")[1]],
+      [1, ["💡 Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide Male Füße; beide bei Gegenwind)", "💡 " + TITEL82 + "Oberkörper 2× zu warm (beide bei Gegenwind)"], "4",
+        "Hände 1× zu kalt · Oberkörper 2× zu warm · Füße 3× zu kalt"]);
+    const fh82 = w.document.createElement("div");
+    fh82.innerHTML = w.fahrtHinweisHtml({ stufe: { id: "stufe5" }, index: 4 });
+    gleich("Fahrt-Karte: je Hinweis eine Zeile, „Stufe bearbeiten ›“ am Ende", [[...fh82.children].map(d => ohneTags(d.innerHTML)), fh82.querySelectorAll("button").length],
+      [["💡 Stufe 3 bis 7 °C: seit deiner Änderung am 08.11. 2× zu kalt (beide Male Füße; beide bei Gegenwind)", "💡 " + TITEL82 + "Oberkörper 2× zu warm (beide bei Gegenwind) Stufe bearbeiten ›"], 1]);
+    w.kleidungStufeFormular(4);
+    wahr("Unterseite der Stufe: „Wo“ und Kommentare mit Urteil „gemischt“", ohneTags(inhaltHtml()).includes("Wo: Hände 1× zu kalt · Oberkörper 2× zu warm · Füße 3× zu kalt"), ohneTags(inhaltHtml()));
+    // 3×2 auf 375 pt (iPhone 13 mini)
+    const echtNow82 = w.Date.now, T82 = zeit("2026-11-20", "18:00");
+    w.Date.now = () => T82;
+    w.eval("rueckmeldungOffen.clear()");
+    setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter: wetterEinst() }, eintraege: [AE("l1", "2026-11-20", 14.2, EW(FW({ kleidung: "stufe4" }), null))] });
+    const rahmen82 = { width: w.frameElement.style.width, height: w.frameElement.style.height };
+    Object.assign(w.frameElement.style, { width: "375px", height: "812px" });
+    w.eval("aktiverTab = 'wetter'; zeichnen()");
+    w.rueckmeldungAllesPasste("l1", "hin");
+    const felder82 = [...w.document.querySelectorAll('#inhalt .rm-feld[data-id="l1"]')];
+    const r82 = felder82.map(b => b.getBoundingClientRect());
+    gleich("375 pt: sechs Felder in 3 Spalten und 2 Zeilen, Kopf · Hals · Hände oben, Oberkörper · Beine · Füße unten; Text passt (kein Überlauf), mindestens 44 pt hoch",
+      [new Set(r82.map(r => Math.round(r.left))).size, new Set(r82.map(r => Math.round(r.top))).size, felder82.map(b => b.dataset.bereich),
+        r82[0].top < r82[3].top && Math.round(r82[0].left) === Math.round(r82[3].left), felder82.every(b => b.scrollWidth <= b.clientWidth + 1), r82.every(r => r.height >= 44)],
+      [3, 2, ["kopf", "hals", "haende", "oberkoerper", "beine", "fuesse"], true, true, true]);
+    const farbe82 = el => w.getComputedStyle(el).backgroundColor;
+    const zust82 = felder82.map(b => b.dataset.zustand);
+    w.rueckmeldungFeldSchalten(felder82[5]);
+    w.rueckmeldungFeldSchalten(felder82[3]); w.rueckmeldungFeldSchalten(felder82[3]);
+    w.rueckmeldungFeldSchalten(felder82[1]); w.rueckmeldungFeldSchalten(felder82[1]); w.rueckmeldungFeldSchalten(felder82[1]);
+    gleich("Vier Zustände mit vier verschiedenen Flächenfarben (grau, grün, blau, orange) und Symbol im Feld",
+      [zust82.every(z => z === "passte"), [felder82[1], felder82[0], felder82[5], felder82[3]].map(b => b.dataset.zustand), new Set([felder82[1], felder82[0], felder82[5], felder82[3]].map(farbe82)).size,
+        [felder82[1], felder82[0], felder82[5], felder82[3]].map(b => b.querySelector(".rm-symbol").textContent)],
+      [true, ["leer", "passte", "zu-kalt", "zu-warm"], 4, ["", "✓", "❄︎", "☀︎"]]);
+    Object.assign(w.frameElement.style, rahmen82);
+    w.Date.now = echtNow82;
+    w.eval("rueckmeldungOffen.clear(); aktiverTab = 'uebersicht'; zeichnen()");
+    // Kontrast aus css/app.css: Schrift auf der Fläche mind. 4,5:1, Rand zur Karte mind. 3:1, hell und dunkel
+    const css82 = await (await fetch("../css/app.css", { cache: "no-store" })).text();
+    const block82 = t => { const v = {}; t.replace(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/g, (_, n, f) => { v[n] = f; }); return v; };
+    const hell82 = block82(css82.slice(css82.indexOf(":root {"), css82.indexOf("@media (prefers-color-scheme: dark)")));
+    const dunkel82 = block82(css82.slice(css82.indexOf("@media (prefers-color-scheme: dark)"), css82.indexOf("* { box-sizing")));
+    const leucht82 = hex => { const n = parseInt(hex.slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255].map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; })
+      .reduce((x, c, i) => x + c * [0.2126, 0.7152, 0.0722][i], 0); };
+    const kontrast82 = (a, b) => { const [x, y] = [leucht82(a), leucht82(b)].sort((p, q) => q - p); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };
+    const pruef82 = v => ["leer", "passte", "kalt", "warm"].map(z => [z, kontrast82(v["rm-" + z + "-text"], v["rm-" + z + "-bg"]) >= 4.5, kontrast82(v["rm-" + z + "-rand"], v.karte) >= 3,
+      kontrast82(v["rm-" + z + "-text"], v["rm-" + z + "-bg"])]).map(([z, a, b, k]) => z + ":" + a + "/" + b + (a ? "" : " (" + k + ")"));
+    gleich("Kontrast der Felder: Schrift mind. 4,5:1 auf der Fläche, Rand mind. 3:1 zur Karte (hell und dunkel)", [pruef82(hell82), pruef82(dunkel82)],
+      [["leer:true/true", "passte:true/true", "kalt:true/true", "warm:true/true"], ["leer:true/true", "passte:true/true", "kalt:true/true", "warm:true/true"]]);
+
+    // -------------------------------------------------------------
     // 81. „gefühlt“ heißt „im Stehen“ (B19, Release 5g)
     // -------------------------------------------------------------
     abschnitt("81. „gefühlt“ heißt „im Stehen“ (B19): Fahrt-Karte, Eintragsansicht, Umschalter, Erklärtext, Stufenformular, Protokoll, weiterer Ort");
