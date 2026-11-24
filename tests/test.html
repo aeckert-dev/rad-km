@@ -1080,10 +1080,49 @@ async function start() {
     // tests/wetter-*.json (aufgezeichnet, Orte, Namen und Kennungen erfunden).
     // fetch wird durch einen Platzhalter ersetzt; es geht nichts ins Netz.
     // =============================================================
-    const fx = {};
+    // T2 (5g): Die Aufzeichnungen stammen aus Europe/Berlin (feste Unix-Zeit bzw.
+    // ISO-Zeitpunkte), die Tests und die App rechnen aber in der Zeitzone des Geräts
+    // (zeit(), zeitpunktAm). In einer anderen Zeitzone bekommen die Zeitstempel deshalb
+    // die Uhrzeit, die sie in Berlin hatten, in der Gerätezeit (06:00 in Berlin → 06:00
+    // in Tokyo). Fällt eine Uhrzeit dabei doppelt an (Zeitumstellung in Berlin am
+    // 25.10., 02:00–03:00), entfällt der zweite Schritt in allen Werten. In Europe/Berlin
+    // bleibt alles unverändert.
+    const IN_BERLIN = Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Berlin";
+    const BERLIN_TEILE = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const berlinAlsGeraet = ms => {
+      const p = Object.fromEntries(BERLIN_TEILE.formatToParts(new Date(ms)).map(x => [x.type, x.value]));
+      return new Date(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second).getTime();
+    };
+    const ISO_ZEIT = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:\d\d)$/;
+    function aufGeraetezeit(x) {
+      if (IN_BERLIN) return x;
+      const block = b => {
+        if (!b || !Array.isArray(b.time)) return;
+        const n = b.time.length, neu = b.time.map(t => berlinAlsGeraet(t * 1000) / 1000);
+        let groesste = -Infinity;
+        const behalten = neu.map(t => t > groesste ? (groesste = t, true) : false);
+        Object.keys(b).forEach(k => {
+          if (!Array.isArray(b[k]) || b[k].length !== n) return;
+          const werte = k === "time" || k === "sunrise" || k === "sunset" ? b[k].map(t => berlinAlsGeraet(t * 1000) / 1000) : b[k];
+          b[k] = werte.filter((_, i) => behalten[i]);
+        });
+      };
+      const gehen = v => {
+        if (Array.isArray(v)) return v.map(gehen);
+        if (typeof v === "string") return ISO_ZEIT.test(v) ? new Date(berlinAlsGeraet(Date.parse(v))).toISOString() : v;
+        if (!v || typeof v !== "object") return v;
+        ["minutely_15", "hourly", "daily"].forEach(k => block(v[k]));
+        Object.keys(v).forEach(k => { if (!["minutely_15", "hourly", "daily"].includes(k)) v[k] = gehen(v[k]); });
+        return v;
+      };
+      return gehen(x);
+    }
+    const fx = {}, fxRoh = {};
     for (const n of ["wetter-open-meteo", "wetter-open-meteo-ein-ort", "wetter-dwd", "wetter-dwd-leer", "wetter-dwd-gebiet", "wetter-dwd-gebiet-leer",
       "wetter-brightsky", "wetter-brightsky-ausland", "wetter-ortssuche", "wetter-ortssuche-leer", "wetter-rueckblick"]) {
-      fx[n] = JSON.parse(await (await fetch(n + ".json", { cache: "no-store" })).text());
+      fxRoh[n] = JSON.parse(await (await fetch(n + ".json", { cache: "no-store" })).text());
+      fx[n] = aufGeraetezeit(kopie(fxRoh[n]));
     }
     // Ersetzt fetch in der App. Regeln: [Teil der Adresse, Antwort, HTTP-Status] oder [Teil, "offline"]; ohne Regel: offline
     const abrufe = [];
@@ -1342,9 +1381,18 @@ async function start() {
     abschnitt("24. Aufgezeichnete Antworten der Wetterdienste lesen (erfundene Orte)");
     const om2 = w.vorhersageLesen(kopie(fx["wetter-open-meteo"]), 2);
     const roh2 = fx["wetter-open-meteo"];
+    // T2 (5g): Anpassung der Aufzeichnungen an die Zeitzone des Geräts
+    gleich("Aufzeichnung in Gerätezeit (T2): Di 27.10. 06:00 in Berlin ist 06:00 auf dem Gerät; Zeitumstellung in Berlin außerhalb Berlins ohne doppelte Schritte",
+      [fx["wetter-open-meteo"][0].minutely_15.time.includes(zeit("2026-10-27", "06:00") / 1000),
+        fxRoh["wetter-open-meteo"][0].minutely_15.time.length - fx["wetter-open-meteo"][0].minutely_15.time.length,
+        fx["wetter-open-meteo"][0].minutely_15.time.every((t, i, a) => i === 0 || t > a[i - 1]),
+        w.uhrzeit(Date.parse(fx["wetter-dwd"].features[0].properties.ONSET))],
+      [true, IN_BERLIN ? 0 : 4, true, "18:00"]);
+    // Lesen: mit der Aufzeichnung, wie sie ist (ohne Anpassung an die Zeitzone des Geräts)
+    const omRoh = w.vorhersageLesen(kopie(fxRoh["wetter-open-meteo"]), 2);
     gleich("Open-Meteo, zwei Orte: 8 Tage und Vortag im 15-Minuten-Raster und stündlich, Zeiten in ms",
-      [om2.length, om2[0].m15.zeit.length, om2[0].stunde.zeit.length, om2[0].m15.zeit[0] === roh2[0].minutely_15.time[0] * 1000,
-        om2[0].m15.zeit[1] - om2[0].m15.zeit[0], om2[0].stunde.zeit[1] - om2[0].stunde.zeit[0]],
+      [omRoh.length, omRoh[0].m15.zeit.length, omRoh[0].stunde.zeit.length, omRoh[0].m15.zeit[0] === fxRoh["wetter-open-meteo"][0].minutely_15.time[0] * 1000,
+        omRoh[0].m15.zeit[1] - omRoh[0].m15.zeit[0], omRoh[0].stunde.zeit[1] - omRoh[0].stunde.zeit[0]],
       [2, 864, 216, true, 900000, 3600000]);
     gleich("Open-Meteo: alle Werte übernommen (Stichprobe Arbeitsort)",
       [om2[1].m15.temperatur[400], om2[1].m15.gefuehlt[400], om2[1].m15.niederschlag[400], om2[1].m15.code[400], om2[1].m15.wind[400], om2[1].m15.richtung[400],
@@ -1352,17 +1400,17 @@ async function start() {
       [roh2[1].minutely_15.temperature_2m[400], roh2[1].minutely_15.apparent_temperature[400], roh2[1].minutely_15.precipitation[400], roh2[1].minutely_15.weather_code[400],
         roh2[1].minutely_15.wind_speed_10m[400], roh2[1].minutely_15.wind_direction_10m[400], roh2[1].minutely_15.wind_gusts_10m[400],
         roh2[1].hourly.precipitation_probability[100], roh2[1].hourly.soil_temperature_0cm[100]]);
-    gleich("Open-Meteo, ein Ort (die Antwort ist ein Objekt statt einer Liste)", w.vorhersageLesen(kopie(fx["wetter-open-meteo-ein-ort"]), 1).map(o => o.m15.zeit.length), [864]);
+    gleich("Open-Meteo, ein Ort (die Antwort ist ein Objekt statt einer Liste)", w.vorhersageLesen(kopie(fxRoh["wetter-open-meteo-ein-ort"]), 1).map(o => o.m15.zeit.length), [864]);
     wirft("Open-Meteo: falsche Anzahl Orte wird erkannt", () => w.vorhersageLesen(kopie(roh2), 1), "unerwartete Antwort");
     wirft("Open-Meteo: Fehlermeldung statt Daten wird erkannt", () => w.vorhersageLesen({ error: true, reason: "Daily API request limit exceeded." }, 1), "unerwartete Antwort");
-    const dwdW = w.dwdWarnungenLesen(kopie(fx["wetter-dwd"]));
+    const dwdW = w.dwdWarnungenLesen(kopie(fxRoh["wetter-dwd"]));
     gleich("DWD (GeoServer): Warngebiet, Ereignis, Stufe, Art, Beginn und Ende",
       [dwdW.abgedeckt, dwdW.gebiet, dwdW.warnungen.map(x => [x.ereignis, x.stufe, x.art, new Date(x.beginn).toISOString(), new Date(x.ende).toISOString()])],
       [true, "Gemeinde Musterdorf", [
         ["WINDBÖEN", 1, "sonst", "2026-10-25T17:00:00.000Z", "2026-10-25T23:00:00.000Z"],
         ["STURMBÖEN", 2, "sonst", "2026-10-25T09:00:00.000Z", "2026-10-25T17:00:00.000Z"],
         ["STARKES GEWITTER", 2, "gewitter", "2026-10-25T12:25:00.000Z", "2026-10-25T13:00:00.000Z"]]]);
-    const bsW = w.brightSkyLesen(kopie(fx["wetter-brightsky"]));
+    const bsW = w.brightSkyLesen(kopie(fxRoh["wetter-brightsky"]));
     const vergleichbar = r => r.warnungen.map(x => [x.ereignis, x.stufe, x.art, x.beginn, x.ende, x.titel, x.text].join("|")).sort();
     gleich("Bright Sky liefert dieselben Warnungen des DWD (Ereignis, Stufe, Art, Zeitraum, Überschrift, Text)", vergleichbar(bsW), vergleichbar(dwdW));
     gleich("Bright Sky: Warngebiet aus „location“", [bsW.abgedeckt, bsW.gebiet], [true, "Gemeinde Musterdorf"]);
@@ -4935,7 +4983,7 @@ async function start() {
         w.fahrgeschwindigkeit("hinfahrt", W5(), [V(3.5, false)]), w.fahrgeschwindigkeit("hinfahrt", W5(), [V(2)]).kmh, w.fahrgeschwindigkeit("hinfahrt", W5(), [V(200)]).kmh],
       [17, { kmh: 20, quelle: "eigen", vorlage: null }, { kmh: 15, quelle: "annahme", vorlage: null }, 5, 40]);
     // Rechnung je Fahrt mit der stimmigen Testdatei (Musterdorf → Ostdorf, nach Osten)
-    const gfRoh = JSON.parse(await (await fetch("wetter-gefuehlt.json", { cache: "no-store" })).text());
+    const gfRoh = aufGeraetezeit(JSON.parse(await (await fetch("wetter-gefuehlt.json", { cache: "no-store" })).text()));
     const gfOrte = () => w.vorhersageLesen(kopie(gfRoh), 2);
     const OSTDORF = { name: "Ostdorf", lat: 51.0, lon: 10.2 };
     const gfStrecke = w.teilstrecken(W5({ wohnort: MUSTERDORF, arbeitsort: OSTDORF }));
