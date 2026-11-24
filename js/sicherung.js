@@ -70,6 +70,7 @@ function datenVergleichen(sicherung, aktuell) {
     wartungsarten: liste(sicherung.wartungsarten, aktuell.wartungsarten, nachId),
     auftraege: liste(sicherung.auftraege, aktuell.auftraege, nachId, ohneBerechnetenKm),
     maengel: liste(sicherung.maengel, aktuell.maengel, nachId),
+    abwesenheiten: liste(sicherung.abwesenheiten, aktuell.abwesenheiten, nachId),
     fahrrad: !gleicherInhalt(sicherung.fahrrad, aktuell.fahrrad),
     einstellungen: !gleicherInhalt(sicherung.einstellungen, aktuell.einstellungen)
   };
@@ -102,7 +103,8 @@ const VERGLEICH_BEZEICHNUNG = {
   auftraege: ["Auftrag", "Aufträge"],
   maengel: ["Mangel", "Mängel"],
   vorlagen: ["Vorlage", "Vorlagen"],
-  wartungsarten: ["Wartungsart", "Wartungsarten"]
+  wartungsarten: ["Wartungsart", "Wartungsarten"],
+  abwesenheiten: ["Abwesenheit", "Abwesenheiten"]
 };
 // Unterschiede als Text: "fehlen" (nur Neues seit der Sicherung) und "sonst"
 function unterschiedTexte(v, h) {
@@ -325,7 +327,8 @@ async function importDateiGewaehlt(datei) {
     neu.eintraege.length + " Einträge, " + neu.vorlagen.length + " Vorlagen, " +
     neu.wartungsarten.length + " Wartungsarten, " + auftraegeText(neu.auftraege) + ", " + neu.maengel.length + " Mängel" +
     (neu.maengel.length ? " (davon " + neu.maengel.filter(m => m.status === "offen").length + " offen)" : "") +
-    (ziele ? ", " + (ziele === 1 ? "1 Jahresziel" : ziele + " Jahresziele") : "") + ".<br><br>" +
+    (ziele ? ", " + (ziele === 1 ? "1 Jahresziel" : ziele + " Jahresziele") : "") +
+    (neu.abwesenheiten.length ? ", " + (neu.abwesenheiten.length === 1 ? "1 Abwesenheit" : neu.abwesenheiten.length + " Abwesenheiten") : "") + ".<br><br>" +
     "<strong>Alle vorhandenen Daten in der App werden ersetzt.</strong> Fortfahren?";
   if (!await frage(zusammenfassung, "Importieren und ersetzen", "Abbrechen", true)) return;
   daten = neu;

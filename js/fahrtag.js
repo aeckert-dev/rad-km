@@ -98,29 +98,33 @@ function fahrtEnde(datum, w = daten.einstellungen.wetter, abw = null) {
 
 // ---------- Nächster Fahrtag ----------
 
-// Ein Tag mit Eintrag „Keine Fahrt“ (0 km) zählt nicht als Fahrtag
+// Ein Tag mit Eintrag „Keine Fahrt“ (0 km) zählt nicht als Fahrtag, ab 5g auch
+// kein Tag einer Abwesenheit (außer mit Fahrt: Einträge gehen vor)
 function keineFahrtAm(datum, eintraege = daten.eintraege) { return eintraege.some(e => e.datum === datum && e.typ === "tag" && e.km === 0); }
-function zaehltAlsFahrtag(datum, fahrtage = daten.einstellungen.fahrtage, eintraege = daten.eintraege) {
-  return fahrtage.includes(isoWochentag(datum)) && !keineFahrtAm(datum, eintraege);
+function zaehltAlsFahrtag(datum, fahrtage = daten.einstellungen.fahrtage, eintraege = daten.eintraege, abwesenheiten = daten.abwesenheiten) {
+  return fahrtage.includes(isoWochentag(datum)) && !keineFahrtAm(datum, eintraege) && !abwesendAm(datum, abwesenheiten, eintraege);
 }
 
 // Der nächste Fahrtag: heute bis zum Ende der (ggf. verschobenen) Rückfahrt, danach
 // der folgende (Fahrtage Mo, Di, Fr: Freitag nach der Rückfahrt schon Montag).
 // "vorlaeufig" bis zum geplanten Ende der Rückfahrt am Vortag (Standard 17:00);
 // "inVorhersage": der Tag liegt in den 8 Tagen der Vorhersage, sonst gibt es sie
-// ab "vorhersageAb". null ohne Fahrtage.
+// ab "vorhersageAb". null ohne Fahrtage. "abwesenheit" (ab 5g): die zuletzt endende
+// Abwesenheit, die bis dahin Fahrtage überspringt (für „Urlaub bis So 03.01.“), sonst null.
 function naechsterFahrtag(jetzt, w = daten.einstellungen.wetter, fahrtage = daten.einstellungen.fahrtage, abw = abweichungFuer(jetzt, w), eintraege = daten.eintraege) {
   if (!fahrtage.length) return null;
   const h = isoAusDate(new Date(jetzt));
   const zaehlt = d => zaehltAlsFahrtag(d, fahrtage, eintraege);
   let datum = zaehlt(h) && jetzt < fahrtEnde(h, w, abw) ? h : plusTage(h, 1);
-  // Höchstens ein Jahr voraus (sonst sind alle Fahrtage als „Keine Fahrt“ eingetragen)
+  // Höchstens ein Jahr voraus (sonst sind alle Fahrtage als „Keine Fahrt“ eingetragen
+  // oder abwesend); danach sucht die App nicht weiter
   for (let i = 0; i < 366 && !zaehlt(datum); i++) datum = plusTage(datum, 1);
   if (!zaehlt(datum)) return null;
+  const abwesenheit = abwesenheitVorFahrtag(h, datum, fahrtage);
   const tage = tageZwischen(h, datum), vortag = plusTage(datum, -1);
   const endgueltigAb = zeitpunktAm(vortag, minutenAus(w.rueckfahrt.bis));
   return { datum, heute: tage === 0, morgen: tage === 1, tage, vorlaeufig: jetzt < endgueltigAb, endgueltigAb, vortag,
-    inVorhersage: tage < VORHERSAGE_TAGE, vorhersageAb: plusTage(datum, 1 - VORHERSAGE_TAGE) };
+    inVorhersage: tage < VORHERSAGE_TAGE, vorhersageAb: plusTage(datum, 1 - VORHERSAGE_TAGE), abwesenheit };
 }
 // "Heute, Mo 23.11.", "Morgen, Mo 23.11. · vorläufig", "Mo 23.11. · in 3 Tagen · vorläufig"
 function fahrtagTitel(n) {

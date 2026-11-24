@@ -322,6 +322,8 @@ button.link { background: transparent; color: var(--akzent); padding: 0 2px; min
 .rm-feld[data-zustand="zu-kalt"] { background: var(--rm-kalt-bg); color: var(--rm-kalt-text); border-color: var(--rm-kalt-rand); }
 .rm-feld[data-zustand="zu-warm"] { background: var(--rm-warm-bg); color: var(--rm-warm-text); border-color: var(--rm-warm-rand); }
 .rm-gesamt { margin: 4px 0 6px; font-weight: 500; }
+/* Abwesenheit (ab 5g): Hinweis unter der Überschrift des nächsten Fahrtags */
+.abwesend { margin: -4px 0 6px; color: var(--text2); font-size: 15px; }
 .rueckmeldung label { margin-top: 4px; }
 /* Nur für VoiceOver (Ansage nach einem Tipp) */
 .unsichtbar { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

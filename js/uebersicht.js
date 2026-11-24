@@ -34,6 +34,10 @@ function bildUebersicht() {
       (eHeute.vorlage ? " (" + esc(eHeute.vorlage) + ")" : "") +
       '<br><button type="button" data-action="eintrag-ansehen" data-id="' + eHeute.id + '">Anzeigen</button></div>';
   }
+  // Ab 5g: heute abwesend (ohne Eintrag)
+  const abwHeute = !eHeute && abwesenheitAm(h);
+  if (abwHeute) html += '<div class="hinweis info">' + abwesenheitSymbol(abwHeute) + ' Heute: ' + esc(abwesenheitName(abwHeute)) +
+    (abwHeute.bis > h ? ' (bis ' + esc(tagKurz(abwHeute.bis, h)) + ')' : "") + '</div>';
   html += '<div class="schnell">';
   daten.vorlagen.forEach(v => {
     html += '<button type="button" class="primaer" data-action="vorlage-erfassen" data-id="' + v.id + '">' +
@@ -101,6 +105,7 @@ function eintraegeListe(h) {
 // Eingestellte Fahrtage der letzten 14 Tage (und ab der eingestellten Uhrzeit
 // heute) ohne Eintrag, je mit "Nachtragen" und "Keine Fahrt". Die Überschrift
 // nennt nur die Anzahl, die Tage stehen in den Zeilen (jeder Tag nur einmal).
+// Ab 2 Tagen (ab 5g) dazu „Als Abwesenheit …“ vom ersten bis zum letzten Tag.
 function lueckenHinweis(h, minuten) {
   const tage = fehlendeFahrtage(h, minuten);
   if (!tage.length) return "";
@@ -109,6 +114,7 @@ function lueckenHinweis(h, minuten) {
     tage.map(d => '<div class="luecke"><span>' + kurz(d) + '</span>' +
       '<button type="button" data-action="nachtragen" data-datum="' + d + '">Nachtragen</button>' +
       '<button type="button" data-action="keine-fahrt" data-datum="' + d + '">Keine Fahrt</button></div>').join("") +
+    (tage.length >= 2 ? '<button type="button" data-action="als-abwesenheit" data-von="' + tage[0] + '" data-bis="' + tage[tage.length - 1] + '">Als Abwesenheit …</button>' : "") +
     '</div>';
 }
 // "Keine Fahrt": Eintrag mit 0 km mit einem Tipper (mit "Rückgängig")

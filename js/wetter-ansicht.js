@@ -68,10 +68,11 @@ function bildWetter(jetzt = Date.now()) {
       'Lege fest, an welchen Wochentagen du zur Arbeit fährst. Dann zeigen Übersicht und Reiter Wetter immer den nächsten Fahrtag.</div>' +
       wegZuEinstellungen("Fahrtage festlegen", "fahrtage");
   } else if (!a.naechster) {
-    html += '<div class="hinweis info" style="margin-top:8px">Kein Fahrtag in Sicht: Alle Fahrtage des nächsten Jahres sind als „Keine Fahrt“ eingetragen.</div>';
+    html += '<div class="hinweis info" style="margin-top:8px">Kein Fahrtag in Sicht: Alle Fahrtage des nächsten Jahres sind als „Keine Fahrt“ eingetragen oder abwesend.</div>';
   } else if (!a.naechsterTag) {
     // Außerhalb der 8 Tage der Vorhersage
-    html += '<h2 style="margin-top:8px">' + esc(fahrtagTitel(a.naechster)) + '</h2><div class="hinweis info">🕔 ' + esc(vorhersageAbText(a.naechster)) + '</div>';
+    html += '<h2 style="margin-top:8px">' + esc(fahrtagTitel(a.naechster)) + '</h2>' + abwesenheitHinweisHtml(a.naechster, jetzt) +
+      '<div class="hinweis info">🕔 ' + esc(vorhersageAbText(a.naechster)) + '</div>';
   } else {
     html += fahrtagHtml(a.naechsterTag, fahrtagTitel(a.naechster), a.naechster, alt, jetzt);
     warnungen = a.naechsterTag.warnungen;
@@ -80,9 +81,13 @@ function bildWetter(jetzt = Date.now()) {
   return html + standKarte(a, jetzt) + wegZuEinstellungen("Orte, Fahrzeiten, Kleidung", "", "e-wetter");
 }
 
+// Unter der Überschrift des nächsten Fahrtags (ab 5g): „🏖️ Urlaub bis So 03.01.“
+function abwesenheitHinweisHtml(n, jetzt) {
+  return n && n.abwesenheit ? '<div class="abwesend">' + abwesenheitSymbol(n.abwesenheit) + ' ' + esc(abwesenheitBisText(n.abwesenheit, isoAusDate(new Date(jetzt)))) + '</div>' : "";
+}
 // Ein Fahrtag im Reiter: Überschrift, ggf. „vorläufig“, Hin- und Rückfahrt, Hinweis zum Einpacken
 function fahrtagHtml(t, titel, n, alt, jetzt) {
-  let html = '<h2 style="margin-top:8px">' + esc(titel) + '</h2>';
+  let html = '<h2 style="margin-top:8px">' + esc(titel) + '</h2>' + abwesenheitHinweisHtml(n, jetzt);
   if (n && n.vorlaeufig) html += '<div class="klein">' + esc(endgueltigText(n, isoAusDate(new Date(jetzt)))) + '</div>';
   t.fahrten.forEach(f => { html += fahrtKarte(f, alt); });
   if (t.kleidungsHinweis) html += '<div class="hinweis info">👕 ' + esc(t.kleidungsHinweis) + '</div>';
@@ -357,6 +362,9 @@ function wetterKachel(jetzt) {
   try { a = wetterAnsicht(jetzt); }
   catch (e) { return '<button type="button" class="karte wetter-kachel" data-action="tab" data-tab="wetter"><strong>🌦️ Wetter</strong> <span class="klein">kann nicht angezeigt werden</span></button>'; }
   const laden = '<div class="klein">' + (a.laeuft ? "Wird geladen …" : "Noch keine Vorhersage") + '</div>';
+  // Ab 5g: der nächste Fahrtag nach einer Abwesenheit („Urlaub bis So 03.01.“)
+  const kachelAbwesend = a.naechster && a.naechster.abwesenheit ? '<div class="klein">' + abwesenheitSymbol(a.naechster.abwesenheit) + ' ' +
+    esc(abwesenheitBisText(a.naechster.abwesenheit, isoAusDate(new Date(jetzt)))) + '</div>' : "";
   if (a.leer || !a.orte.length) {
     if (a.leer || !a.ort) inhalt = '<div><strong>🌦️ Wetter</strong></div><div class="klein">Wohn- und Arbeitsort festlegen, dann zeigt die App hier die Ampel für deine Fahrten.</div>';
   } else if (a.fahrtageLeer) {
@@ -364,7 +372,7 @@ function wetterKachel(jetzt) {
   } else if (!a.naechster) {
     inhalt = '<div><strong>🌦️ Wetter</strong></div><div class="klein">Kein Fahrtag in Sicht.</div>';
   } else if (!a.naechsterTag) {
-    inhalt = '<div><strong>🌦️ ' + esc(fahrtagKurz(a.naechster)) + '</strong></div><div class="klein">' + esc(vorhersageAbText(a.naechster)) + '</div>';
+    inhalt = '<div><strong>🌦️ ' + esc(fahrtagKurz(a.naechster)) + '</strong></div><div class="klein">' + esc(vorhersageAbText(a.naechster)) + '</div>' + kachelAbwesend;
   } else {
     const offen = a.naechsterTag.fahrten.filter(f => !f.vorbei);
     inhalt = '<div class="kachel-zeile"><strong>🌦️ ' + esc(fahrtagKurz(a.naechster)) + '</strong>' +
@@ -372,6 +380,7 @@ function wetterKachel(jetzt) {
     const problem = offen.filter(f => f.bewertung && f.bewertung.farbe !== "gruen").sort((x, y) => (y.bewertung.farbe === "rot") - (x.bewertung.farbe === "rot"))[0];
     if (problem) inhalt += '<div class="klein">' + problem.name + ' ' + FARBWORT[problem.bewertung.farbe] + ': ' + esc(grundText(problem.bewertung.gruende[0])) + '</div>';
     if (!offen.some(f => f.bewertung)) inhalt += laden;
+    inhalt += kachelAbwesend;
   }
   if (a.ort) {
     // Weiterer Ort: eine Zeile für heute

@@ -15,7 +15,7 @@ function minutenJetzt(d = new Date()) { return d.getHours() * 60 + d.getMinutes(
 // einer verschobenen Abfahrt frühestens nach dem Ende der verschobenen Fahrt).
 // "minuten" ist die Uhrzeit am Stichtag; ohne Angabe die aktuelle, wenn der
 // Stichtag heute ist, sonst 0:00. Ein Eintrag mit 0 km ("keine Fahrt") und eine
-// Wochensumme in derselben Woche gelten als erfasst.
+// Wochensumme in derselben Woche gelten als erfasst, ab 5g auch eine Abwesenheit.
 function fehlendeFahrtage(h = heute(), minuten = h === heute() ? minutenJetzt() : 0) {
   const f = daten.fahrrad;
   if (!f) return [];
@@ -29,7 +29,7 @@ function fehlendeFahrtage(h = heute(), minuten = h === heute() ? minutenJetzt() 
   const bis = es.hinweisHeuteAn && minuten >= ab ? h : plusTage(h, -1);
   const tage = [];
   for (let d = plusTage(h, -14); d <= bis; d = plusTage(d, 1)) {
-    if (d >= f.startdatum && fahrtage.has(isoWochentag(d)) && !eintragAm(d) && !wochen.has(montagDerWoche(d))) tage.push(d);
+    if (d >= f.startdatum && fahrtage.has(isoWochentag(d)) && !eintragAm(d) && !wochen.has(montagDerWoche(d)) && !abwesenheitAm(d)) tage.push(d);
   }
   return tage;
 }
@@ -95,7 +95,7 @@ const MONATE_KURZ = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "S
 function bildFahrten() {
   const h = heute();
   return umschalterHtml("fahrten-ansicht", fahrtenAnsicht, [["eintraege", "Einträge"], ["statistik", "Statistik"]], "Ansicht") +
-    (fahrtenAnsicht === "statistik" ? bildStatistik() : eintraegeListe(h));
+    (fahrtenAnsicht === "statistik" ? bildStatistik() : eintraegeListe(h) + abwesenheitenBereich(h));
 }
 
 // Jahresziele (Fahrten → Statistik); Fortschritt auf der Übersicht
@@ -163,6 +163,8 @@ function bildStatistik() {
     k.jahre.filter(z => z.wochensummen).map(z => '<p class="klein">' + z.jahr + ': ' +
       (z.wochensummen === 1 ? "1 Wochensumme" : z.wochensummen + " Wochensummen") + ' (' + kmText(z.wochenKm) +
       ' km) in „km“ enthalten, aber nicht als Radtage gezählt.</p>').join("") +
+    // Ab 5g: abwesende Fahrtage (zählen als Tage ohne Fahrt)
+    abwesendeFahrtage(h).map(j => '<p class="klein">' + esc(abwesendText(j)) + ' – zählen als Tage ohne Fahrt.</p>').join("") +
     '</div>';
   return html + jahreszieleBereich() + wetterStatistik(h);
 }

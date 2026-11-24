@@ -821,7 +821,7 @@ async function start() {
     gleich("Letzte 14 Tage bis gestern: Di 20.10. und Fr 23.10. fehlen", w.fehlendeFahrtage(HL), ["2026-10-20", "2026-10-23"]);
     const hinweis = ohneTags(w.lueckenHinweis(HL));
     wahr("Startseite: „2 Fahrtage ohne Eintrag“, darunter je Tag (nur einmal) „Nachtragen“ und „Keine Fahrt“",
-      hinweis === "2 Fahrtage ohne Eintrag Di 20.10. Nachtragen Keine Fahrt Fr 23.10. Nachtragen Keine Fahrt" &&
+      hinweis === "2 Fahrtage ohne Eintrag Di 20.10. Nachtragen Keine Fahrt Fr 23.10. Nachtragen Keine Fahrt Als Abwesenheit …" &&
       (w.lueckenHinweis(HL).match(/data-action="nachtragen"/g) || []).length === 2 &&
       (w.lueckenHinweis(HL).match(/data-action="keine-fahrt"/g) || []).length === 2, hinweis);
     w.eval(`daten.fahrrad.startdatum = "2026-10-21"`);
@@ -2179,7 +2179,7 @@ async function start() {
     const hinweisHeute = w.lueckenHinweis(FR, 18 * 60);
     wahr("Startseite: „5 Fahrtage ohne Eintrag“, darunter Fr 09.10., Mo 12.10., Di 13.10., Di 20.10. und „heute“ (nur einmal, W9), je mit „Nachtragen“ und „Keine Fahrt“",
       ohneTags(hinweisHeute) === "5 Fahrtage ohne Eintrag Fr 09.10. Nachtragen Keine Fahrt Mo 12.10. Nachtragen Keine Fahrt Di 13.10. Nachtragen Keine Fahrt " +
-        "Di 20.10. Nachtragen Keine Fahrt heute Nachtragen Keine Fahrt" && (ohneTags(hinweisHeute).match(/heute/g) || []).length === 1 &&
+        "Di 20.10. Nachtragen Keine Fahrt heute Nachtragen Keine Fahrt Als Abwesenheit …" && (ohneTags(hinweisHeute).match(/heute/g) || []).length === 1 &&
       hinweisHeute.includes('data-action="nachtragen" data-datum="' + FR + '"') && hinweisHeute.includes('data-action="keine-fahrt" data-datum="' + FR + '"'), ohneTags(hinweisHeute));
     gleich("Kein Fahrtag (Do 29.10.) um 20:00: nur die früheren Tage", w.fehlendeFahrtage("2026-10-29", 20 * 60), ["2026-10-20", "2026-10-23"]);
     w.eval(`daten.eintraege.push({ id: "fr", datum: "${FR}", km: 14.2, vorlage: null, notiz: "", typ: "tag", arbeitsweg: false, wetter: null })`);
@@ -3913,7 +3913,7 @@ async function start() {
     gleich("Alle Dateien vorhanden; jede JS-Datei mit Kopfzeile, \"use strict\" und gültigem JavaScript", dateiFehler, []);
     // Je Datei eine Funktion, die nur dort steht: alle Dateien sind geladen
     const jeDatei = { "grundlagen": "heute", "daten": "datenEinlesen", "berechnungen": "kmStandAm", "statistik": "bildStatistik", "wartung": "werkstattLage", "kalender": "kalenderDatei",
-      "wetter": "wetterAnsicht", "fahrtag": "naechsterFahrtag", "gefuehlt": "fahrtGefuehlt", "orte": "ortAusText", "oberflaeche": "zeichnen", "uebersicht": "bildUebersicht", "wetter-ansicht": "bildWetter", "wartung-ansicht": "bildWartung",
+      "wetter": "wetterAnsicht", "fahrtag": "naechsterFahrtag", "abwesenheit": "abwesenheitAm", "gefuehlt": "fahrtGefuehlt", "orte": "ortAusText", "oberflaeche": "zeichnen", "uebersicht": "bildUebersicht", "wetter-ansicht": "bildWetter", "wartung-ansicht": "bildWartung",
       "einstellungen": "bildEinstellungen", "sicherung": "exportInhalt", "bedienung": "AKTIONEN", "start": "serviceWorkerStarten" };
     gleich("Jede JS-Datei ist in der App geladen (je eine Funktion bzw. Tabelle daraus vorhanden)",
       swDateien.filter(d => d.startsWith("js/")).map(d => d.slice(3, -3)).filter(n => !jeDatei[n] || !["function", "object"].includes(w.eval("typeof " + jeDatei[n]))), []);
@@ -6164,6 +6164,139 @@ async function start() {
       [stufe81.includes("Ab „im Stehen“ (°C)"), ohneTags(inhaltHtml()).includes("Ab „beim Fahren“ (°C)"), (stufe81 + ohneTags(inhaltHtml())).includes("gefühlt")], [true, true, false]);
     w.unterseiteZeigen("kleidung-protokoll");
     gleich("Protokoll: „Stufe wählen nach … beim Fahren → im Stehen“, auch für ältere Einträge", [ohneTags(inhaltHtml()).includes("beim Fahren → im Stehen"), ohneTags(inhaltHtml()).includes("gefühlt")], [true, false]);
+
+    // -------------------------------------------------------------
+    // 83. Abwesenheit (N3, Release 5g)
+    // -------------------------------------------------------------
+    abschnitt("83. Abwesenheit (N3): Datenmodell, kein „Fahrtag ohne Eintrag“, nächster Fahrtag danach mit Hinweis, Einträge gehen vor, Liste, Formular, Löschen mit „Rückgängig“, Statistik, Sicherung");
+    const AB = (id, von, bis, grund = null) => ({ id, von, bis, grund });
+    const URLAUB = AB("u1", "2026-12-21", "2027-01-03", "urlaub"), KRANK = AB("k1", "2026-12-07", "2026-12-11", "krank");
+    const setzeAb = (abwesenheiten, eintraege = [], wetter = wetterEinst()) =>
+      setze7({ fahrrad: F("2026-01-01", 0), einstellungen: { fahrtage: [1, 2, 5], wetter }, eintraege, abwesenheiten });
+    // Datenmodell und Prüfung
+    const mitAb = liste => JSON.stringify({ version: 14, fahrrad: F("2026-01-01", 0), eintraege: [], abwesenheiten: liste });
+    gleich("Gespeichert: id, von, bis, grund (null = ohne Angabe), nach Beginn sortiert; aneinander angrenzend erlaubt",
+      kopie(w.datenEinlesen(mitAb([URLAUB, KRANK, AB("a2", "2026-12-12", "2026-12-12")]))).abwesenheiten,
+      [KRANK, AB("a2", "2026-12-12", "2026-12-12"), URLAUB]);
+    const abFalsch = (liste, teil, text) => wirft("Abwesenheit: " + text + " wird abgelehnt", () => w.datenEinlesen(mitAb(liste)), teil);
+    abFalsch([URLAUB, AB("x", "2027-01-03", "2027-01-05")], "überschneiden sich", "Überschneidung (ein gemeinsamer Tag)");
+    abFalsch([AB("x", "2026-12-10", "2026-12-09")], "„von“ darf nicht nach „bis“ liegen", "von nach bis");
+    abFalsch([AB("x", "2026-12-32", "2027-01-02")], "gültige Daten", "ungültiges Datum");
+    abFalsch([AB("x", "2026-01-01", "2027-01-02")], "höchstens 366 Tage", "367 Tage");
+    abFalsch([AB("x", "2026-12-01", "2026-12-02", "ferien")], "grund muss", "unbekannter Grund");
+    abFalsch([AB("x", "2026-12-01", "2026-12-02"), AB("x", "2026-12-05", "2026-12-06")], "kommt doppelt vor", "doppelte id");
+    gleich("366 Tage sind erlaubt; ohne Liste (ältere Datei) keine Abwesenheiten",
+      [w.datenEinlesen(mitAb([AB("x", "2026-01-01", "2027-01-01")])).abwesenheiten.length, w.datenEinlesen(JSON.stringify({ version: 14, eintraege: [] })).abwesenheiten], [1, []]);
+    // Kein Hinweis „Fahrtag ohne Eintrag“ im Zeitraum (auch nachträglich)
+    setzeAb([KRANK]);
+    gleich("„Fahrtage ohne Eintrag“: Tage der Abwesenheit (krank Mo 07.12.–Fr 11.12.) fehlen, die übrigen bleiben", w.fehlendeFahrtage("2026-12-14", 0),
+      ["2026-11-30", "2026-12-01", "2026-12-04"]);
+    // Nächster Fahrtag nach der Abwesenheit, mit Hinweis
+    setzeAb([URLAUB]);
+    const FR18 = zeit("2026-12-18", "18:00");
+    let n83 = w.naechsterFahrtag(FR18);
+    gleich("Nächster Fahrtag (Fr 18.12. abends): nicht Mo 21.12., sondern Mo 04.01. nach dem Urlaub; Hinweis „Urlaub bis So 03.01.“",
+      [n83.datum, n83.abwesenheit && n83.abwesenheit.id, w.abwesenheitBisText(n83.abwesenheit, "2026-12-18")], ["2027-01-04", "u1", "Urlaub bis So 03.01."]);
+    gleich("Vor dem Urlaub (Mo 14.12.): nächster Fahrtag Di 15.12., kein Hinweis", (n => [n.datum, n.abwesenheit])(w.naechsterFahrtag(zeit("2026-12-14", "18:00"))), ["2026-12-15", null]);
+    gleich("Während des Urlaubs (Di 22.12. 08:00): kein „Heute“ im Reiter Wetter, nächster Fahrtag Mo 04.01.",
+      (n => [n.datum, w.wetterAuswahl(zeit("2026-12-22", "08:00"), n).optionen.map(o => o.wert), w.zaehltAlsFahrtag("2026-12-22")])(w.naechsterFahrtag(zeit("2026-12-22", "08:00"))),
+      ["2027-01-04", ["naechster"], false]);
+    setzeAb([AB("w1", "2026-12-23", "2026-12-24")]);
+    gleich("Abwesenheit ohne eingestellten Fahrtag (Mi–Do): kein Hinweis", w.naechsterFahrtag(zeit("2026-12-22", "18:00")).abwesenheit, null);
+    setzeAb([URLAUB], [AE("r83", "2026-12-22", 14.2, null)]);
+    gleich("Einträge gehen vor: mit Fahrt am Di 22.12. ist das ein Fahrtag (Mo 21.12. bleibt abwesend); „Keine Fahrt“ und andere Einträge bleiben, wie sie sind",
+      [w.naechsterFahrtag(FR18).datum, w.zaehltAlsFahrtag("2026-12-21"), w.zaehltAlsFahrtag("2026-12-22"), w.eval("daten.eintraege.length")], ["2026-12-22", false, true, 1]);
+    // Anzeige im Reiter Wetter und in der Kachel
+    setzeAb([URLAUB]);
+    const FR19 = zeit("2026-12-18", "19:30");
+    const seite83 = ohneTags(w.bildWetter(FR19)), kachel83 = ohneTags(w.wetterKachel(FR19));
+    wahr("Reiter Wetter (Fr 19:30): „Mo 04.01. · in 17 Tagen“, darunter „🏖️ Urlaub bis So 03.01.“", seite83.includes("Mo 04.01. · in 17 Tagen · vorläufig 🏖️ Urlaub bis So 03.01. 🕔 Die Vorhersage für Mo 04.01. gibt es ab Mo 28.12."), seite83);
+    wahr("Kachel der Übersicht: nächster Fahrtag und „🏖️ Urlaub bis So 03.01.“", kachel83.includes("Mo 04.01.") && kachel83.includes("🏖️ Urlaub bis So 03.01."), kachel83);
+    // Übersicht: heute abwesend
+    const echtHeute83 = w.heute;
+    w.heute = () => "2026-12-22";
+    const ue83 = ohneTags(w.bildUebersicht());
+    wahr("Übersicht „Heute erfassen“: „🏖️ Heute: Urlaub (bis So 03.01.)“", ue83.includes("🏖️ Heute: Urlaub (bis So 03.01.)"), ue83);
+    // Reiter Fahrten → Einträge: Abschnitt „Abwesenheiten“
+    setzeAb([KRANK, URLAUB, AB("a0", "2026-08-03", "2026-08-14", "dienstreise")], [AE("r83", "2026-12-22", 14.2, null)]);
+    w.eval("abwesenheitFruehereOffen = false; aktiverTab = 'fahrten'; fahrtenAnsicht = 'eintraege'; zeichnen()");
+    const fa83 = () => ohneTags(inhaltHtml());
+    wahr("Fahrten → Einträge: unter der Liste „Abwesenheiten“: laufende und kommende mit Symbol, Zeitraum, Stand, Fahrtagen, Einträgen; frühere eingeklappt",
+      fa83().includes("Abwesenheiten 🏖️ Urlaub Mo 21.12.–So 03.01. läuft · noch 12 Tage · 6 Fahrtage · 1 mit Eintrag › Frühere (2) › + Abwesenheit") &&
+      fa83().indexOf("Abwesenheiten") > fa83().indexOf("Einträge ("), fa83());
+    w.document.querySelector('#inhalt [data-action="abwesenheit-fruehere"]').click();
+    wahr("„Frühere (2)“ aufgeklappt: neueste zuerst (krank, Dienstreise)", fa83().includes("Frühere (2) ⌄ 🤒 Krank Mo 07.12.–Fr 11.12. vorbei · 3 Fahrtage › 💼 Dienstreise Mo 03.08.–Fr 14.08. vorbei · 6 Fahrtage ›"), fa83());
+    // Formular: anlegen, Überschneidung, bearbeiten, löschen mit „Rückgängig“
+    setzeAb([URLAUB], [AE("r83", "2026-12-22", 14.2, null)]);
+    w.speichern();
+    alerts.length = 0;
+    w.abwesenheitFormular();
+    feld("ab-von").value = "2027-01-02"; feld("ab-bis").value = "2027-01-08"; feld("ab-grund").value = "krank";
+    feld("ab-von").dispatchEvent(new w.Event("change", { bubbles: true }));
+    const info83 = feld("ab-info").textContent;
+    w.abwesenheitSpeichern();
+    gleich("Überschneidung im Formular: Hinweis schon beim Ändern, Speichern verhindert (Meldung), nichts gespeichert",
+      [info83, alerts, w.eval("daten.abwesenheiten.length"), w.eval("fenster.open")],
+      ["Überschneidet sich mit Urlaub Mo 21.12.–So 03.01.", ["Der Zeitraum überschneidet sich mit Urlaub Mo 21.12.–So 03.01. Bitte diese Abwesenheit ändern oder einen anderen Zeitraum wählen."], 1, true]);
+    feld("ab-von").value = "2027-01-04"; feld("ab-bis").value = "2027-01-08";
+    feld("ab-bis").dispatchEvent(new w.Event("change", { bubbles: true }));
+    const info83b = feld("ab-info").textContent;
+    w.abwesenheitSpeichern();
+    const gesp83 = () => JSON.parse(localStorage.getItem(TEST_SCHLUESSEL)).abwesenheiten;
+    gleich("Angrenzend (Mo 04.01.–Fr 08.01., krank): „5 Tage, davon 3 Fahrtage“, gespeichert, sortiert, Meldung",
+      [info83b, gesp83().map(a => [a.von, a.bis, a.grund]), toast()[0], w.eval("fenster.open")],
+      ["5 Tage, davon 3 Fahrtage.", [["2026-12-21", "2027-01-03", "urlaub"], ["2027-01-04", "2027-01-08", "krank"]], "Krank Mo 04.01.–Fr 08.01. gespeichert", false]);
+    w.abwesenheitFormular("u1");
+    gleich("Bearbeiten: Formular mit den Werten und dem Hinweis auf Einträge im Zeitraum (bleiben erhalten)",
+      [feld("ab-von").value, feld("ab-bis").value, feld("ab-grund").value, feld("ab-info").textContent, !!w.document.querySelector('#fensterinhalt [data-action="abwesenheit-loeschen"]')],
+      ["2026-12-21", "2027-01-03", "urlaub", "14 Tage, davon 6 Fahrtage (1 mit Eintrag – er bleibt erhalten).", true]);
+    feld("ab-bis").value = "2027-01-02"; feld("ab-grund").value = "";
+    w.abwesenheitSpeichern();
+    gleich("… als ein Block geändert (bis Sa 02.01., ohne Grund): dieselbe id, Einträge unverändert", [gesp83()[0], w.eval("daten.eintraege.length")],
+      [AB("u1", "2026-12-21", "2027-01-02", null), 1]);
+    const vorLoeschen83 = localStorage.getItem(TEST_SCHLUESSEL);
+    let antwort83 = false;
+    w.frage = async () => antwort83;
+    await w.abwesenheitLoeschen("u1");
+    const nachNein = w.eval("daten.abwesenheiten.length");
+    antwort83 = true;
+    await w.abwesenheitLoeschen("u1");
+    gleich("Löschen: mit Rückfrage, dann gelöscht mit „Rückgängig“; „Rückgängig“ stellt sie wieder her",
+      [nachNein, gesp83().map(a => a.id), toast(), (w.rueckgaengig(), localStorage.getItem(TEST_SCHLUESSEL) === vorLoeschen83)],
+      [2, [JSON.parse(vorLoeschen83).abwesenheiten[1].id], ["Abwesend Mo 21.12.–Sa 02.01. gelöscht", true], true]);
+    // „Als Abwesenheit …“ in der Übersicht
+    w.heute = () => "2026-12-14";
+    setzeAb([]);
+    const luecke83 = w.document.createElement("div");
+    luecke83.innerHTML = w.lueckenHinweis("2026-12-14", 0);
+    w.document.body.appendChild(luecke83);
+    luecke83.querySelector('[data-action="als-abwesenheit"]').click();
+    gleich("„Fahrtage ohne Eintrag“ mit „Als Abwesenheit …“: Formular vom ersten bis zum letzten Tag",
+      [luecke83.querySelector('[data-action="als-abwesenheit"]').textContent, feld("ab-von").value, feld("ab-bis").value, w.document.querySelector("#fensterinhalt h2").textContent],
+      ["Als Abwesenheit …", "2026-11-30", "2026-12-11", "Neue Abwesenheit"]);
+    w.fensterSchliessen();
+    luecke83.remove();
+    // Statistik: abwesende Fahrtage je Jahr
+    w.heute = () => "2027-01-05";
+    setzeAb([KRANK, URLAUB], [AE("r83", "2026-12-22", 14.2, null)]);
+    gleich("Statistik: Fahrtage in Abwesenheiten (ohne Tage mit Fahrt) je Jahr und Grund", w.abwesendeFahrtage("2027-01-05").map(w.abwesendText),
+      ["2027: 1 Fahrtag abwesend (Urlaub 1)", "2026: 7 Fahrtage abwesend (Urlaub 4, krank 3)"]);
+    w.eval("aktiverTab = 'fahrten'; fahrtenAnsicht = 'statistik'; zeichnen()");
+    wahr("… unter den Kennzahlen: „2026: 7 Fahrtage abwesend (Urlaub 4, krank 3) – zählen als Tage ohne Fahrt.“",
+      ohneTags(inhaltHtml()).includes("2026: 7 Fahrtage abwesend (Urlaub 4, krank 3) – zählen als Tage ohne Fahrt."), ohneTags(inhaltHtml()));
+    gleich("Serie: abwesende Fahrtage zählen als Tage ohne Fahrt (unterbrechen die Serie wie bisher ein Fahrtag ohne Eintrag)", w.laengsteSerie("2026-12-21", "2027-01-05"), 1);
+    // Sicherung
+    w.speichern();
+    const sich83 = w.exportInhalt();
+    gleich("Sicherung: Abwesenheiten in der Exportdatei, Export → Import verlustfrei", [JSON.parse(sich83).abwesenheiten, kopie(w.datenEinlesen(sich83))],
+      [[KRANK, URLAUB], kopie(w.eval("daten"))]);
+    const ohne83 = JSON.stringify(Object.assign(JSON.parse(sich83), { abwesenheiten: [KRANK] }));
+    const erg83 = w.sicherungAuswerten(ohne83, w.eval("daten"), "2027-01-05");
+    gleich("„Sicherung prüfen“: eine Abwesenheit neuer als die Sicherung → „älter: 1 Abwesenheit fehlt“", [erg83.status, erg83.titel], ["aelter", "Sicherung ist älter: 1 Abwesenheit fehlt"]);
+    const anders83 = JSON.stringify(Object.assign(JSON.parse(sich83), { abwesenheiten: [Object.assign({}, KRANK, { grund: null }), URLAUB] }));
+    gleich("… geänderte Abwesenheit: „1 Abwesenheit geändert“", w.sicherungAuswerten(anders83, w.eval("daten"), "2027-01-05").details, ["1 Abwesenheit geändert"]);
+    w.heute = echtHeute83;
+    w.eval("aktiverTab = 'uebersicht'; fahrtenAnsicht = 'eintraege'; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {
