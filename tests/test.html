@@ -1997,7 +1997,7 @@ async function start() {
     // Rückfragen: Antwort über frageAntwort, die Texte landen in "fragen"
     w.frage = async text => { fragen.push(ohneTags(text)); return frageAntwort; };
     // tests/offline-update-test.js hängt für den Update-Test "-neu" an die App-Version an
-    gleich("App-Version 5g, Datenversion 14 (Release 5g)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5g", 14]);
+    gleich("App-Version 5h, Datenversion 14 (Release 5h)", [w.eval("APP_VERSION").replace(/-neu$/, ""), w.eval("DATEN_VERSION")], ["5h", 14]);
 
     // -------------------------------------------------------------
     // 35. Umwandlung Version 4 → 7
@@ -5339,8 +5339,9 @@ async function start() {
     uhrN4 = Date.parse("2026-11-14T08:20:00.000Z");
     w.kleidungFormular();
     w.document.querySelector('#inhalt [data-action="kleidung-grundlage"][data-wert="gefuehlt"]').click();
-    gleich("Umschalter: Eintrag „grundlage“ (fahrt → gefuehlt); die Zählung aller Stufen beginnt danach", [protN4()[4], w.letzteAenderung("stufe1")],
-      [{ zeitpunkt: "2026-11-14T08:20:00.000Z", art: "grundlage", stufe: null, vorher: "fahrt", nachher: "gefuehlt", auchBetroffen: [] }, Date.parse("2026-11-14T08:20:00.000Z")]);
+    gleich("Umschalter: Eintrag „grundlage“ (fahrt → gefuehlt); setzt die Zählung nicht zurück (ab 5h, B20): Stufe 1 weiter seit 5d, Stufe 5 ab ihrer letzten Änderung",
+      [protN4()[4], w.letzteAenderung("stufe1"), w.letzteAenderung("stufe5")],
+      [{ zeitpunkt: "2026-11-14T08:20:00.000Z", art: "grundlage", stufe: null, vorher: "fahrt", nachher: "gefuehlt", auchBetroffen: [] }, null, Date.parse("2026-11-14T08:05:00.000Z")]);
     w.document.querySelector('#inhalt [data-action="kleidung-grundlage"][data-wert="fahrt"]').click();
     uhrN4 = Date.parse("2026-11-14T08:30:00.000Z");
     w.kleidungRegenFormular(0);
@@ -5348,7 +5349,8 @@ async function start() {
     w.kleidungRegenSpeichern("0");
     gleich("Regenzusatz geändert: protokolliert (art „regen“), setzt die Zählung der Stufen nicht zurück",
       [protN4()[6].art, protN4()[6].vorher.bereiche.kopf, protN4()[6].nachher.bereiche.kopf], ["regen", "", "Kapuze"]);
-    wahr("… Zählung der Stufe 1 weiter ab dem Umschalter (nicht ab dem Regenzusatz)", w.letzteAenderung("stufe1") === Date.parse("2026-11-14T08:20:00.000Z"));
+    gleich("… Zählung weiter ohne Regenzusatz und Umschalter: Stufe 1 seit 5d, Stufe 5 ab der Grenze von Stufe 4 (08:05)", [w.letzteAenderung("stufe1"), w.letzteAenderung("stufe5")],
+      [null, Date.parse("2026-11-14T08:05:00.000Z")]);
     await w.kleidungRegenWeg(0);
     gleich("Regenzusatz entfernt: protokolliert", [protN4()[7].art, protN4()[7].nachher], ["regen", null]);
     // Seite „Änderungen der Kleidung“
@@ -5836,8 +5838,8 @@ async function start() {
     wahr("Neue Stufe: ohne Zeile „Rückmeldungen“", !ohneTags(inhaltHtml()).includes("Rückmeldungen seit"), ohneTags(inhaltHtml()));
     n4Daten([], kleidung78(true));
     w.kleidungFormular();
-    gleich("Nach dem Umschalter (22.11.): alle Stufen „seit deiner Änderung am 22.11.: noch keine“", [zeile78(0), zeile78(4), zeile78(5)],
-      ["seit deiner Änderung am 22.11.: noch keine", "seit deiner Änderung am 22.11.: noch keine", "seit deiner Änderung am 22.11.: noch keine"]);
+    gleich("Nach dem Umschalter (22.11.) unverändert (ab 5h, B20): unveränderte Stufe „seit 5d“, geänderte und Nachbarstufe „seit deiner Änderung am 21.11.“", [zeile78(0), zeile78(4), zeile78(5)],
+      ["seit 5d: noch keine", "seit deiner Änderung am 21.11.: noch keine", "seit deiner Änderung am 21.11.: noch keine"]);
     n4Daten([AE("h1", "2026-11-23", 34, EW(FN("zu-kalt", "2026-11-23T05:00:00.000Z", { kleidung: "stufe6" }), FN("zu-kalt", "2026-11-23T05:00:00.000Z", { kleidung: "stufe6" })))], kleidung78());
     const k78 = w.eval("daten.einstellungen.wetter.kleidung");
     gleich("Hinweistext mit derselben Prüfung: Nachbarstufe „seit deiner Änderung am 21.11.“", w.kleidungHinweis("stufe6").text,
@@ -6297,6 +6299,98 @@ async function start() {
     gleich("… geänderte Abwesenheit: „1 Abwesenheit geändert“", w.sicherungAuswerten(anders83, w.eval("daten"), "2027-01-05").details, ["1 Abwesenheit geändert"]);
     w.heute = echtHeute83;
     w.eval("aktiverTab = 'uebersicht'; fahrtenAnsicht = 'eintraege'; zeichnen()");
+
+    // -------------------------------------------------------------
+    // 84. Umschalter „Stufe wählen nach“ setzt die Zählung nicht zurück (B20, Release 5h)
+    // -------------------------------------------------------------
+    abschnitt("84. Umschalter „Stufe wählen nach“ setzt die Zählung nicht zurück (B20): Zählung nach der gespeicherten Grundlage, Text ab der letzten Änderung der Stufe, Hinweise, Meldung");
+    const echtNow84 = w.Date.now;
+    let uhr84 = Date.parse("2026-11-05T08:00:00.000Z");
+    w.Date.now = () => uhr84;
+    // Tag 1 (02.11.): Stufe 5 geändert; Tag 2 und 3: Rückmeldungen mit „beim Fahren“; Tag 4: viermal umgeschaltet
+    const T84 = "2026-11-02T07:30:00.000Z";
+    const kleidung84 = () => { const k = kleidungN4(); k.protokoll[0].zeitpunkt = T84; return k; };
+    const PASS84 = Object.fromEntries(["kopf", "hals", "haende", "oberkoerper", "beine"].map(b => [b, "passte"]));
+    const F84 = (urteil, tag, bereiche, aend = {}) => FN(urteil, "2026-11-" + tag + "T05:00:00.000Z", Object.assign({ rueckmeldungBereiche: bereiche }, aend));
+    const FUESSE84 = Object.assign({ fuesse: "zu-kalt" }, PASS84);
+    const eintraege84 = [AE("a1", "2026-11-03", 34, EW(F84("zu-kalt", "03", FUESSE84), F84(null, "03", {}))),
+      AE("a2", "2026-11-04", 34, EW(F84("zu-kalt", "04", FUESSE84), F84(null, "04", {}, { kleidung: "stufe2" })))];
+    const z84 = () => w.rueckmeldungenSeitAenderung().stufe5;
+    const umschalten84 = wert => { w.kleidungFormular(); w.document.querySelector('#inhalt [data-action="kleidung-grundlage"][data-wert="' + wert + '"]').click(); uhr84 += 60000; };
+    const viermal84 = () => ["gefuehlt", "fahrt", "gefuehlt", "fahrt"].forEach(umschalten84);
+    const k84 = () => kopie(w.eval("daten.einstellungen.wetter.kleidung"));
+    const zeile84 = i => ohneTags(w.document.querySelector('#inhalt [data-action="kleidung-stufe"][data-i="' + i + '"] .text').innerHTML).split("Rückmeldungen ")[1];
+    const HW84 = "Stufe 3 bis 7 °C: seit deiner Änderung am 02.11. 2× zu kalt (beide Male Füße; beide bei Gegenwind)";
+    n4Daten(eintraege84, kleidung84());
+    const hinweiseVor84 = w.kleidungHinweise("stufe5").map(h => h.text);
+    gleich("Vor dem Umschalten: 2× zu kalt seit der Änderung am 02.11., Hinweis zur Stufe mit „beide Male Füße“",
+      [z84().anzahl, w.seitText("stufe5", z84()), hinweiseVor84], [2, "seit deiner Änderung am 02.11.: 2× zu kalt", [HW84]]);
+    viermal84();
+    const prot84 = k84().protokoll;
+    gleich("(a) Viermal umgeschaltet (Ende „beim Fahren“): vier Einträge „grundlage“ im Protokoll, Grundlage „fahrt“, letzte Änderung der Stufe weiter am 02.11., Stufe 1 ohne Änderung",
+      [prot84.length, prot84.slice(1).map(p => [p.art, p.vorher, p.nachher]), k84().grundlage, w.letzteAenderung("stufe5"), w.letzteAenderung("stufe1")],
+      [5, [["grundlage", "fahrt", "gefuehlt"], ["grundlage", "gefuehlt", "fahrt"], ["grundlage", "fahrt", "gefuehlt"], ["grundlage", "gefuehlt", "fahrt"]], "fahrt", Date.parse(T84), null]);
+    gleich("(a) … beide Rückmeldungen zählen weiter, der Text nennt den 02.11. (Tag der Änderung der Stufe, nicht des Umschalters)",
+      [z84().anzahl, z84()["zu-kalt"], z84().seit, w.seitText("stufe5", z84())], [2, 2, Date.parse(T84), "seit deiner Änderung am 02.11.: 2× zu kalt"]);
+    w.kleidungFormular();
+    const seite84 = ohneTags(inhaltHtml());
+    gleich("(a) Seite Kleidung: Zeile der Stufe „seit deiner Änderung am 02.11.: 2× zu kalt“, unveränderte Stufe „seit 5d: noch keine“, Hinweis oben",
+      [zeile84(4).split(" Wo:")[0], zeile84(0), seite84.includes("💡 " + HW84 + " Stufe bearbeiten")], ["seit deiner Änderung am 02.11.: 2× zu kalt", "seit 5d: noch keine", true]);
+    wahr("Seite Kleidung: Feldhinweis „Umschalten setzt die Zählung nicht zurück.“ und der Satz im Erklärtext; „und des Umschalters“ entfällt",
+      seite84.includes("Ohne Luftfeuchte in der Vorhersage gilt „im Stehen“. Umschalten setzt die Zählung nicht zurück.") &&
+      seite84.includes("Der Umschalter setzt die Zählung nicht zurück; gezählt werden die Fahrten, deren Stufe nach der aktuellen Einstellung gewählt wurde.") &&
+      !seite84.includes("und des Umschalters"), seite84);
+    w.unterseiteZeigen("kleidung-protokoll");
+    gleich("Der Umschalter steht weiter unter „Änderungen“ (viermal)", (ohneTags(inhaltHtml()).match(/Stufe wählen nach/g) || []).length, 4);
+    gleich("(d) Hinweis zur Stufe (Füße bei beiden Fahrten zu kalt, Gesamturteil „zu kalt“) bleibt nach dem Umschalten bestehen und nennt den 02.11.; Füße stehen in seiner Klammer (kein eigener Hinweis je Bereich in derselben Richtung, Regel aus 5g)",
+      [w.kleidungHinweise("stufe5").map(h => h.text), w.bereichHinweise("stufe5")], [hinweiseVor84, []]);
+    const fh84 = w.fahrtHinweisHtml({ stufe: { id: "stufe5" }, index: 4 });
+    wahr("(d) … auch in der Fahrt-Karte", ohneTags(fh84).includes(HW84), ohneTags(fh84));
+    // (b) „im Stehen“: Fahrten mit „beim Fahren“ zählen nicht, neue mit „im Stehen“ schon; zurück: umgekehrt
+    umschalten84("gefuehlt");
+    gleich("(b) Auf „im Stehen“: die Fahrten mit „beim Fahren“ zählen nicht, kein Hinweis; Text weiter ab dem 02.11.",
+      [z84().anzahl, w.seitText("stufe5", z84()), w.kleidungHinweise("stufe5")], [0, "seit deiner Änderung am 02.11.: noch keine", []]);
+    n4Daten(eintraege84.concat([AE("b1", "2026-11-06", 34, EW(F84("passte", "06", Object.assign({ fuesse: "passte" }, PASS84), { grundlage: "gefuehlt", empfohlenAm: "2026-11-06T05:00:00.000Z" }), null))]), k84());
+    uhr84 = Date.parse("2026-11-06T18:00:00.000Z");
+    gleich("(b) … eine neue Fahrt mit „im Stehen“ zählt", [k84().grundlage, z84().anzahl, z84().passte, z84().fahrten.map(f => f.datum)], ["gefuehlt", 1, 1, ["2026-11-06"]]);
+    umschalten84("fahrt");
+    gleich("(b) Zurück auf „beim Fahren“: die alten Fahrten zählen wieder, die mit „im Stehen“ nicht",
+      [z84().anzahl, z84()["zu-kalt"], z84().passte, z84().fahrten.map(f => f.datum), w.kleidungHinweise("stufe5").map(h => h.text)], [2, 2, 0, ["2026-11-03", "2026-11-04"], [HW84]]);
+    // (e) Meldung nach „Alles passte“
+    w.rueckmeldungAllesPasste("a1", "rueck");
+    gleich("(e) Meldung nach „Alles passte“ nach dem Umschalten: Datum der letzten Änderung der Stufe (02.11.), nicht des Umschalters",
+      toast()[0], "Rückmeldung „passte“ (alle Bereiche) gespeichert · Stufe 3 bis 7 °C seit deiner Änderung am 02.11.: 2× zu kalt, 1× passte");
+    w.rueckmeldungAllesPasste("a2", "rueck");
+    gleich("(e) … Stufe ohne Änderung: „seit 5d“", toast()[0], "Rückmeldung „passte“ (alle Bereiche) gespeichert · Stufe 15 bis 20 °C seit 5d: 1× passte");
+    // (c) Änderungen der Stufe und der Nachbarstufe setzen weiter zurück
+    uhr84 = Date.parse("2026-11-07T08:00:00.000Z");
+    w.kleidungStufeFormular(4);
+    feld("ks-hals").value = "Schal, Tuch";
+    w.kleidungStufeSpeichern("4");
+    gleich("(c) Änderung der Stufe selbst (07.11.): Zählung beginnt neu, kein Hinweis",
+      [w.letzteAenderung("stufe5"), w.seitText("stufe5", z84()), w.kleidungHinweise("stufe5")], [uhr84, "seit deiner Änderung am 07.11.: noch keine", []]);
+    n4Daten(eintraege84, kleidung84());
+    viermal84();
+    uhr84 = Date.parse("2026-11-08T08:00:00.000Z");
+    w.kleidungStufeFormular(3);
+    feld("ks-ab").value = "8";
+    w.kleidungStufeSpeichern("3");
+    const letzt84 = k84().protokoll[k84().protokoll.length - 1];
+    gleich("(c) Grenze der Nachbarstufe 4 (7 → 8 °C, 08.11.) verschiebt den Bereich von Stufe 5 (auchBetroffen): Zählung beginnt ebenfalls neu",
+      [letzt84.stufe, letzt84.auchBetroffen, w.letzteAenderung("stufe5"), w.seitText("stufe5", z84()), w.kleidungHinweise("stufe5")],
+      ["stufe4", ["stufe5"], uhr84, "seit deiner Änderung am 08.11.: noch keine", []]);
+    // (d) Hinweise je Bereich allein (Gesamturteil „gemischt“, kein Hinweis zur Stufe) bleiben nach dem Umschalten
+    const GEMISCHT84 = Object.assign({}, PASS84, { oberkoerper: "zu-warm", fuesse: "zu-kalt" });
+    uhr84 = Date.parse("2026-11-05T08:00:00.000Z");
+    n4Daten([AE("d1", "2026-11-03", 34, EW(F84("gemischt", "03", GEMISCHT84), null)), AE("d2", "2026-11-04", 34, EW(F84("gemischt", "04", GEMISCHT84), null))], kleidung84());
+    const BEREICH84 = ["Stufe 3 bis 7 °C: Oberkörper 2× zu warm (beide bei Gegenwind)", "Stufe 3 bis 7 °C: Füße 2× zu kalt (beide bei Gegenwind)"];
+    const bereichVor84 = w.kleidungHinweise("stufe5").map(h => h.text);
+    viermal84();
+    gleich("(d) Hinweise je Bereich (zweimal „gemischt“: Füße zu kalt, Oberkörper zu warm) vor und nach dem viermaligen Umschalten gleich; Zählung weiter ab dem 02.11.",
+      [bereichVor84, w.kleidungHinweise("stufe5").map(h => h.text), w.kleidungHinweis("stufe5"), w.seitText("stufe5", z84())],
+      [BEREICH84, BEREICH84, null, "seit deiner Änderung am 02.11.: 2× gemischt"]);
+    w.Date.now = echtNow84;
+    w.eval("aktiverTab = 'uebersicht'; zeichnen()");
   } catch (e) {
     zeile(false, "Unerwarteter Fehler: " + e.message, e.stack);
   } finally {

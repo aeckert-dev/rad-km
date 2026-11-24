@@ -874,7 +874,7 @@ function kleidungSeite() {
     '<div class="feldhinweis">Beide Werte rechnen mit derselben Formel wie Open-Meteo (gefühlte Temperatur nach Steadman): „im Stehen“ ohne, „beim Fahren“ mit Fahrtwind ' +
     '(Fahrgeschwindigkeit, Windrichtung und Windstärke je Teilstrecke, die für den Wind zählt). „Beim Fahren“ liegt meist 1–3 °C unter „im Stehen“; die Empfehlung fällt dadurch ' +
     'oft eine Stufe wärmer aus. Andere Wetter-Apps (z. B. Apple Wetter) rechnen ihr „gefühlt“ oft anders (eher als Windchill) und weichen deshalb um 2–3 °C ab. ' +
-    'Ohne Luftfeuchte in der Vorhersage gilt „im Stehen“.</div>' +
+    'Ohne Luftfeuchte in der Vorhersage gilt „im Stehen“. Umschalten setzt die Zählung nicht zurück.</div>' +
     geschwindigkeitHtml() + plausibilitaetHtml() +
     '<label class="haken"><input type="checkbox" id="k-rueckmeldung" data-change="kleidung-rueckmeldung"' + (k.rueckmeldung ? " checked" : "") + '>' +
     '<span>Rückmeldung zur Kleidung<br><span class="klein">Karte „Wie war die Kleidung?“ im Reiter Wetter und die Knöpfe in den Einträgen. ' +
@@ -898,7 +898,8 @@ function kleidungSeite() {
       k.protokoll.length ? (k.protokoll.length === 1 ? "1 Änderung" : k.protokoll.length + " Änderungen") + ", zuletzt am " +
         datumText(isoAusDate(new Date(k.protokoll[k.protokoll.length - 1].zeitpunkt))) : "noch keine") + '</div>' +
     '<p class="klein">Die App protokolliert jede Änderung an einer Stufe, am Regenzusatz und am Umschalter „Stufe wählen nach“. Die Rückmeldungen zählen je Stufe ab ihrer ' +
-    'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt, und des Umschalters), darunter „Wo“ nach Körperbereichen. ' +
+    'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt), darunter „Wo“ nach Körperbereichen. ' +
+    'Der Umschalter setzt die Zählung nicht zurück; gezählt werden die Fahrten, deren Stufe nach der aktuellen Einstellung gewählt wurde. ' +
     'Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „im Stehen“).</p>'
   );
 }
@@ -1306,14 +1307,17 @@ function regenProtokoll(vorher, nachher) {
   return abs.filter(ab => !gleicherInhalt(finde(vorher, ab), finde(nachher, ab))).map(ab => protokollEintrag("regen", null, finde(vorher, ab), finde(nachher, ab)));
 }
 // Letzte Änderung (ms), ab der die Rückmeldungen einer Stufe zählen: Änderungen der
-// Stufe selbst, Änderungen, die ihren Bereich verschieben, und des Umschalters; null = keine
+// Stufe selbst und Änderungen, die ihren Bereich verschieben; null = keine. Der
+// Umschalter „Stufe wählen nach“ zählt nicht (ab 5h, B20): Fahrten mit der anderen
+// Grundlage sortiert rueckmeldungenSeitAenderung() über f.grundlage aus.
 function letzteAenderung(id, k = daten.einstellungen.wetter.kleidung) {
-  return k.protokoll.filter(p => p.art === "grundlage" || (p.art === "stufe" && (p.stufe === id || p.auchBetroffen.includes(id))))
+  return k.protokoll.filter(p => p.art === "stufe" && (p.stufe === id || p.auchBetroffen.includes(id)))
     .reduce((m, p) => { const t = Date.parse(p.zeitpunkt); return m === null || t > m ? t : m; }, null);
 }
 // Rückmeldungen je Stufe ab ihrer letzten Änderung: gezählt werden Fahrten, deren
 // Empfehlung nach der aktuellen Grundlage und nach der Änderung berechnet wurde
-// und die nach der Änderung lagen. Rückmeldungen von vor 5d (empfohlenAm null)
+// und die nach der Änderung lagen. Nach dem Umschalten und Zurückstellen zählen
+// die früheren Fahrten mit dieser Grundlage also wieder (B20, 5h). Rückmeldungen von vor 5d (empfohlenAm null)
 // stehen getrennt in "vor5d". { id: { seit, anzahl, "zu-warm", passte, "zu-kalt", gemischt,
 // regen: {…}, fahrten: [{ urteil, lage, regen, datum, art, bereiche: { bereich: Urteil }, kommentar }], vor5d: {…} } }
 function rueckmeldungenSeitAenderung(k = daten.einstellungen.wetter.kleidung, w = daten.einstellungen.wetter) {

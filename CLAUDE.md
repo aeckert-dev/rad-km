@@ -37,6 +37,11 @@ sind immer erfunden.
   „✓ Alles passte“. Das Gesamturteil kommt immer aus `urteilAusBereiche`. In
   der Karte bleibt eine Fahrt mit Angabe bis „Fertig“ oder Reiterwechsel
   (`rueckmeldungOffen`, geleert in `zeichnen()`).
+- Zählung der Rückmeldungen je Stufe ab ihrer letzten Änderung
+  (`letzteAenderung`): nur Änderungen der Stufe und solche, die ihren Bereich
+  verschieben (`auchBetroffen`). Der Umschalter „Stufe wählen nach“ setzt nicht
+  zurück (B20, 5h); Fahrten mit anderer Grundlage fallen über `f.grundlage`
+  heraus (`rueckmeldungenSeitAenderung`).
 - Abwesenheiten (N3, 5g) gehören zu den Daten (`abwesenheiten`). Einträge
   gehen vor: Ein Tag mit Fahrt zählt trotz Abwesenheit als Fahrtag
   (`abwesendAm`, `zaehltAlsFahrtag`).

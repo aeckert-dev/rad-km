@@ -691,7 +691,8 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
   (siehe unten), dann der Umschalter **Stufe wählen nach: beim Fahren
   (Standard) / im Stehen** (bis 5f „gefühlt beim Fahren / gefühlt (Open-Meteo)“)
   mit kurzer Erklärung (dieselbe Formel wie Open-Meteo, einmal ohne, einmal mit
-  Fahrtwind; andere Wetter-Apps rechnen oft anders), das Feld **Eigene
+  Fahrtwind; andere Wetter-Apps rechnen oft anders; seit 5h dazu „Umschalten
+  setzt die Zählung nicht zurück.“), das Feld **Eigene
   Fahrgeschwindigkeit** (leer = automatisch, mit Angabe, woher der Wert kommt),
   der Schalter **Rückmeldung zur Kleidung**, die Stufen von warm nach kalt mit
   ihrer Kleidung und den Rückmeldungen, der Regenzusatz und die Zeile
@@ -781,9 +782,20 @@ was du anziehen sollst und ob amtliche Warnungen bestehen.
     der Änderung, deren Empfehlung nach der Änderung und nach der aktuellen
     Grundlage (Umschalter) berechnet wurde. Als Änderung einer Stufe zählt auch
     eine Grenze einer anderen Stufe, die ihren Bereich verschiebt (z. B. wird
-    „3 bis 7 °C“ zu „3 bis 8 °C“), und der Umschalter (für alle Stufen); der
-    Regenzusatz nicht. Die Meldung nach „Alles passte“ bzw. „Fertig“ nennt den
-    neuen Stand. Seit 5g kommt **„gemischt“** dazu, z. B. „2× zu kalt, 1×
+    „3 bis 7 °C“ zu „3 bis 8 °C“); der Regenzusatz nicht. Die Meldung nach
+    „Alles passte“ bzw. „Fertig“ nennt den neuen Stand.
+  - **Umschalter und Zählung** (seit 5h, B20): Der Umschalter setzt die Zählung
+    nicht zurück; gezählt werden die Fahrten, deren Stufe nach der aktuellen
+    Einstellung gewählt wurde. „seit deiner Änderung am …“ nennt deshalb immer
+    das Datum der letzten Änderung der Stufe (ohne Änderung „seit 5d“), auch in
+    den Hinweisen und in der Meldung nach einer Rückmeldung. Wer für einige
+    Tage auf „im Stehen“ und dann zurück auf „beim Fahren“ stellt, sieht die
+    früheren Fahrten mit „beim Fahren“ wieder in der Zählung, sofern die Stufe
+    seitdem nicht geändert wurde; Fahrten mit „im Stehen“ zählen nur, solange
+    „im Stehen“ eingestellt ist. Unter „Änderungen“ steht der Umschalter
+    weiterhin. Bis 5g begann nach jedem Umschalten die Zählung aller Stufen neu,
+    auch nach Umschalten und sofortigem Zurückstellen; das gilt ab 5h auch
+    rückwirkend nicht mehr (ohne Umwandlung der Daten). Seit 5g kommt **„gemischt“** dazu, z. B. „2× zu kalt, 1×
     passte, 1× gemischt“.
   - **Wo** (seit 5f, seit 5g mit „passte“): Unter der Zählung steht je Stufe
     eine Zeile nach Körperbereichen, z. B. „Wo: Füße 2× zu kalt, 1× passte ·
@@ -2024,6 +2036,11 @@ mit „✓ Alles passte“, Feldern passte / zu kalt / zu warm, Gesamturteil (ne
 Open-Meteo heißt „im Stehen“ (B19); Abwesenheiten (Urlaub, Dienstreise, krank,
 sonstiges) als Zeitraum (N3); die Tests laufen in jeder Zeitzone (T2).
 
+**Release 5h** (Datenversion 14, keine Umwandlung): Der Umschalter „Stufe
+wählen nach“ setzt die Zählung der Rückmeldungen nicht mehr zurück (B20).
+Gezählt werden die Fahrten, deren Stufe nach der aktuellen Einstellung gewählt
+wurde, ab der letzten Änderung der Stufe; das gilt auch rückwirkend.
+
 ## Tests
 
 `tests/test.html` prüft unter anderem:
@@ -2219,7 +2236,7 @@ sonstiges) als Zeitraum (N3); die Tests laufen in jeder Zeitzone (T2).
   nur die neuen Werte; Vorhersage: ersetzt, Kleidung und Rückmeldung bleiben),
 - Release 5d, Änderungsprotokoll (N4): Einträge beim Speichern, ohne Änderung
   keiner, neue und entfernte Stufe, verschobene Grenze mit betroffener
-  Nachbarstufe, Umschalter, Regenzusatz (setzt die Zählung nicht zurück),
+  Nachbarstufe, Umschalter und Regenzusatz (setzen die Zählung nicht zurück),
   „Rückgängig“, die Unterseite „Änderungen der Kleidung“; die Zählung ab der
   letzten Änderung (Fahrt und Empfehlung danach, gleiche Grundlage, vor 5d
   getrennt), der Hinweis (2× zu kalt bei 1× passte ja, bei 3× passte nicht,
@@ -2273,9 +2290,9 @@ sonstiges) als Zeitraum (N3); die Tests laufen in jeder Zeitzone (T2).
 - Release 5f, gefühlte Temperatur (B15): Fahrt-Karten „Heute“ und „Nächster“
   ohne „(gefühlt …)“, die Kleidungszeile mit „gefühlt“; weiterer Ort und alte
   Fahrten ohne „beim Fahren“ mit Klammer; Eintragsansicht wie die Karte.
-- Release 5f, Zählertext (B16): geänderte Stufe, verschobene Nachbarstufe und
-  Umschalter ohne Rückmeldung „seit deiner Änderung am …: noch keine“, sonst
-  „seit 5d“; Unterseite der Stufe und Hinweistext.
+- Release 5f, Zählertext (B16): geänderte Stufe und verschobene Nachbarstufe
+  ohne Rückmeldung „seit deiner Änderung am …: noch keine“, sonst „seit 5d“
+  (seit 5h auch nach dem Umschalter); Unterseite der Stufe und Hinweistext.
 - Release 5f, „Wo?“ und Kommentar (B17): Aufklappen nach „zu kalt“/„zu warm“,
   die Fahrt in der Karte bis „Fertig“, Schalter an/aus (still gespeichert, in
   der Reihenfolge der Stufen), Kommentar (beim Tippen gespeichert, ohne
@@ -2314,6 +2331,15 @@ sonstiges) als Zeitraum (N3); die Tests laufen in jeder Zeitzone (T2).
   „Rückgängig“), „Als Abwesenheit …“, Statistik-Zeile und Serie, Sicherung
   (Export, Import, „Sicherung prüfen“).
 - Release 5g, Zeitzonen (T2): die Aufzeichnungen in Gerätezeit.
+- Release 5h, Umschalter und Zählung (B20): Stufe am 02.11. geändert,
+  Rückmeldungen am 03. und 04.11., am 05.11. viermal umgeschaltet (Ende „beim
+  Fahren“): beide zählen, der Text nennt den 02.11. (Zeile der Stufe, Hinweis
+  oben und in der Fahrt-Karte), vier Einträge unter „Änderungen“; „im Stehen“:
+  die alten zählen nicht, eine neue Fahrt mit „im Stehen“ schon, zurück auf
+  „beim Fahren“ umgekehrt; Änderung der Stufe und der Nachbarstufe
+  (`auchBetroffen`) setzen weiter zurück; Hinweis zur Stufe und Hinweise je
+  Bereich bleiben nach dem Umschalten; Meldung nach „Alles passte“ mit dem
+  Datum der Änderung der Stufe bzw. „seit 5d“; Feldhinweis und Erklärtext.
 
 Die Tests zur Ansicht „Jetzt“ und zum aktuellen Standort für das Wetter (oben
 unter 4d, 4e, 5c und 5d genannt) sind mit 5e entfallen.
