@@ -25,11 +25,21 @@ sind immer erfunden.
   außerhalb der Daten (nicht in der Sicherung): `radkm-wetter`,
   `radkm-wartungsarten-pruefen`, `radkm-letzte-orte`, `radkm-heute-abfahrt`
   (verschobene Abfahrt von heute, gilt nur an diesem Tag).
-- Die gefühlte Temperatur steht nur einmal: Steht die Kleidungszeile mit
-  „gefühlt …“ dabei, entfällt „(gefühlt …)“ in der Wertezeile
-  (`werteText(w, false)`, B15, 5f).
-- Bereiche und Kommentar zur Rückmeldung werden still gespeichert (ohne
-  Meldung); eine Meldung mit „Rückgängig“ gibt es nur beim Urteil selbst.
+- Die gefühlte Temperatur von Open-Meteo heißt in der Oberfläche „im Stehen“
+  (seit 5g, B19; neben „beim Fahren“, in Wertezeile, Tageswerten, Umschalter,
+  Protokoll); „gefühlt“ nur in der Erklärung zu anderen Wetter-Apps. Datenfelder
+  (`gefuehlt`, `grundlage: "gefuehlt"`) bleiben.
+- Sie steht nur einmal: Steht die Kleidungszeile mit „im Stehen …“ dabei,
+  entfällt „(im Stehen …)“ in der Wertezeile (`werteText(w, false)`, B15, 5f).
+- Rückmeldung je Körperbereich (B18, 5g): Felder und Kommentar werden still
+  gespeichert (ohne Meldung, ohne Neuzeichnen: nur Feld, „Alles passte“ und
+  Gesamtzeile ändern sich); eine Meldung mit „Rückgängig“ gibt es nur bei
+  „✓ Alles passte“. Das Gesamturteil kommt immer aus `urteilAusBereiche`. In
+  der Karte bleibt eine Fahrt mit Angabe bis „Fertig“ oder Reiterwechsel
+  (`rueckmeldungOffen`, geleert in `zeichnen()`).
+- Abwesenheiten (N3, 5g) gehören zu den Daten (`abwesenheiten`). Einträge
+  gehen vor: Ein Tag mit Fahrt zählt trotz Abwesenheit als Fahrtag
+  (`abwesendAm`, `zaehltAlsFahrtag`).
 - Den Standort des iPhones fragt nur „📍 Aktueller Standort“ im Ortsformular ab
   (auf Tipp); das Wetter nie (seit 5e).
 - Für das iPhone optimiert, Hell- und Dunkelmodus über die Farbvariablen in
@@ -50,15 +60,16 @@ sind immer erfunden.
 | `js/grundlagen.js` | `APP_VERSION`, `DATEN_VERSION`, Speicherschlüssel, Konstanten; Hilfsfunktionen Datum/Zahlen/Text |
 | `js/daten.js` | Datenmodell: Standardwerte, Laden, Prüfen, `MIGRATIONEN`, Speichern |
 | `js/berechnungen.js` | km-Stand, Summen, Prognosen, Jahresziel, Zusammenfassung der Einträge |
-| `js/statistik.js` | Reiter Fahrten (Einträge \| Statistik), Fahrtage/Kennzahlen, Diagramm, Jahresziele, Wetter-Statistik, „Wetter nachtragen“ |
+| `js/statistik.js` | Reiter Fahrten (Einträge \| Statistik, darunter die Abwesenheiten), Fahrtage/Kennzahlen (Fahrtage ohne Eintrag ohne Abwesenheiten), Diagramm, Jahresziele, Wetter-Statistik, „Wetter nachtragen“ |
 | `js/wartung.js` | Werkstatt-Berechnung: Fälligkeit (`intervallStatus`, `saisonStatus`), `werkstattLage`, Standard-Zuordnung, Vorschläge |
 | `js/kalender.js` | Kalenderdatei (.ics) zum Termin eines geplanten Auftrags (UTC aus Europe/Berlin, Vorlaufzeit), Stand im Kalender (`imKalender`) |
 | `js/wartung-ansicht.js` | Reiter Wartung (Aktuell \| Verlauf), Wartungsarten-Liste, Aufträge, Termin mit Vorlaufzeit, Kalender (Knopf in der Karte, Fenster, veralteter Eintrag), Abschluss, Aufgaben, Mängel, Wartungsarten, Prüfbildschirm |
 | `js/wetter.js` | Wetter-Logik: Abruf (Strecke + aktiver weiterer Ort in einer Abfrage), Zwischenspeicher, Ampel, Kleidung (`stufenGrundlage`), Wind (Pfeilrichtung/-farbe), Sonnenauf-/untergang, Abfahrt, `wetterAnsicht` (nächster Fahrtag, heute, weiterer Ort), Wetter je Eintrag mit Zeitfenster, Rückblick (`rueckblickUebernehmen`, `gespeicherteZeiten`) |
-| `js/fahrtag.js` | Nächster Fahrtag (`naechsterFahrtag`, „vorläufig“, Vorlauf, außerhalb der Vorhersage, „Keine Fahrt“), Auswahl im Reiter Wetter (`wetterAuswahl`, 2-Stunden-Regel), „Heute später los“ (`fahrtZeitfenster`, `abweichungPruefen`, Hilfsspeicher `radkm-heute-abfahrt`, `fahrtEnde`) |
+| `js/abwesenheit.js` | Abwesenheit: `abwesenheitAm`, `abwesendAm` (Einträge gehen vor), Hinweis „Urlaub bis …“ (`abwesenheitVorFahrtag`), Abschnitt in Fahrten → Einträge, Formular (Überschneidung), Löschen, `abwesendeFahrtage` (Statistik) |
+| `js/fahrtag.js` | Nächster Fahrtag (`naechsterFahrtag`, „vorläufig“, Vorlauf, außerhalb der Vorhersage, „Keine Fahrt“, Abwesenheit), Auswahl im Reiter Wetter (`wetterAuswahl`, 2-Stunden-Regel), „Heute später los“ (`fahrtZeitfenster`, `abweichungPruefen`, Hilfsspeicher `radkm-heute-abfahrt`, `fahrtEnde`) |
 | `js/gefuehlt.js` | Gefühlt beim Fahren: Formel wie Open-Meteo, Luftstrom, Wind auf 1,5 m, Fahrgeschwindigkeit, `fahrtGefuehlt` (Teilstrecken, kältester Schritt, ohne Richtung), Windlage, Plausibilität |
 | `js/orte.js` | Ortseingabe: Koordinaten/Kartenlinks lesen (`ortAusText`), Ortssuche beim Tippen (Verzögerung, Abbruch, Umlaute), zuletzt gewählte Orte, Namensvorschlag (DWD-Gemeinde) |
-| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappt „vorbei ›“, „Heute später los …“ als Fenster von unten, Link zum gespeicherten Wetter), Kachel, Windpfeile, „gefühlt · beim Fahren“, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, Ort-Formular, Kleidung mit Umschalter/Fahrgeschwindigkeit/Plausibilität im Testmodus, Stufe/Regenzusatz, Änderungen, Ampel-Grenzen), Rückmeldung mit „Wo?“ (Bereiche) und Kommentar (`rueckmeldungOffen` bis „Fertig“), Änderungsprotokoll, Zählung ab der letzten Änderung (`seitTitel`/`seitText`), Hinweise mit Bereichen, „Wo“ je Stufe, letzte Kommentare |
+| `js/wetter-ansicht.js` | Reiter Wetter (Umschalter, eingeklappt „vorbei ›“, „Heute später los …“ als Fenster von unten, Link zum gespeicherten Wetter), Kachel, Windpfeile, „gefühlt · beim Fahren“, Wetter-Einstellungen (Hauptseite; Unterseiten Orte und Strecke, Ort-Formular, Kleidung mit Umschalter/Fahrgeschwindigkeit/Plausibilität im Testmodus, Stufe/Regenzusatz, Änderungen, Ampel-Grenzen), Rückmeldung je Körperbereich („✓ Alles passte“, Felder zyklisch, `gesamtText`, Kommentar, `rueckmeldungOffen` bis „Fertig“/Reiterwechsel), Änderungsprotokoll, Zählung ab der letzten Änderung (`seitTitel`/`seitText`, mit „gemischt“), Hinweise zur Stufe und je Bereich (`kleidungHinweise`), „Wo“ je Stufe mit „passte“, letzte Kommentare, „im Stehen · beim Fahren“ |
 | `js/uebersicht.js` | Reiter Übersicht, Eintragsliste (Fahrten → Einträge), Eintragsformular, Prognosefenster |
 | `js/einstellungen.js` | Reiter Einstellungen: Hauptseite, Unterseiten (`EINSTELLUNGEN_SEITEN`), Fahrrad, Vorlagen, Fahrtage |
 | `js/sicherung.js` | Export, Prüfung, Vergleich, Import |
@@ -66,7 +77,8 @@ sind immer erfunden.
 | `js/bedienung.js` | `AKTIONEN`: Zuordnung von `data-action`/`data-change` zu Funktionen |
 | `js/start.js` | Service Worker anmelden, „Neue Version verfügbar“, Start |
 | `sw.js` | Service Worker: vollständiger Satz aller Dateien offline, Update erst nach „Neu laden“ |
-| `tests/test.html` | Testseite (lädt `index.html?test` unsichtbar); Testdateien `tests/daten-v*.json`, `tests/wetter-*.json` (u. a. `wetter-gefuehlt.json`, stimmig nach der Formel von Open-Meteo). Zeitabhängiges immer mit eingespeistem `jetzt` testen |
+| `tests/test.html` | Testseite (lädt `index.html?test` unsichtbar); Testdateien `tests/daten-v*.json`, `tests/wetter-*.json` (u. a. `wetter-gefuehlt.json`, stimmig nach der Formel von Open-Meteo; Zeitstempel aus Europe/Berlin, außerhalb Berlins per `aufGeraetezeit` auf dieselbe Uhrzeit in Gerätezeit gesetzt, `fxRoh` unverändert). Zeitabhängiges immer mit eingespeistem `jetzt` testen |
+| `tests/zeitzonen-test.js` | Testseite headless in Europe/Berlin, UTC, America/New_York, Asia/Tokyo, je hell und dunkel |
 | `tests/offline-update-test.js` | Offline-Start und neue Versionen mit Playwright |
 
 ## Datenmodell
@@ -88,7 +100,8 @@ sind immer erfunden.
 - Tests ausführen: `python3 -m http.server 8000` im Repository starten und
   `http://localhost:8000/tests/test.html` öffnen (oder dieselbe Seite headless,
   z. B. mit Playwright). Oben steht „Alle … Tests bestanden“; der Seitentitel
-  beginnt mit `OK` bzw. `FEHLER`.
+  beginnt mit `OK` bzw. `FEHLER`. Vor dem Pull Request
+  `node tests/zeitzonen-test.js` (vier Zeitzonen, hell und dunkel; alle grün).
 - Bei Änderungen an `sw.js`, an der Dateiliste oder am Start der App
   zusätzlich `node tests/offline-update-test.js` ausführen (Offline-Start,
   neue Version, „Neu laden“, Übergang von 5a.1, Daten unverändert).
