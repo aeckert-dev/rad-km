@@ -286,11 +286,11 @@ function eintragWetterHtml(e) {
     // Ab 5e: Zeitfenster und tatsächliche Abfahrt („Abfahrt 18:30 statt 16:00“ nach „Heute später los“)
     const zeit = f.von ? ' <span class="klein">' + f.von + '–' + f.bis + (f.geplanteAbfahrt ? ' · Abfahrt ' + f.abfahrt + ' statt ' + f.geplanteAbfahrt : '') + '</span>' : "";
     return '<div class="eintrag-wetter"><div><strong>' + name + '</strong>' + zeit + ' ' + ampelHtml(f.ampel) + FARBWORT[f.ampel] + '</div>' +
-      // Ab 5f wie in der Karte: „gefühlt …“ in der Zeile „beim Fahren“, dann ohne Klammer (B15)
-      '<div class="klein">' + gradText(f.temperatur) + (f.beimFahren === null ? ' (gefühlt ' + gradText(f.gefuehlt) + ')' : '') + ' · Regen ' +
+      // Ab 5f wie in der Karte: „im Stehen …“ (bis 5f „gefühlt“) in der Zeile „beim Fahren“, dann ohne Klammer (B15)
+      '<div class="klein">' + gradText(f.temperatur) + (f.beimFahren === null ? ' (im Stehen ' + gradText(f.gefuehlt) + ')' : '') + ' · Regen ' +
       (f.regenWahrscheinlichkeit === null ? "" : f.regenWahrscheinlichkeit + ' %, ') + zahl1.format(f.niederschlag) + ' mm · Wind ' + kmhText(f.wind) + ' · Böen ' + kmhText(f.boeen) + '</div>' +
-      (f.beimFahren === null ? "" : '<div class="klein">gefühlt ' + gradText(f.gefuehlt) + ' · beim Fahren ' + gradText(f.beimFahren) + (windLageGespeichert(f) ? " (" + windLageGespeichert(f) + ")" : "") +
-        (f.geschwindigkeit ? " bei " + zahl1.format(f.geschwindigkeit) + " km/h" : "") + ' · Stufe nach ' + (f.grundlage === "fahrt" ? "„beim Fahren“" : "„gefühlt“") +
+      (f.beimFahren === null ? "" : '<div class="klein">im Stehen ' + gradText(f.gefuehlt) + ' · beim Fahren ' + gradText(f.beimFahren) + (windLageGespeichert(f) ? " (" + windLageGespeichert(f) + ")" : "") +
+        (f.geschwindigkeit ? " bei " + zahl1.format(f.geschwindigkeit) + " km/h" : "") + ' · Stufe nach ' + (f.grundlage === "fahrt" ? "„beim Fahren“" : "„im Stehen“") +
         (f.empfohlenAm ? "" : " (vor 5d)") + '</div>') +
       (f.kleidung ? '<div>👕 ' + esc(fahrtKleidungText(f)) + '</div>' : "") + rueckmeldung + '</div>';
   };

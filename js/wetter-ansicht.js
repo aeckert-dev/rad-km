@@ -11,13 +11,14 @@ function ampelText(b) {
 // "Heute, Di 27.10." bzw. "Mo 02.11."
 function tagUeberschrift(datum, titel) { return titel === "Heute" || titel === "Morgen" ? titel + ", " + wochentag(datum) + " " + kurzDatum(datum) : titel; }
 // Werte einer Fahrt (ohne Böen, die stehen in der Zeile zum Wind). Die Klammer
-// „(gefühlt …)“ nur ohne Kleidungszeile mit „gefühlt“ daneben (B15, ab 5f).
+// „(im Stehen …)“ nur ohne Kleidungszeile mit „im Stehen“ daneben (B15, ab 5f;
+// bis 5f „gefühlt“, ab 5g „im Stehen“, B19).
 function werteText(w, mitGefuehlt = true) {
-  return gradText(w.temperatur) + (mitGefuehlt ? " (gefühlt " + gradText(w.gefuehlt) + ")" : "") + " · Regen " +
+  return gradText(w.temperatur) + (mitGefuehlt ? " (im Stehen " + gradText(w.gefuehlt) + ")" : "") + " · Regen " +
     (w.regenWahrscheinlichkeit === null ? "" : w.regenWahrscheinlichkeit + " %, ") + zahl1.format(w.niederschlag) + " mm";
 }
 function tageswerteText(t) {
-  return gradText(t.tmin) + " bis " + gradText(t.tmax) + (t.gefuehltMin === null ? "" : " (gefühlt " + gradText(t.gefuehltMin) + " bis " + gradText(t.gefuehltMax) + ")") +
+  return gradText(t.tmin) + " bis " + gradText(t.tmax) + (t.gefuehltMin === null ? "" : " (im Stehen " + gradText(t.gefuehltMin) + " bis " + gradText(t.gefuehltMax) + ")") +
     " · Regen " + (t.regenWahrscheinlichkeit === null ? "" : t.regenWahrscheinlichkeit + " %, ") + zahl1.format(t.niederschlag) + " mm · " +
     (t.wind === null ? "" : "Wind bis " + kmhText(t.wind) + ", ") + "Böen bis " + kmhText(t.boeen) + (t.gewitter ? " · Gewitter möglich" : "");
 }
@@ -278,7 +279,7 @@ function gefuehltZeileHtml(f, gefuehlt) {
   const fahren = !g ? "beim Fahren –"
     : g.ohneRichtung ? fett(f.grundlage === "fahrt", "beim Fahren ca. " + gradText(g.beimFahren)) + " (" + gradText(g.gegen) + " bei Gegen-, " + gradText(g.ruecken) + " bei Rückenwind)"
     : fett(f.grundlage === "fahrt", "beim Fahren " + gradText(g.beimFahren)) + (g.lage ? " (" + g.lage + ")" : "");
-  return fett(f.grundlage === "gefuehlt" && !!g, "gefühlt " + gradText(gefuehlt)) + " · " + fahren;
+  return fett(f.grundlage === "gefuehlt" && !!g, "im Stehen " + gradText(gefuehlt)) + " · " + fahren;
 }
 
 // Wind: erste Zeile mit Himmelsrichtung und Böen (nur Text), darunter je
@@ -455,7 +456,7 @@ function regelZeile(aktion, titel, text) {
 }
 function kleidungKurztext(k) {
   const std = standardKleidung();
-  return k.stufen.length + " Stufen nach " + (k.grundlage === "fahrt" ? "„beim Fahren“" : "„gefühlt“") +
+  return k.stufen.length + " Stufen nach " + (k.grundlage === "fahrt" ? "„beim Fahren“" : "„im Stehen“") +
     " · Regenzusatz " + (k.regen.length ? "ab " + k.regen.map(r => r.ab + " %").join(" / ") : "keiner") +
     " · Rückmeldung " + (k.rueckmeldung ? "an" : "aus") + (gleicherInhalt([k.stufen, k.regen], [std.stufen, std.regen]) ? " · Standard" : "");
 }
@@ -860,14 +861,16 @@ function kleidungSeite() {
   return (
     hinweise.map(x => kleidungHinweisHtml(x.h, x.i)).join("") +
     '<h3 style="margin-top:8px">Stufe wählen nach</h3>' +
-    umschalterHtml("kleidung-grundlage", k.grundlage, [["fahrt", "gefühlt beim Fahren"], ["gefuehlt", "gefühlt (Open-Meteo)"]], "Stufe wählen nach") +
-    '<div class="feldhinweis">„Beim Fahren“ rechnet Fahrtwind, Windrichtung und Windstärke ein (je Teilstrecke, die für den Wind zählt). Es liegt meist 1–3 °C unter ' +
-    '„gefühlt“ von Open-Meteo (für einen stehenden Menschen); die Empfehlung fällt dadurch oft eine Stufe wärmer aus. Ohne Luftfeuchte in der Vorhersage gilt „gefühlt“.</div>' +
+    umschalterHtml("kleidung-grundlage", k.grundlage, [["fahrt", "beim Fahren"], ["gefuehlt", "im Stehen"]], "Stufe wählen nach") +
+    '<div class="feldhinweis">Beide Werte rechnen mit derselben Formel wie Open-Meteo (gefühlte Temperatur nach Steadman): „im Stehen“ ohne, „beim Fahren“ mit Fahrtwind ' +
+    '(Fahrgeschwindigkeit, Windrichtung und Windstärke je Teilstrecke, die für den Wind zählt). „Beim Fahren“ liegt meist 1–3 °C unter „im Stehen“; die Empfehlung fällt dadurch ' +
+    'oft eine Stufe wärmer aus. Andere Wetter-Apps (z. B. Apple Wetter) rechnen ihr „gefühlt“ oft anders (eher als Windchill) und weichen deshalb um 2–3 °C ab. ' +
+    'Ohne Luftfeuchte in der Vorhersage gilt „im Stehen“.</div>' +
     geschwindigkeitHtml() + plausibilitaetHtml() +
     '<label class="haken"><input type="checkbox" id="k-rueckmeldung" data-change="kleidung-rueckmeldung"' + (k.rueckmeldung ? " checked" : "") + '>' +
     '<span>Rückmeldung zur Kleidung<br><span class="klein">Karte „Wie war die Kleidung?“ im Reiter Wetter und die Knöpfe in den Einträgen. ' +
     'Ausgeschaltet bleiben gegebene Rückmeldungen und die Auswertung erhalten.</span></span></label>' +
-    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach dem kältesten Wert der Fahrt (' + (k.grundlage === "fahrt" ? "gefühlt beim Fahren" : "gefühlt") +
+    '<h3 style="margin-top:16px">Stufen</h3><p class="klein" style="margin-top:0">Nach dem kältesten Wert der Fahrt (' + (k.grundlage === "fahrt" ? "beim Fahren" : "im Stehen") +
     '), von warm nach kalt. ' +
     'Eine Stufe gilt ab ihrer Grenze, die letzte darunter. Antippen zum Ändern.</p>' +
     '<div class="liste">' + k.stufen.map((s, i) => zeile("kleidung-stufe", i, stufeBereich(k, i),
@@ -887,7 +890,7 @@ function kleidungSeite() {
         datumText(isoAusDate(new Date(k.protokoll[k.protokoll.length - 1].zeitpunkt))) : "noch keine") + '</div>' +
     '<p class="klein">Die App protokolliert jede Änderung an einer Stufe, am Regenzusatz und am Umschalter „Stufe wählen nach“. Die Rückmeldungen zählen je Stufe ab ihrer ' +
     'letzten Änderung (auch einer Grenze, die ihren Bereich verschiebt, und des Umschalters), darunter „Wo“ nach Körperbereichen. ' +
-    'Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „gefühlt“).</p>'
+    'Rückmeldungen von vor 5d stehen getrennt („vor 5d“, Stufe damals nach „im Stehen“).</p>'
   );
 }
 // Fahrgeschwindigkeit für „beim Fahren“: automatisch (Vorlage und Dauer) oder ein eigener Wert
@@ -945,7 +948,7 @@ function kleidungGrundlageSetzen(wert) {
   if (!GRUNDLAGEN.includes(wert) || k.grundlage === wert) return;
   k.protokoll.push(protokollEintrag("grundlage", null, k.grundlage, wert));
   k.grundlage = wert;
-  if (speichern()) { zeichnen(); meldung(wert === "fahrt" ? "Stufe nach „gefühlt beim Fahren“" : "Stufe nach „gefühlt“ (Open-Meteo)"); }
+  if (speichern()) { zeichnen(); meldung(wert === "fahrt" ? "Stufe nach „beim Fahren“" : "Stufe nach „im Stehen“"); }
 }
 
 // Schalter "Rückmeldung zur Kleidung" (sofort gespeichert; Rückmeldungen und Auswertung bleiben)
@@ -970,7 +973,7 @@ function kleidungStufeSeite(i) {
   const z = neu ? null : rueckmeldungenSeitAenderung()[s.id];
   return (
     (letzte ? '<p class="klein">Die letzte Stufe gilt unterhalb der vorigen (' + stufeBereich(k, i) + ').</p>'
-      : '<label for="ks-ab">Ab gefühlter Temperatur (°C)</label><input type="text" id="ks-ab" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '">' +
+      : '<label for="ks-ab">Ab ' + (k.grundlage === "fahrt" ? "„beim Fahren“" : "„im Stehen“") + ' (°C)</label><input type="text" id="ks-ab" class="kurzfeld" autocomplete="off" value="' + zahlFeld(s.ab) + '">' +
         '<div class="feldhinweis">Ein Grenzwert gehört zu dieser Stufe; die Stufen werden nach ihrer Grenze sortiert.</div>') +
     bereichFelder("ks", s.bereiche) +
     '<label for="ks-haende-regen">Hände bei Regen (optional)</label>' +
@@ -988,7 +991,7 @@ function kleidungStufeSpeichern(iText) {
   const k = daten.einstellungen.wetter.kleidung, n = k.stufen.length;
   const i = iText === "" ? null : Number(iText), letzte = i !== null && i === n - 1;
   const ab = letzte ? null : zahlLesen(wert("ks-ab"));
-  if (!letzte && ab === null) { alert("Bitte die gefühlte Temperatur eingeben, ab der die Stufe gilt, z. B. 7 oder −2."); return; }
+  if (!letzte && ab === null) { alert("Bitte die Temperatur (" + (k.grundlage === "fahrt" ? "„beim Fahren“" : "„im Stehen“") + ") eingeben, ab der die Stufe gilt, z. B. 7 oder −2."); return; }
   const bereiche = bereicheLesen("ks");
   if (!BEREICH_SCHLUESSEL.some(b => bereiche[b])) { alert("Bitte mindestens einen Bereich ausfüllen (Kopf, Hals, Hände, Oberkörper, Beine oder Füße)."); return; }
   const andere = k.stufen.filter((s, j) => j !== i);
@@ -1384,7 +1387,7 @@ function kleidungProtokollSeite() {
   const bereichsTeile = (a, b) => BEREICHE.filter(([bb]) => (a[bb] || "") !== (b[bb] || "")).map(([bb, n]) => n + ": " + leerText(a[bb]) + " → " + leerText(b[bb]));
   const unterschiede = (a, b) => (a.ab !== b.ab ? ["Grenze " + grenze(a.ab) + " → " + grenze(b.ab)] : []).concat(bereichsTeile(a.bereiche, b.bereiche),
     (a.haendeBeiRegen || null) !== (b.haendeBeiRegen || null) ? ["Hände bei Regen: " + leerText(a.haendeBeiRegen) + " → " + leerText(b.haendeBeiRegen)] : []);
-  const GRUNDLAGE_TEXT = { fahrt: "gefühlt beim Fahren", gefuehlt: "gefühlt (Open-Meteo)" };
+  const GRUNDLAGE_TEXT = { fahrt: "beim Fahren", gefuehlt: "im Stehen" };
   const zeilen = k.protokoll.slice().reverse().map(p => {
     const wann = datumText(isoAusDate(new Date(p.zeitpunkt))) + " " + uhrzeit(Date.parse(p.zeitpunkt));
     let titel, details = [];
