@@ -130,6 +130,7 @@ function leereDaten() {
     einstellungen: standardEinstellungen(),
     vorlagen: [],
     eintraege: [],
+    abwesenheiten: [],
     wartungsarten: standardWartungsarten(),
     auftraege: [],
     maengel: []
@@ -306,8 +307,31 @@ const MIGRATIONEN = {
     if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
       ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion12(e.wetter.hin), rueck: fahrtAusVersion12(e.wetter.rueck) }) }) : e);
     return d;
+  },
+  // Version 13 → 14 (Release 5g): Rückmeldung je Körperbereich (B18) und
+  // Abwesenheiten (N3). Die bisherige Liste der Bereiche wird ein Objekt
+  // { bereich: Urteil }: Jeder genannte Bereich bekommt das bisherige Urteil
+  // (zu-kalt bzw. zu-warm); ohne Bereiche (auch bei „passte“) bleibt es leer.
+  // Urteil und Kommentar bleiben. Neu ist die (leere) Liste abwesenheiten.
+  13: alt => {
+    const d = Object.assign({}, alt, { version: 14 });
+    if (Array.isArray(alt.eintraege)) d.eintraege = alt.eintraege.map(e => istObjekt(e) && istObjekt(e.wetter)
+      ? Object.assign({}, e, { wetter: Object.assign({}, e.wetter, { hin: fahrtAusVersion13(e.wetter.hin), rueck: fahrtAusVersion13(e.wetter.rueck) }) }) : e);
+    if (d.abwesenheiten === undefined) d.abwesenheiten = [];
+    return d;
   }
 };
+
+// Bereiche der Rückmeldung ab Version 14: aus der Liste von Version 13 ein Objekt mit
+// dem bisherigen Urteil je Bereich. Ungültiges bleibt, wie es ist (die Prüfung meldet es).
+function fahrtAusVersion13(f) {
+  if (!istObjekt(f)) return f;
+  const liste = f.rueckmeldungBereiche ?? [];
+  if (!Array.isArray(liste)) return f;
+  const urteil = f.rueckmeldung === "zu-kalt" || f.rueckmeldung === "zu-warm" ? f.rueckmeldung : null;
+  if ((!urteil && liste.length) || new Set(liste).size !== liste.length) return f;
+  return Object.assign({}, f, { rueckmeldungBereiche: Object.fromEntries(liste.map(b => [b, urteil])) });
+}
 
 // Neue Werte je Fahrt ab Version 13: Bereiche und Kommentar zur Rückmeldung, bei älteren Fahrten leer
 const fahrtWerte13 = () => ({ rueckmeldungBereiche: [], rueckmeldungKommentar: "" });
@@ -732,7 +756,16 @@ function bereichePruefen(b, wo, fehler, mindestensEiner = true, feld = "bereiche
 
 // Wetter der Hin- und Rückfahrt eines Tageseintrags (ab Version 4; null = keins)
 const AMPELFARBEN = ["gruen", "gelb", "rot"];
-const RUECKMELDUNGEN = ["zu-warm", "passte", "zu-kalt"];
+const RUECKMELDUNGEN = ["zu-warm", "passte", "zu-kalt", "gemischt"];
+// Gesamturteil aus den Feldern je Bereich (ab 5g, B18): nur „zu kalt“ → zu-kalt, nur
+// „zu warm“ → zu-warm, beides → gemischt, sonst (mindestens ein „passte“) passte;
+// ohne Angabe null
+function urteilAusBereiche(rb) {
+  const werte = Object.values(rb || {});
+  if (!werte.length) return null;
+  const kalt = werte.includes("zu-kalt"), warm = werte.includes("zu-warm");
+  return kalt && warm ? "gemischt" : kalt ? "zu-kalt" : warm ? "zu-warm" : "passte";
+}
 function eintragWetterPruefen(ew, wo, fehler) {
   if (ew === undefined || ew === null) return null;
   if (!istObjekt(ew)) fehler(wo + ": muss ein Objekt oder null sein.");
@@ -753,7 +786,7 @@ function eintragWetterPruefen(ew, wo, fehler) {
     const regenkleidung = f.regenkleidung ?? false;
     if (typeof regenkleidung !== "boolean") fehler(wn + ": regenkleidung muss true oder false sein.");
     const rm = f.rueckmeldung ?? null;
-    if (rm !== null && !RUECKMELDUNGEN.includes(rm)) fehler(wn + ": rueckmeldung muss „zu-warm“, „passte“, „zu-kalt“ oder null sein.");
+    if (rm !== null && !RUECKMELDUNGEN.includes(rm)) fehler(wn + ": rueckmeldung muss „zu-warm“, „passte“, „zu-kalt“, „gemischt“ oder null sein.");
     // Ab Version 11: gefühlt beim Fahren und woraus es berechnet wurde (fehlend = null)
     const opt = (k, gueltig, text) => { const v = f[k] ?? null; if (v !== null && !gueltig(v)) fehler(wn + ": " + k + " muss " + text + " oder null sein."); return v; };
     const winkel = v => istEndlich(v) && v >= 0 && v <= 360;
@@ -787,22 +820,27 @@ function eintragWetterPruefen(ew, wo, fehler) {
     const abfahrt = opt("abfahrt", istUhrzeit, "eine Uhrzeit im Format HH:MM");
     const geplanteAbfahrt = opt("geplanteAbfahrt", istUhrzeit, "eine Uhrzeit im Format HH:MM");
     if (geplanteAbfahrt !== null && abfahrt === null) fehler(wn + ": geplanteAbfahrt gibt es nur zusammen mit abfahrt.");
-    // Ab Version 13: Körperbereiche und Kommentar zur Rückmeldung, nur bei „zu warm“ oder „zu kalt“ (fehlend = leer)
-    const rb = f.rueckmeldungBereiche ?? [];
-    if (!Array.isArray(rb) || rb.some(b => !BEREICH_SCHLUESSEL.includes(b)))
-      fehler(wn + ": rueckmeldungBereiche muss eine Liste aus „kopf“, „hals“, „haende“, „oberkoerper“, „beine“ und „fuesse“ sein.");
-    if (new Set(rb).size !== rb.length) fehler(wn + ": rueckmeldungBereiche enthält einen Bereich doppelt.");
+    // Ab Version 14: Rückmeldung je Körperbereich { bereich: "passte" | "zu-kalt" | "zu-warm" }
+    // (fehlender Bereich = keine Angabe). Mit Angaben muss das Urteil dazu passen;
+    // ohne (Rückmeldungen vor 5g) gibt es kein „gemischt“. Kommentar bei jedem Urteil.
+    const rb = f.rueckmeldungBereiche ?? {};
+    if (!istObjekt(rb) || Object.keys(rb).some(b => !BEREICH_SCHLUESSEL.includes(b)))
+      fehler(wn + ": rueckmeldungBereiche muss ein Objekt mit den Bereichen „kopf“, „hals“, „haende“, „oberkoerper“, „beine“ und „fuesse“ sein.");
+    if (Object.values(rb).some(u => !BEREICH_URTEILE.includes(u)))
+      fehler(wn + ": rueckmeldungBereiche: Jeder Bereich muss „passte“, „zu-kalt“ oder „zu-warm“ sein.");
+    const abgeleitet = urteilAusBereiche(rb);
+    if (abgeleitet !== null && rm !== abgeleitet)
+      fehler(wn + ": rueckmeldung muss zu den Bereichen passen (hier „" + abgeleitet + "“).");
+    if (abgeleitet === null && rm === "gemischt") fehler(wn + ": rueckmeldung „gemischt“ gibt es nur mit Bereichen (rueckmeldungBereiche).");
     const rkRoh = f.rueckmeldungKommentar ?? "";
     if (typeof rkRoh !== "string") fehler(wn + ": rueckmeldungKommentar muss ein Text sein.");
     if (/[\r\n]/.test(rkRoh)) fehler(wn + ": rueckmeldungKommentar muss einzeilig sein.");
     const rk = rkRoh.trim();
     if ([...rk].length > KOMMENTAR_MAX) fehler(wn + ": rueckmeldungKommentar darf höchstens " + KOMMENTAR_MAX + " Zeichen haben.");
-    if ((rb.length || rk) && rm !== "zu-warm" && rm !== "zu-kalt")
-      fehler(wn + ": rueckmeldungBereiche und rueckmeldungKommentar gibt es nur bei der Rückmeldung „zu-warm“ oder „zu-kalt“.");
     return { temperatur: zahl("temperatur"), gefuehlt: zahl("gefuehlt"), niederschlag: zahl("niederschlag", 0), regenWahrscheinlichkeit: w,
       wind: zahl("wind", 0), boeen: zahl("boeen", 0), ampel: f.ampel, kleidung, empfehlung, regenkleidung, rueckmeldung: rm,
       beimFahren, luftfeuchte, windRichtung, windAnteil, teilstrecken, geschwindigkeit, grundlage, empfohlenAm, von, bis, abfahrt, geplanteAbfahrt,
-      rueckmeldungBereiche: BEREICH_SCHLUESSEL.filter(b => rb.includes(b)), rueckmeldungKommentar: rk };
+      rueckmeldungBereiche: Object.fromEntries(BEREICH_SCHLUESSEL.filter(b => rb[b]).map(b => [b, rb[b]])), rueckmeldungKommentar: rk };
   };
   return { quelle: ew.quelle, stand: ew.stand, hin: fahrt(ew.hin, "hin"), rueck: fahrt(ew.rueck, "rueck") };
 }
@@ -912,6 +950,26 @@ function pruefen(d) {
       arbeitsweg: jaNein(e.arbeitsweg, "Eintrag vom " + datumText(e.datum) + " (arbeitsweg)"),
       wetter
     };
+  });
+
+  // Abwesenheiten (ab Version 14): Zeitraum von–bis mit optionalem Grund, höchstens
+  // ABWESENHEIT_MAX_TAGE Tage, ohne Überschneidung; gespeichert nach Beginn sortiert
+  const abwIds = new Set();
+  erg.abwesenheiten = objekte(d.abwesenheiten, "abwesenheiten").map((a, i) => {
+    const wo = "Abwesenheit Nr. " + (i + 1);
+    const id = istText(a.id) && a.id ? a.id : neueId();
+    if (abwIds.has(id)) fehler(wo + ": id „" + id + "“ kommt doppelt vor.");
+    abwIds.add(id);
+    if (!istGueltigesDatum(a.von) || !istGueltigesDatum(a.bis)) fehler(wo + ": von und bis müssen gültige Daten sein (Format JJJJ-MM-TT).");
+    if (a.von > a.bis) fehler(wo + ": „von“ darf nicht nach „bis“ liegen.");
+    if (tageZwischen(a.von, a.bis) + 1 > ABWESENHEIT_MAX_TAGE) fehler(wo + ": Eine Abwesenheit darf höchstens " + ABWESENHEIT_MAX_TAGE + " Tage dauern.");
+    const grund = a.grund ?? null;
+    if (grund !== null && !ABWESENHEIT_GRUENDE.includes(grund)) fehler(wo + ": grund muss „urlaub“, „dienstreise“, „krank“, „sonstiges“ oder null sein.");
+    return { id, von: a.von, bis: a.bis, grund };
+  }).sort((a, b) => a.von.localeCompare(b.von));
+  erg.abwesenheiten.forEach((a, i) => {
+    const vor = erg.abwesenheiten[i - 1];
+    if (vor && a.von <= vor.bis) fehler("Abwesenheiten " + datumText(vor.von) + "–" + datumText(vor.bis) + " und " + datumText(a.von) + "–" + datumText(a.bis) + " überschneiden sich.");
   });
 
   // Wartungsarten: Aufträge (mit Zeitfenster, Intervall, einmalig oder ohne

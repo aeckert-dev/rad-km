@@ -36,6 +36,19 @@
   --wind-gegen: #c62828;
   --wind-seite: #b25e00;
   --wind-ruecken: #16805c;
+  /* Rückmeldung je Körperbereich (ab 5g): Fläche, Schrift, Rand je Zustand */
+  --rm-leer-bg: #ececf0;
+  --rm-leer-text: #48484a;
+  --rm-leer-rand: #8a8a8e;
+  --rm-passte-bg: #d9f2e6;
+  --rm-passte-text: #0b5c3f;
+  --rm-passte-rand: #16805c;
+  --rm-kalt-bg: #dde9fb;
+  --rm-kalt-text: #0b4a8f;
+  --rm-kalt-rand: #1f6fd1;
+  --rm-warm-bg: #ffe8d1;
+  --rm-warm-text: #8a4500;
+  --rm-warm-rand: #c66a00;
   /* Reiterleiste (B11): Höhe der Reiter und wie viel der Home-Zone unten frei
      bleibt. Frei bleibt safe-area-inset-bottom minus --home-abzug, mindestens
      8 px: 14px ergibt 20 pt am iPhone 13 mini (34 pt Home-Zone), 8px ergibt 26 pt. */
@@ -72,6 +85,18 @@
     --wind-gegen: #ff6b6b;
     --wind-seite: #ffb547;
     --wind-ruecken: #34c38f;
+    --rm-leer-bg: #2c2c2e;
+    --rm-leer-text: #d1d1d6;
+    --rm-leer-rand: #8e8e93;
+    --rm-passte-bg: #12352a;
+    --rm-passte-text: #8be8c0;
+    --rm-passte-rand: #34c38f;
+    --rm-kalt-bg: #0f2a4d;
+    --rm-kalt-text: #a8ceff;
+    --rm-kalt-rand: #4a9bff;
+    --rm-warm-bg: #3a2a0f;
+    --rm-warm-text: #ffc98a;
+    --rm-warm-rand: #ff9f0a;
   }
 }
 
@@ -280,14 +305,28 @@ button.link { background: transparent; color: var(--akzent); padding: 0 2px; min
 .warnung.stufe-2 { border-color: var(--warnstufe-2); }
 .warnung.stufe-3 { border-color: var(--warnstufe-3); }
 .warnung.stufe-4 { border-color: var(--warnstufe-4); }
-/* Rückmeldung zur Kleidung, gespeichertes Wetter im Eintrag, Regeln in den Einstellungen, Ampelverteilung */
-.rueckmeldung { display: flex; gap: 6px; margin: 6px 0 4px; }
-.rueckmeldung button { flex: 1; min-height: 44px; padding: 6px 4px; }
-/* „Wo war es zu kalt?“: sechs Schalter in drei Spalten, darunter der Kommentar (ab 5f) */
-.rueckmeldung-wo { margin: 4px 0 8px; }
-.bereich-wahl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 8px; }
-.bereich-wahl button { min-height: 44px; padding: 6px 2px; font-size: 15px; }
-.rueckmeldung-wo label { margin-top: 4px; }
+/* Rückmeldung zur Kleidung je Körperbereich (B18, ab 5g): „✓ Alles passte“, darunter
+   sechs Felder in drei Spalten (3×2 auf 375 pt). Der Zustand steht als Symbol und Text
+   im Feld, die Farbe kommt dazu; „keine Angabe“ mit gestricheltem Rand. */
+.rueckmeldung { margin: 6px 0 8px; }
+.rueckmeldung .rm-alle { width: 100%; min-height: 44px; padding: 8px 12px; }
+.rueckmeldung .rm-alle[aria-pressed="true"] { background: var(--rm-passte-bg); color: var(--rm-passte-text); box-shadow: inset 0 0 0 2px var(--rm-passte-rand); }
+.rm-felder { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 4px; }
+.rm-feld { min-height: 60px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  font-size: 15px; line-height: 1.2; border: 2px solid transparent; }
+.rm-feld .rm-name { font-weight: 600; overflow-wrap: anywhere; }
+.rm-feld .rm-symbol { font-size: 15px; min-height: 18px; }
+.rm-feld .rm-zustand { font-size: 13px; font-weight: 500; }
+.rm-feld[data-zustand="leer"] { background: var(--rm-leer-bg); color: var(--rm-leer-text); border: 1px dashed var(--rm-leer-rand); }
+.rm-feld[data-zustand="passte"] { background: var(--rm-passte-bg); color: var(--rm-passte-text); border-color: var(--rm-passte-rand); }
+.rm-feld[data-zustand="zu-kalt"] { background: var(--rm-kalt-bg); color: var(--rm-kalt-text); border-color: var(--rm-kalt-rand); }
+.rm-feld[data-zustand="zu-warm"] { background: var(--rm-warm-bg); color: var(--rm-warm-text); border-color: var(--rm-warm-rand); }
+.rm-gesamt { margin: 4px 0 6px; font-weight: 500; }
+/* Abwesenheit (ab 5g): Hinweis unter der Überschrift des nächsten Fahrtags */
+.abwesend { margin: -4px 0 6px; color: var(--text2); font-size: 15px; }
+.rueckmeldung label { margin-top: 4px; }
+/* Nur für VoiceOver (Ansage nach einem Tipp) */
+.unsichtbar { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .kommentare { margin: 4px 0 8px; padding-left: 18px; }
 .kommentare li { margin: 2px 0; overflow-wrap: anywhere; }
 .eintrag-wetter { border-top: 1px solid var(--linie); padding: 8px 0; }

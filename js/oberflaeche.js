@@ -120,8 +120,13 @@ let einstellungenSeite = null;
 let einstellungenWert = null;
 
 const TITEL = { uebersicht: "Übersicht", wetter: "Wetter", wartung: "Wartung", fahrten: "Fahrten", einstellungen: "Einstellungen" };
+// Zuletzt gezeichneter Reiter: Beim Wechsel verschwinden die stehen gebliebenen
+// Fahrten aus „Wie war die Kleidung?“ (wie mit „Fertig“, ab 5g)
+let gezeichneterTab = null;
 
 function zeichnen() {
+  if (gezeichneterTab !== null && gezeichneterTab !== aktiverTab) rueckmeldungOffen.clear();
+  gezeichneterTab = aktiverTab;
   const unterseite = aktiverTab === "einstellungen" && einstellungenSeite ? EINSTELLUNGEN_SEITEN[einstellungenSeite] : null;
   document.getElementById("seitentitel").textContent = unterseite ? (typeof unterseite.titel === "function" ? unterseite.titel(einstellungenWert) : unterseite.titel) : TITEL[aktiverTab];
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("aktiv", b.dataset.tab === aktiverTab));
